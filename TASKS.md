@@ -28,12 +28,12 @@
 - [x] Screenshot + console check, commit
 
 ## M3 Home
-- [ ] Ranch area with farmhouse, yard fence and openings
-- [ ] Pen with gate; gate swings shut when the last one is in ("That'll do!")
-- [ ] Day timer (~5 min), dusk dither, clock HUD
-- [ ] Group spawning in pastures each morning
-- [ ] End-of-day summary (delivered, lost, earned, what you can build)
-- [ ] Screenshot + console check, commit
+- [x] Ranch area with farmhouse (yard fencing moved to M5, where the ranch grows)
+- [x] Pen with gate; gate swings shut when the last one is in ("That'll do!")
+- [x] Day timer (~5 min), dusk dither, clock HUD
+- [x] Group spawning in pastures each morning
+- [x] End-of-day summary (delivered, lost, earned, what you can build)
+- [x] Screenshot + console check, commit
 
 ## M4 Coin and building
 - [ ] Penned animals produce goods (eggs, wool, milk) scaled by stress
@@ -97,4 +97,15 @@
   predators. A dog walking at the flock's pace adds none.
 - Lying down shows the nearest flock's flight zone as a faint dashed ring, so
   the "settle" command doubles as a way to read the flock.
+- Pens hold 16 "space" (duck 1, sheep/goat 2, cow/pony 4) and take one
+  species at a time. The gate stays open while any acceptable animal waits
+  within 60px, and swings shut 0.6s after the last arrival with "THAT'LL
+  DO!" and the batch's calm rating. Penned animals are always blocked by
+  gate cells, so reopening for the next group never lets anyone out.
+- Delivery value = species value x calm multiplier from the animal's peak
+  stress on the way home: CALM x1.5, STEADY x1, RATTLED x0.6, FRANTIC x0.35.
+- Until M6 the night is skipped: nightfall goes straight to the summary.
+- A second Claude session ("Hairline skill for game animations") is editing
+  `src/art/dog.ts`, `src/art/fx.ts` and `src/systems/particles.ts` in this
+  same checkout. Milestone commits leave those files to that session.
 

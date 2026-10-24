@@ -66,6 +66,7 @@ export class Animal {
   carried = false; // being dragged off
   // For the "stress at delivery" calm bonus.
   peakStress = 0;
+  deliveryValue = 0;
 
   constructor(id: SpeciesId, x: number, y: number, coat: Coat = 0) {
     this.sp = SPECIES[id];

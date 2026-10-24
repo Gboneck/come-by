@@ -1,82 +1,194 @@
 import { C } from './palette';
 import type { Screen } from './gfx/screen';
-import { panel, rect } from './gfx/draw';
-import { text, textWidth } from './gfx/font';
 import type { Input } from './input';
 import { UI } from './ui/ui';
 import { drawTouchControls } from './ui/touch';
 import { Particles } from './systems/particles';
 import { Dog } from './entities/dog';
-import { Animal, barkAt, drawAnimal, drawAnimalShadow, findGroups, nipFrom, updateHerd, type Group, type HerdCtx, type PressureSource } from './entities/animal';
-import { ring } from './gfx/draw';
-import { TS, WORLD_H, WORLD_W, WorldMap, type RegionDef } from './world/map';
+import { Animal, barkAt, findGroups, nipFrom, updateHerd, type Group, type HerdCtx, type PressureSource } from './entities/animal';
+import { WORLD_H, WORLD_W, WorldMap, type RegionDef, type SpeciesId } from './world/map';
 import { bake, type Baked } from './world/terrain';
+import { Ranch, type RanchEvent } from './ranch/ranch';
+import type { Pen } from './ranch/buildings';
+import { DayCycle } from './systems/day';
+import { spawnMorning } from './systems/spawner';
+import { NightOverlay } from './render/night';
+import { drawWorld } from './render/world';
+import { drawHud } from './ui/hud';
+import { drawSummary, type Summary } from './ui/summary';
 import { clamp, damp } from './util';
+
+export type Mode = 'play' | 'summary';
+
+export interface DayStats {
+  delivered: Partial<Record<SpeciesId, number>>;
+  deliveredValue: number;
+  calm: number;
+  lost: Partial<Record<SpeciesId, number>>;
+  goodsValue: number;
+}
+
+export interface Banner {
+  big: string;
+  small?: string;
+  t: number;
+  max: number;
+}
+
+const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0 });
+
+// Delivery value multiplier from how stressed an animal was on the way home.
+export function calmRating(stress: number): { mult: number; label: string } {
+  if (stress < 0.3) return { mult: 1.5, label: 'CALM' };
+  if (stress < 0.55) return { mult: 1, label: 'STEADY' };
+  if (stress < 0.8) return { mult: 0.6, label: 'RATTLED' };
+  return { mult: 0.35, label: 'FRANTIC' };
+}
 
 export class Game {
   g: CanvasRenderingContext2D;
   ui: UI;
   map: WorldMap;
   baked: Baked;
+  ranch: Ranch;
+  day = new DayCycle();
   dog: Dog;
-  fx = new Particles();
-  cam = { x: 0, y: 0 };
-  t = 0;
-  private banner: { text: string; t: number } | null = null;
-  private lastRegion: RegionDef | null = null;
-  debug = false;
-  showZones = false;
   animals: Animal[] = [];
   groups: Group[] = [];
+  fx = new Particles();
+  night = new NightOverlay();
+  cam = { x: 0, y: 0 };
+  t = 0;
+  mode: Mode = 'play';
+  tier = 1;
+  coins = 0;
+  stats: DayStats = newStats();
+  summary: Summary | null = null;
+  banner: Banner | null = null;
+  place: { text: string; t: number } | null = null;
+  private lastRegion: RegionDef | null = null;
   private groupT = 0;
   private sources: PressureSource[] = [];
+  debug = false;
+  showZones = false;
 
   constructor(public screen: Screen, public input: Input) {
     this.g = screen.g;
     this.ui = new UI(input);
     this.map = new WorldMap();
     this.baked = bake(this.map);
-    this.dog = new Dog(96 * TS + 4, 104 * TS + 4);
+    this.ranch = new Ranch(this.map);
+    this.ranch.setupStarter();
+    const door = this.doorPoint();
+    this.dog = new Dog(door.x, door.y);
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
-    this.spawnFlock('sheep', 96 * TS, 92 * TS, 12);
+    this.startDay(true);
   }
 
-  spawnFlock(id: Animal['sp']['id'], x: number, y: number, n: number) {
+  doorPoint() {
+    const f = this.ranch.farmhouse!;
+    return { x: f.cx, y: f.y1 + 8 };
+  }
+
+  isUnlocked(r: RegionDef) {
+    return r.tier <= this.tier;
+  }
+
+  spawnFlock(id: SpeciesId, x: number, y: number, n: number) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * (6 + n * 1.2);
-      const an = new Animal(id, x + Math.cos(a) * r, y + Math.sin(a) * r);
-      this.animals.push(an);
+      this.animals.push(new Animal(id, x + Math.cos(a) * r, y + Math.sin(a) * r));
     }
+  }
+
+  // ---- Day flow ----
+
+  startDay(first = false) {
+    if (!first) this.day.nextDay();
+    this.stats = newStats();
+    const door = this.doorPoint();
+    this.dog.x = door.x;
+    this.dog.y = door.y;
+    this.dog.vx = this.dog.vy = 0;
+    this.dog.face = 'd';
+    this.dog.stamina = this.dog.stats.stamina;
+    this.cam.x = this.dog.x;
+    this.cam.y = this.dog.y;
+    for (const a of this.animals) a.stress *= 0.3;
+    this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => this.isUnlocked(r)));
+    for (const p of this.ranch.pens) if (!p.full) p.open = true;
+    this.mode = 'play';
+    this.summary = null;
+    this.showBanner(`DAY ${this.day.day}`, 'BRING THEM HOME BEFORE DUSK', 2.6);
+  }
+
+  endDay() {
+    const wild = this.animals.filter((a) => !a.pen && !a.gone);
+    const strays = wild.filter((a) => a.stray).length;
+    this.summary = {
+      day: this.day.day,
+      stats: this.stats,
+      leftOut: wild.length,
+      strays,
+      coins: this.coins,
+      penned: this.ranch.pens.reduce((s, p) => s + p.animals.length, 0),
+    };
+    this.mode = 'summary';
+    this.input.clearQueue();
+  }
+
+  showBanner(big: string, small?: string, max = 2.2) {
+    this.banner = { big, small, t: max, max };
+  }
+
+  // ---- Update ----
+
+  update(dt: number) {
+    this.t += dt;
+    if (this.mode === 'summary') {
+      this.fx.update(dt);
+      if (this.input.pressed('confirm') || this.input.pressed('bark')) this.startDay();
+      return;
+    }
+    const dayEv = this.day.update(dt);
+    if (dayEv === 'dusk') this.showBanner('DUSK', 'GET THEM HOME, THE LIGHT IS GOING', 2.6);
+    if (dayEv === 'nightfall') {
+      this.endDay();
+      return;
+    }
+
+    this.dog.update(dt, this.input, this.map, this.fx);
+    for (const ev of this.dog.events) this.onDogEvent(ev);
+    this.dog.events.length = 0;
+    updateHerd(this.animals, this.herdCtx(), dt);
+    for (const ev of this.ranch.update(dt, this.animals, false)) this.onRanchEvent(ev);
+    if ((this.groupT -= dt) <= 0) {
+      this.groups = findGroups(this.animals);
+      this.groupT = 0.25;
+    }
+    if (this.debug && this.input.pressed('helper')) this.showZones = !this.showZones;
+    this.fx.update(dt);
+    this.updateCamera(dt);
+
+    const reg = this.map.regionAt(this.dog.x, this.dog.y);
+    if (reg && reg !== this.lastRegion) {
+      this.place = { text: reg.name.toUpperCase(), t: 2.4 };
+      this.lastRegion = reg;
+    }
+    if (this.place && (this.place.t -= dt) <= 0) this.place = null;
+    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
   }
 
   private herdCtx(): HerdCtx {
     const d = this.dog;
     this.sources.length = 0;
     this.sources.push({ x: d.x, y: d.y, vx: d.vx, vy: d.vy, strength: 1, range: 1, kind: 'dog', lying: d.lying });
-    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates: [] };
-  }
-
-  update(dt: number) {
-    this.t += dt;
-    this.dog.update(dt, this.input, this.map, this.fx);
-    for (const ev of this.dog.events) this.onDogEvent(ev);
-    this.dog.events.length = 0;
-    updateHerd(this.animals, this.herdCtx(), dt);
-    if ((this.groupT -= dt) <= 0) {
-      this.groups = findGroups(this.animals);
-      this.groupT = 0.25;
-    }
-    if (this.input.pressed('helper') && this.debug) this.showZones = !this.showZones;
-    this.fx.update(dt);
-    this.updateCamera(dt);
-
-    const reg = this.map.regionAt(this.dog.x, this.dog.y);
-    if (reg && reg !== this.lastRegion) {
-      this.banner = { text: reg.name, t: 2.6 };
-      this.lastRegion = reg;
-    }
-    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    const gates = this.ranch.pens.map((p: Pen) => {
+      const gp = p.gatePoint(-6);
+      return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
+    });
+    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
@@ -91,7 +203,30 @@ export class Game {
     }
   }
 
-  // The group nearest the dog (for the flock mood readout).
+  private onRanchEvent(ev: RanchEvent) {
+    if (ev.kind === 'penned') {
+      const a = ev.animal;
+      const { mult } = calmRating(a.peakStress);
+      const value = Math.max(1, Math.round(a.sp.value * mult));
+      a.deliveryValue = value;
+      this.coins += value;
+      this.stats.deliveredValue += value;
+      this.stats.delivered[a.sp.id] = (this.stats.delivered[a.sp.id] ?? 0) + 1;
+      if (mult > 1) this.stats.calm++;
+      this.fx.float(a.x, a.y - 10, `+${value}$`, C.butter, 1.1);
+    } else if (ev.kind === 'shut') {
+      const n = ev.batch.length;
+      const avg = ev.batch.reduce((s, a) => s + a.peakStress, 0) / Math.max(1, n);
+      const { label } = calmRating(avg);
+      const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
+      const sp = ev.batch[0].sp;
+      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}  +${value}$`, 2.8);
+      const gp = ev.pen.gatePoint(0);
+      for (let i = 0; i < 10; i++)
+        this.fx.add({ kind: 'spark', x: gp.x, y: gp.y - 4, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, max: 0.5, color: C.butter });
+    }
+  }
+
   nearestGroup(maxD = 140): Group | null {
     let best: Group | null = null, bd = maxD;
     for (const gr of this.groups) {
@@ -105,9 +240,15 @@ export class Game {
 
   private updateCamera(dt: number) {
     const d = this.dog;
-    const tx = d.x + d.vx * 0.35;
-    const ty = d.y + d.vy * 0.35;
-    const k = damp(4.5, dt);
+    let tx = d.x + d.vx * 0.35;
+    let ty = d.y + d.vy * 0.35;
+    // Lean towards the flock you are working so you can see both.
+    const gr = this.nearestGroup(110);
+    if (gr) {
+      tx += (gr.x - d.x) * 0.3;
+      ty += (gr.y - d.y) * 0.3;
+    }
+    const k = damp(4, dt);
     this.cam.x += (tx - this.cam.x) * k;
     this.cam.y += (ty - this.cam.y) * k;
     const { W, H } = this.screen;
@@ -115,103 +256,34 @@ export class Game {
     this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
   }
 
-  // Debug: the whole world as one image (ground, entities, canopy).
+  view() {
+    const { W, H } = this.screen;
+    return { ox: Math.round(this.cam.x - W / 2), oy: Math.round(this.cam.y - H / 2), W, H };
+  }
+
+  // Debug: the whole world as one image.
   debugMapImage(): string {
     const c = document.createElement('canvas');
     c.width = WORLD_W;
     c.height = WORLD_H;
     const g = c.getContext('2d')!;
     g.drawImage(this.baked.ground, 0, 0);
-    this.dog.draw(g);
     g.drawImage(this.baked.canopy, 0, 0);
     return c.toDataURL('image/png');
   }
 
-  view() {
-    const { W, H } = this.screen;
-    return { ox: Math.round(this.cam.x - W / 2), oy: Math.round(this.cam.y - H / 2), W, H };
-  }
+  // ---- Render ----
 
   render() {
     const g = this.g;
-    const { ox, oy, W, H } = this.view();
-    g.drawImage(this.baked.ground, ox, oy, W, H, 0, 0, W, H);
-
-    g.save();
-    g.translate(-ox, -oy);
-    const inView = (x: number, y: number, m = 24) => x > ox - m && x < ox + W + m && y > oy - m && y < oy + H + m;
-    for (const a of this.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a);
-    this.dog.drawShadow(g);
-    this.fx.drawLow(g);
-    // Lying down lets you read the flock: its flight zone shows faintly.
-    if (this.dog.lying) {
-      const gr = this.nearestGroup(160);
-      if (gr) {
-        let rad = 0;
-        for (const a of gr.members) rad = Math.max(rad, Math.hypot(a.x - gr.x, a.y - gr.y));
-        const sp = gr.members[0].sp;
-        ring(g, gr.x, gr.y, rad + sp.flight * (1 + 0.6 * gr.stress) * 0.85, C.sage, 6);
-      }
-    }
-    if (this.showZones) {
-      for (const a of this.animals) if (inView(a.x, a.y)) ring(g, a.x, a.y, a.sp.flight * (1 + 0.6 * a.stress), C.plum, 8);
-    }
-    const ents: { y: number; draw: () => void }[] = [];
-    for (const a of this.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, this.t) });
-    ents.push({ y: this.dog.y, draw: () => this.dog.draw(g) });
-    ents.sort((p, q) => p.y - q.y);
-    for (const e of ents) e.draw();
-    g.restore();
-
-    g.drawImage(this.baked.canopy, ox, oy, W, H, 0, 0, W, H);
-
-    g.save();
-    g.translate(-ox, -oy);
-    this.drawStamina(g);
-    this.fx.drawHigh(g);
-    g.restore();
-
-    this.drawHud(g, W, H);
+    const v = this.view();
+    drawWorld(this, g, v);
     this.input.uiHeld.clear();
-    drawTouchControls(g, this.ui, this.input, W, H);
-  }
-
-  // A small bar beside the dog, only while stamina is not full.
-  private drawStamina(g: CanvasRenderingContext2D) {
-    const d = this.dog;
-    if (d.stamina >= d.stats.stamina - 0.01) return;
-    const h = 10;
-    const x = Math.round(d.x + 8), y = Math.round(d.y - 12);
-    rect(g, x - 1, y - 1, 4, h + 2, C.plum);
-    const f = Math.round((d.stamina / d.stats.stamina) * h);
-    const blink = d.exhausted && Math.floor(this.t * 6) % 2 === 0;
-    rect(g, x, y + h - f, 2, f, blink ? C.moss : C.butter);
-  }
-
-  private drawHud(g: CanvasRenderingContext2D, W: number, _H: number) {
-    const gr = this.nearestGroup();
-    if (gr) {
-      const sp = gr.members[0].sp;
-      const n = gr.members.length;
-      const mood = gr.stress < 0.3 ? 'CALM' : gr.stress < 0.6 ? 'UNEASY' : 'PANIC';
-      const col = gr.stress < 0.3 ? C.butter : gr.stress < 0.6 ? C.wool : C.butter;
-      const label = `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}`;
-      const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8;
-      panel(g, 3, 3, w, 19);
-      text(g, label, 7, 6, C.wool);
-      const pips = 5, lit = Math.round((1 - gr.stress) * pips);
-      for (let i = 0; i < pips; i++) rect(g, 7 + i * 4, 14, 3, 4, i < lit ? col : C.sage);
-      if (mood !== 'PANIC' || Math.floor(this.t * 6) % 2 === 0) text(g, mood, 28, 13, col);
-    }
-    if (this.banner) {
-      const b = this.banner;
-      const show = b.t > 2.3 ? Math.floor(b.t * 20) % 2 === 0 : true;
-      if (show) {
-        const tw = textWidth(b.text.toUpperCase());
-        const x = Math.round(W / 2 - tw / 2 - 5);
-        panel(g, x, 16, tw + 10, 11);
-        text(g, b.text.toUpperCase(), W / 2, 19, C.wool, { align: 'center' });
-      }
+    if (this.mode === 'play') {
+      drawHud(this, g, v.W, v.H);
+      drawTouchControls(g, this.ui, this.input, v.W, v.H);
+    } else if (this.mode === 'summary' && this.summary) {
+      if (drawSummary(g, this.ui, this.summary, v.W, v.H, this.t)) this.input.push('confirm');
     }
   }
 }

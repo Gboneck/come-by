@@ -84,7 +84,7 @@ export interface SimResult {
 }
 
 // Fast-forward the game under bot control.
-export function runSim(game: Game, o: BotOpts, maxSeconds: number, reach = 24): SimResult {
+export function runSim(game: Game, o: BotOpts & { untilPenned?: boolean }, maxSeconds: number, reach = 24): SimResult {
   const dt = 1 / 60;
   let t = 0, sumS = 0, nS = 0, peak = 0, maxGroups = 0, panics = 0, reached = false;
   const wasPanic = new Set<Animal>();
@@ -104,7 +104,9 @@ export function runSim(game: Game, o: BotOpts, maxSeconds: number, reach = 24): 
       if (a.panicT <= 0) wasPanic.delete(a);
     }
     maxGroups = Math.max(maxGroups, game.groups.length);
-    if (flock.length) {
+    if (o.untilPenned) {
+      if (!flock.length) { reached = true; break; }
+    } else if (flock.length) {
       cx /= flock.length; cy /= flock.length;
       if (Math.hypot(cx - o.goalX, cy - o.goalY) < reach) { reached = true; break; }
     }
