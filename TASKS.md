@@ -7,14 +7,14 @@
 - [x] git init, GitHub Pages workflow
 
 ## M1 Pasture
-- [ ] Integer-scaled low-res canvas (~240px short side), nearest-neighbour
-- [ ] Palette module; pixel font; sprite-from-string system
-- [ ] World tile map with regions, forest masses, grass tufts, buttercups
-- [ ] Baked terrain + canopy layers (dithered teal/plum trees, sage shadows)
-- [ ] Dog: movement, sprint + stamina, 4-direction walk cycle, dust puffs
-- [ ] Camera following the dog with look-ahead, clamped to the world
-- [ ] Desktop controls (WASD/arrows) and touch controls (virtual stick, buttons)
-- [ ] Screenshot + console check, commit
+- [x] Integer-scaled low-res canvas (~240px short side), nearest-neighbour
+- [x] Palette module; pixel font; sprite-from-string system
+- [x] World tile map with regions, forest masses, grass tufts, buttercups
+- [x] Baked terrain + canopy layers (dithered teal/plum trees, sage shadows)
+- [x] Dog: movement, sprint + stamina, 4-direction walk cycle, dust puffs
+- [x] Camera following the dog with look-ahead, clamped to the world
+- [x] Desktop controls (WASD/arrows) and touch controls (virtual stick, buttons)
+- [x] Screenshot + console check, commit
 
 ## M2 Flock
 - [ ] Sheep sprites (distinct silhouette, walk cycle, graze frame)
@@ -77,3 +77,14 @@
 - Night/dusk darkness is a Bayer dither of plum pixels instead of alpha, so
   the screen stays inside the palette.
 - Sprint on touch = push the virtual stick to its rim (no extra button).
+- World is a hub-and-spoke valley: the ranch in the middle, each region a
+  clearing in dense forest, joined by corridors with dirt paths. Locked
+  regions sit behind a gate in their corridor (`REGIONS[].gate` in
+  `src/world/map.ts`). Map is 192x168 tiles of 8px; collision runs on 4px
+  cells so fences can be thin.
+- Canopy texture copies the reference's technique (mostly teal, plum drawn as
+  the lower arcs of leaf clumps, chevrons and specks, denser on the shaded
+  lower-left side) rather than random noise.
+- `scripts/zoom.mjs` crops and enlarges any PNG for pixel inspection;
+  `scripts/mapshot.mjs` exports the whole baked world to `shots/map.png`.
+
