@@ -112,6 +112,24 @@ stays unique.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
   the model for helper dogs.
 
+## Working from a cloud session (often from a phone)
+
+The game is live at https://gboneck.github.io/come-by/ and deploys from
+`main` of `Gboneck/come-by` through `.github/workflows/deploy.yml`.
+
+- On startup `scripts/cloud-setup.sh` installs packages and Playwright's
+  headless Chromium (it prints whether that worked).
+- Work on a branch. Before shipping: `npm run typecheck`, `npm run build`,
+  and `npm run shot` (desktop + phone screenshots in `shots/`, fails on
+  console errors). Look at the screenshots. For anything touching herding,
+  run `node scripts/tune.mjs <species>` before and after and compare.
+- Ship by opening a pull request into `main`; merging it redeploys the
+  site in about a minute. When the user says to ship or merge, merge it
+  yourself (`gh pr merge --squash --delete-branch`) and say when the
+  deploy is done (`gh run watch`).
+- The user is usually on a phone: keep replies short, say what changed in
+  the game in plain words, and give the live link to try it.
+
 ## Working rules
 
 - Work milestone by milestone (see `TASKS.md`). After each: run the game,

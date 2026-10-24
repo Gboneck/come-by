@@ -1,5 +1,7 @@
 # Come By
 
+**Play it: https://gboneck.github.io/come-by/** (desktop or phone)
+
 A top-down pixel-art herding game. You are a blue heeler cattle dog bringing
 ducks, sheep, goats, cattle and wild ponies home to a ranch that grows into a
 thriving valley. Calm, skilful herding always pays better than barking
