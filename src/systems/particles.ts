@@ -1,8 +1,11 @@
 import { C } from '../palette';
-import { disc, ring, rect } from '../gfx/draw';
+import { ring, rect } from '../gfx/draw';
 import { text } from '../gfx/font';
+import { drawSpr, type Sprite } from '../gfx/sprite';
+import { fxSprites } from '../art/fx';
 
-export type PKind = 'dust' | 'ring' | 'float' | 'spark' | 'splash' | 'heart' | 'feather';
+// 'anim' plays a sprite strip once over its life (puffs, the bark burst).
+export type PKind = 'anim' | 'ring' | 'float' | 'spark' | 'splash' | 'heart' | 'feather';
 
 export interface Particle {
   kind: PKind;
@@ -16,6 +19,12 @@ export interface Particle {
   color: string;
   text?: string;
   dash?: number;
+  frames?: Sprite[];
+  flip?: boolean;
+  low?: boolean; // draw on the ground, under entities
+  follow?: { x: number; y: number }; // stay pinned to this, at the spawn offset
+  ox?: number;
+  oy?: number;
 }
 
 export class Particles {
@@ -26,8 +35,19 @@ export class Particles {
     this.list.push({ vx: 0, vy: 0, size: 1, color: C.wool, life: max, max, ...p });
   }
 
+  // Small footfall puff that drifts and rises.
   dust(x: number, y: number, vx = 0, vy = 0) {
-    this.add({ kind: 'dust', x, y, vx, vy, max: 0.35 + Math.random() * 0.2, size: 1.5 + Math.random(), color: C.wool });
+    this.add({ kind: 'anim', x, y, vx, vy, max: 0.32 + Math.random() * 0.12, frames: fxSprites().puff, low: true, flip: Math.random() < 0.5 });
+  }
+
+  // Big puff for flopping down or skidding to a stop.
+  puff(x: number, y: number, vx = 0, vy = 0) {
+    this.add({ kind: 'anim', x, y, vx, vy, max: 0.42, frames: fxSprites().bigPuff, low: true, flip: Math.random() < 0.5 });
+  }
+
+  // A sprite strip pinned to a moving thing (e.g. the bark burst at the mouth).
+  attached(follow: { x: number; y: number }, ox: number, oy: number, frames: Sprite[], max: number, flip = false) {
+    this.add({ kind: 'anim', x: follow.x + ox, y: follow.y + oy, follow, ox, oy, frames, max, flip });
   }
 
   ring(x: number, y: number, radius: number, color: string = C.wool, max = 0.35, dash = 0) {
@@ -48,12 +68,26 @@ export class Particles {
       p.life -= dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      if (p.kind === 'dust') { p.vx *= 0.9; p.vy = p.vy * 0.9 - 4 * dt; }
+      if (p.kind === 'anim') {
+        if (p.follow) {
+          p.x = p.follow.x + (p.ox ?? 0);
+          p.y = p.follow.y + (p.oy ?? 0);
+        } else {
+          p.vx *= 0.9;
+          p.vy = p.vy * 0.9 - 4 * dt;
+        }
+      }
       if (p.kind === 'float') p.vy *= 0.94;
       if (p.kind === 'splash') p.vy += 90 * dt;
       if (p.kind === 'heart') p.vy = -10;
     }
     this.list = this.list.filter((p) => p.life > 0);
+  }
+
+  private drawAnim(g: CanvasRenderingContext2D, p: Particle) {
+    const fr = p.frames!;
+    const i = Math.min(fr.length - 1, Math.floor((1 - p.life / p.max) * fr.length));
+    drawSpr(g, fr[i], p.x, p.y, p.flip);
   }
 
   // Ground-level effects (under entities).
@@ -62,6 +96,8 @@ export class Particles {
       const t = 1 - p.life / p.max;
       if (p.kind === 'ring') {
         ring(g, p.x, p.y, p.size * (0.25 + 0.75 * Math.sqrt(t)), p.color, p.dash);
+      } else if (p.kind === 'anim' && p.low) {
+        this.drawAnim(g, p);
       }
     }
   }
@@ -70,12 +106,9 @@ export class Particles {
     for (const p of this.list) {
       const k = p.life / p.max;
       switch (p.kind) {
-        case 'dust': {
-          const r = Math.round(p.size * k);
-          if (r <= 0) rect(g, p.x, p.y, 1, 1, p.color);
-          else disc(g, p.x, p.y, r, p.color);
+        case 'anim':
+          if (!p.low) this.drawAnim(g, p);
           break;
-        }
         case 'splash':
         case 'spark':
         case 'feather':

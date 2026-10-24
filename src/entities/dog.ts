@@ -1,7 +1,8 @@
 import { C } from '../palette';
 import { ellipse } from '../gfx/draw';
 import { drawSpr, type Sprite } from '../gfx/sprite';
-import { makeDogSprites, type DogSprites } from '../art/dog';
+import { makeDogSprites, RUN_BOB, SPRINT_BOB, type DogPoses, type DogSprites } from '../art/dog';
+import { fxSprites } from '../art/fx';
 import type { Input } from '../input';
 import { BLOCK_DOG, SHALLOW, type WorldMap } from '../world/map';
 import { collideCircle } from '../world/collide';
@@ -23,6 +24,10 @@ export type DogEvent = 'bark' | 'nip';
 
 let SPRITES: DogSprites | null = null;
 
+const SETTLE_STEP = 0.07; // seconds per in-between pose when lying down
+const GET_UP = 0.12;
+const BARK_TIME = 0.28; // mouth open, then the head dips as it follows through
+
 export class Dog {
   x: number;
   y: number;
@@ -42,8 +47,12 @@ export class Dog {
   barkCd = 0;
   nipCd = 0;
   nipT = 0;
+  private lieT = 0;
+  private flopped = false;
   private phase = 0;
+  private lastStep = 0;
   private dustT = 0;
+  private skidded = false;
   inWater = false;
   events: DogEvent[] = [];
   stats: DogStats = { ...BASE_STATS };
@@ -68,11 +77,22 @@ export class Dog {
     const wantLie = controllable && input.lie;
     if (wantLie && !this.lying) {
       this.lying = true;
-      fx.dust(this.x - 3, this.y + 2, -6, 0);
-      fx.dust(this.x + 3, this.y + 2, 6, 0);
+      this.lieT = 0;
+      this.flopped = false;
     } else if (!wantLie && this.lying) {
       this.lying = false;
-      this.getUp = 0.12;
+      this.getUp = GET_UP;
+    }
+    if (this.lying) {
+      this.lieT += dt;
+      // A little dust each side as the body meets the ground.
+      if (!this.flopped && this.lieT >= this.poses().settle.length * SETTLE_STEP) {
+        this.flopped = true;
+        if (!this.inWater) {
+          fx.dust(this.x - 4, this.y + 2, -10, 0);
+          fx.dust(this.x + 4, this.y + 2, 10, 0);
+        }
+      }
     }
 
     let mx = 0, my = 0;
@@ -116,6 +136,7 @@ export class Dog {
     collideCircle(map, this, this.r, BLOCK_DOG);
 
     // Facing follows input direction, with a little hysteresis between axes.
+    const prevFace = this.face;
     const sx = mag > 0.1 ? mx : this.vx, sy = mag > 0.1 ? my : this.vy;
     if (Math.hypot(sx, sy) > 0.05 && this.nipT <= 0) {
       const l = Math.hypot(sx, sy);
@@ -129,16 +150,35 @@ export class Dog {
 
     const v = this.speed;
     this.phase += (v * dt) / (this.sprinting ? 7 : 4.5);
+    const step = Math.floor(this.phase);
 
-    // Dust behind a running dog, splashes in the ford.
+    // Splashes in the ford. On dry ground the gallop kicks a puff from the
+    // hind feet on each landing (odd frames), and a nip lunge trails dust.
     this.dustT -= dt;
-    if (v > 20 && this.dustT <= 0) {
-      if (this.inWater) {
+    if (this.inWater) {
+      if (v > 20 && this.dustT <= 0) {
         fx.splash(this.x, this.y + 2);
         this.dustT = 0.18;
-      } else if (this.sprinting || v > this.stats.walk * 1.2) {
-        fx.dust(this.x - this.hx * 4, this.y + 2 - this.hy * 2, -this.vx * 0.15, -this.vy * 0.15);
-        this.dustT = 0.07;
+      }
+    } else if (this.sprinting) {
+      if (step !== this.lastStep && (step & 1) === 1 && v > 20)
+        fx.dust(this.x - this.hx * 5, this.y + 2 - this.hy * 2, -this.vx * 0.2, -this.vy * 0.2);
+    } else if (v > this.stats.walk * 1.2 && this.dustT <= 0) {
+      fx.dust(this.x - this.hx * 4, this.y + 2 - this.hy * 2, -this.vx * 0.15, -this.vy * 0.15);
+      this.dustT = 0.07;
+    }
+    this.lastStep = step;
+
+    // Skids: a big puff when letting go at a gallop, or turning tail at speed.
+    if (!this.inWater) {
+      const fast = v > this.stats.walk * 1.25;
+      const reversed = (prevFace === 'l' && this.face === 'r') || (prevFace === 'r' && this.face === 'l');
+      if (mag < 0.1 && this.nipT <= 0) {
+        if (fast && !this.skidded) fx.puff(this.x + this.hx * 2, this.y + 2, this.vx * 0.3, this.vy * 0.3);
+        this.skidded = true;
+      } else {
+        this.skidded = false;
+        if (reversed && v > 30) fx.puff(this.x, this.y + 2, this.vx * 0.3, 0);
       }
     }
 
@@ -146,10 +186,16 @@ export class Dog {
     if (input.pressed('bark') && this.barkCd <= 0) {
       if (this.lying) { this.lying = false; this.getUp = 0.1; }
       this.barkCd = 0.75;
-      this.barkAnim = 0.28;
+      this.barkAnim = BARK_TIME;
       this.events.push('bark');
       fx.ring(this.x, this.y - 2, this.stats.barkRange, C.wool, 0.32, 6);
       fx.ring(this.x, this.y - 2, this.stats.barkRange * 0.55, C.wool, 0.22);
+      // Sound lines thrown from the mouth, riding along with the dog.
+      const B = fxSprites();
+      if (this.face === 'r') fx.attached(this, 7, -2, B.barkSide, 0.24);
+      else if (this.face === 'l') fx.attached(this, -7, -2, B.barkSide, 0.24, true);
+      else if (this.face === 'd') fx.attached(this, 0, 3, B.barkDown, 0.24);
+      else fx.attached(this, 0, -9, B.barkUp, 0.24);
     }
     if (input.pressed('nip') && this.nipCd <= 0 && !this.lying) {
       this.nipCd = 0.45;
@@ -158,25 +204,35 @@ export class Dog {
     }
   }
 
+  private poses(): DogPoses {
+    const P = SPRITES!.poses;
+    return this.face === 'd' ? P.down : this.face === 'u' ? P.up : P.side;
+  }
+
   frameSprite(): { s: Sprite; flip: boolean; bob: number } {
-    const S = SPRITES!;
-    const moving = this.speed > 6;
-    const f = ((Math.floor(this.phase) % 4) + 4) % 4;
+    const P = this.poses();
     const flip = this.face === 'l';
-    const bob = moving && (f === 1 || f === 3) ? -1 : 0;
-    if (this.face === 'l' || this.face === 'r') {
-      if (this.lying) return { s: S.sideLie, flip, bob: 0 };
-      if (this.barkAnim > 0) return { s: S.sideBark, flip, bob: 0 };
-      if (!moving) return { s: S.sideStand, flip, bob: 0 };
-      return { s: this.sprinting ? S.gallop[f] : S.side[f], flip, bob };
+    const pose = (s: Sprite, bob = 0) => ({ s, flip, bob });
+    if (this.lying) {
+      // Sink through the settle poses, then breathe; now and then the tail
+      // thumps the ground a few times.
+      const i = Math.floor(this.lieT / SETTLE_STEP);
+      if (i < P.settle.length) return pose(P.settle[i]);
+      const t = this.lieT - P.settle.length * SETTLE_STEP;
+      const thump = t > 1.5 ? (t - 1.5) % 3.2 : 1;
+      if (thump < 0.48 && Math.floor(thump / 0.08) % 2 === 0) return pose(P.lieWag);
+      return pose(t % 1.6 > 1.1 ? P.lieBreath : P.lie);
     }
-    if (this.face === 'd') {
-      if (this.lying) return { s: S.downLie, flip: false, bob: 0 };
-      if (this.barkAnim > 0) return { s: S.downBark, flip: false, bob: 0 };
-      return { s: moving ? S.down[f] : S.downStand, flip: false, bob };
+    if (this.barkAnim > 0) return pose(this.barkAnim > 0.1 ? P.bark : P.brace);
+    if (this.getUp > 0) {
+      // Rise back up through the settle poses.
+      const i = Math.min(P.settle.length - 1, Math.floor((this.getUp / GET_UP) * P.settle.length));
+      return pose(P.settle[i]);
     }
-    if (this.lying) return { s: S.upLie, flip: false, bob: 0 };
-    return { s: moving ? S.up[f] : S.upStand, flip: false, bob };
+    if (this.speed <= 6) return pose(P.stand);
+    const cyc = this.sprinting ? P.sprint : P.run;
+    const f = Math.floor(this.phase) % cyc.length;
+    return pose(cyc[f], (this.sprinting ? SPRINT_BOB : RUN_BOB)[f]);
   }
 
   drawShadow(g: CanvasRenderingContext2D) {
