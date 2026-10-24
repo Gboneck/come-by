@@ -50,7 +50,7 @@ export class NightOverlay {
           const d2 = dx * dx + dy * dy;
           if (d2 < l.r * l.r) {
             const k = 1 - Math.sqrt(d2) / l.r;
-            level -= 16 * Math.min(1, k * 1.6);
+            level -= 16 * Math.min(1, k * 1.8);
           }
         }
         buf[y * W + x] = BAYER4[by + ((x + ox) & 3)] < level ? plum : 0;

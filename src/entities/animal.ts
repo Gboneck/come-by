@@ -604,8 +604,13 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number) {
     const f = moving ? ((Math.floor(a.phase) % arr.length) + arr.length) % arr.length : 0;
     drawSpr(g, arr[f], a.x, y);
   }
-  // Worry marks: "!" when stressed, blinking when panicking.
-  if (a.stress > 0.55 && !a.pen) {
+}
+
+// Worry marks: "!" when stressed, blinking when panicking. Drawn above the
+// night so a frightened flock reads in the dark.
+export function drawAnimalMarks(g: CanvasRenderingContext2D, a: Animal, t: number) {
+  if (a.gone) return;
+  if (a.stress > 0.55 && (!a.pen || a.stress > 0.75)) {
     const blink = a.panicT > 0 ? Math.floor(t * 10) % 2 === 0 : true;
     if (blink) {
       const top = Math.round(a.y - (a.sp.r * 2 + 6));

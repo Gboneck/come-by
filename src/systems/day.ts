@@ -26,10 +26,10 @@ export class DayCycle {
 
   // 0..1 darkness for the dither overlay.
   darkness(): number {
-    if (this.phase === 'night') return 0.62;
+    if (this.phase === 'night') return 0.5;
     const f = this.frac;
     if (f < DUSK_AT) return 0;
-    return Math.min(0.62, ((f - DUSK_AT) / (1 - DUSK_AT)) * 0.62);
+    return Math.min(0.5, ((f - DUSK_AT) / (1 - DUSK_AT)) * 0.5);
   }
 
   update(dt: number): 'dusk' | 'nightfall' | 'dawn' | null {

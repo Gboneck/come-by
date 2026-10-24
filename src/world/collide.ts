@@ -7,9 +7,35 @@ export interface Body {
   vy: number;
 }
 
+// If the centre has ended up inside a blocked cell (squeezed by others),
+// move it into the nearest open cell rather than through the wall.
+function rescue(map: WorldMap, b: Body, mask: number): boolean {
+  const cx = Math.floor(b.x / CS), cy = Math.floor(b.y / CS);
+  if ((map.cell(cx, cy) & mask) === 0) return false;
+  let best = 1e9, bx = b.x, by = b.y;
+  for (let r = 1; r <= 6 && best === 1e9; r++) {
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        if ((map.cell(cx + dx, cy + dy) & mask) !== 0) continue;
+        const L = (cx + dx) * CS, T = (cy + dy) * CS;
+        const px = Math.min(Math.max(b.x, L + 0.5), L + CS - 0.5);
+        const py = Math.min(Math.max(b.y, T + 0.5), T + CS - 0.5);
+        const d = (px - b.x) ** 2 + (py - b.y) ** 2;
+        if (d < best) { best = d; bx = px; by = py; }
+      }
+  }
+  if (best === 1e9) return false;
+  b.x = bx;
+  b.y = by;
+  b.vx = 0;
+  b.vy = 0;
+  return true;
+}
+
 // Push a circle out of blocked cells and kill velocity into walls.
 export function collideCircle(map: WorldMap, b: Body, r: number, mask: number): boolean {
-  let any = false;
+  let any = rescue(map, b, mask);
   for (let iter = 0; iter < 3; iter++) {
     let hit = false;
     const x0 = Math.floor((b.x - r) / CS), x1 = Math.floor((b.x + r) / CS);
@@ -20,23 +46,12 @@ export function collideCircle(map: WorldMap, b: Body, r: number, mask: number): 
         const L = cx * CS, T = cy * CS;
         const px = b.x < L ? L : b.x > L + CS ? L + CS : b.x;
         const py = b.y < T ? T : b.y > T + CS ? T + CS : b.y;
-        let dx = b.x - px, dy = b.y - py;
+        const dx = b.x - px, dy = b.y - py;
         const d2 = dx * dx + dy * dy;
-        if (d2 >= r * r) continue;
-        let nx: number, ny: number, push: number;
-        if (d2 > 1e-6) {
-          const d = Math.sqrt(d2);
-          nx = dx / d; ny = dy / d; push = r - d;
-        } else {
-          // Centre is inside the cell: leave by the nearest face.
-          const l = b.x - L, rt = L + CS - b.x, t = b.y - T, bt = T + CS - b.y;
-          const m = Math.min(l, rt, t, bt);
-          if (m === l) { nx = -1; ny = 0; push = l + r; }
-          else if (m === rt) { nx = 1; ny = 0; push = rt + r; }
-          else if (m === t) { nx = 0; ny = -1; push = t + r; }
-          else { nx = 0; ny = 1; push = bt + r; }
-          dx = nx; dy = ny;
-        }
+        if (d2 >= r * r || d2 < 1e-6) continue;
+        const d = Math.sqrt(d2);
+        const nx = dx / d, ny = dy / d;
+        const push = r - d;
         b.x += nx * push;
         b.y += ny * push;
         const vn = b.vx * nx + b.vy * ny;
@@ -47,6 +62,7 @@ export function collideCircle(map: WorldMap, b: Body, r: number, mask: number): 
     if (!hit) break;
     any = true;
   }
+  if (rescue(map, b, mask)) any = true;
   if (b.x < r) b.x = r;
   if (b.y < r) b.y = r;
   if (b.x > WORLD_W - r) b.x = WORLD_W - r;

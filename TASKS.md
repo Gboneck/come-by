@@ -53,10 +53,10 @@
 - [x] Screenshot + console check, commit
 
 ## M6 Night
-- [ ] Night phase with dither darkness and lanterns
-- [ ] Coyotes (later wolves) hunt strays and unprotected pens
-- [ ] Barn protects nearby pens; losses tracked in summary
-- [ ] Screenshot + console check, commit
+- [x] Night phase with dither darkness and lanterns
+- [x] Coyotes (later wolves) hunt strays and unprotected pens
+- [x] Barn protects nearby pens; losses tracked in summary
+- [x] Screenshot + console check, commit
 
 ## M7 Helpers and polish
 - [ ] Helper dogs: hold a flank by day, guard pens at night
@@ -164,4 +164,25 @@
   opens the Ledger (Tab / tap). First-day hints walk through finding,
   circling, lying down, penning, the calm bonus, the ledger and the kennel;
   each region shows a one-time tip on first visit.
+- Nights start at tier 2 (tier 1 nights are skipped, so the tutorial days
+  stay gentle). Coyotes: 1 + (day + tier) / 5, up to 4; wolves from tier 4.
+  They arrive one by one from a tree line near their quarry, sneak in,
+  rush the last 50px, and either grab a loose animal or dig under an
+  unsheltered pen fence (8s coyote, 6s wolf, doubled for an upgraded pen),
+  then drag their catch back to the trees. Reaching a thief makes it drop
+  the animal ("SAVED!").
+- A bark sends a coyote running; wolves need two (or a nip) and come back
+  once. A dog close by unnerves them, a lying dog much less. The night ends
+  early once every visitor has gone, so a well-defended night is short.
+- A barn shelters pens inside its ring (84px, 120px upgraded); it does not
+  protect animals left out in the pastures. Any night with no losses counts
+  for the tier 4 goal, including a quiet one behind a barn.
+- Night is a 50% checkerboard of plum with pools of light (dog, farmhouse,
+  lanterns, barn); predator eyes and the flock's "!" marks are drawn above
+  the dark so the action reads.
+- Collision fix found while testing nights: a body squeezed into a solid
+  cell used to be pushed out through the far face, ratcheting it deep into
+  the forest. It now always rescues to the nearest open cell.
+- Predators path-find with A* over the tile grid (`src/world/path.ts`);
+  helper dogs will reuse it.
 

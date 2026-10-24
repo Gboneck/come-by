@@ -2,7 +2,7 @@ import { C } from '../palette';
 import { panel, rect, px } from '../gfx/draw';
 import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
-import { DUSK_AT } from '../systems/day';
+import { DUSK_AT, NIGHT_LEN } from '../systems/day';
 import { nextGoal } from '../systems/progression';
 import { wrap } from '../gfx/font';
 import { touchLayout } from './touch';
@@ -55,7 +55,10 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
       const gp = pen.gatePoint(10);
       edgeArrow(g, game, gp.x, gp.y, C.wool, 'PEN', top);
     }
-  } else {
+  }
+  if (game.day.phase === 'night') {
+    for (const p of game.predators) if (p.active) edgeArrow(g, game, p.x, p.y, C.wool, p.carry ? '!!' : '!', top);
+  } else if (!driving) {
     const groups = [...game.groups]
       .sort((a, b) => Math.hypot(a.x - game.dog.x, a.y - game.dog.y) - Math.hypot(b.x - game.dog.x, b.y - game.dog.y))
       .slice(0, 2);
@@ -71,9 +74,17 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   const tx = 6, ty = 14, tw = 44;
   rect(g, tx, ty, tw, 2, C.sage);
   rect(g, tx + Math.round(tw * DUSK_AT), ty, tw - Math.round(tw * DUSK_AT), 2, C.teal);
-  const sx = tx + Math.round(d.frac * (tw - 1));
-  rect(g, sx - 1, ty - 1, 3, 4, d.phase === 'dusk' ? C.butter : C.butter);
-  px(g, sx, ty - 2, C.butter);
+  if (d.phase === 'night') {
+    // Moon crossing a dark track.
+    rect(g, tx, ty, tw, 2, C.plum);
+    const mx = tx + Math.round((d.nightT / NIGHT_LEN) * (tw - 1));
+    rect(g, mx - 1, ty - 1, 3, 4, C.wool);
+    px(g, mx + 1, ty - 1, C.plum);
+  } else {
+    const sx = tx + Math.round(d.frac * (tw - 1));
+    rect(g, sx - 1, ty - 1, 3, 4, C.butter);
+    px(g, sx, ty - 2, C.butter);
+  }
 
   // ---- Coins (top-right) ----
   const coinStr = `${game.coins}$`;

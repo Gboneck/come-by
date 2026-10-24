@@ -22,6 +22,8 @@ import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey 
 import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
 import { drawLedger } from './ui/ledger';
 import { REGIONS } from './world/map';
+import { Predator, type PredCtx } from './entities/predator';
+import { Barn } from './ranch/structures';
 import { clamp, damp } from './util';
 
 export type Mode = 'play' | 'summary' | 'build' | 'ledger';
@@ -99,6 +101,8 @@ export class Game {
   totals: Totals = newTotals();
   helpers: unknown[] = [];
   won = false;
+  predators: Predator[] = [];
+  private quietT = 0;
   tut = 0; // tutorial step
   tutT = 0;
   private tierCheckT = 0;
@@ -247,6 +251,13 @@ export class Game {
   }
 
   endDay() {
+    if (this.day.phase === 'night') {
+      const lost = Object.values(this.stats.lost).reduce((n, v) => n + (v ?? 0), 0);
+      if (lost === 0) this.totals.nightsNoLoss++;
+      // Anyone still being carried off at dawn is dropped where they are.
+      for (const p of this.predators) p.dropCarry();
+    }
+    this.predators = [];
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
@@ -315,18 +326,30 @@ export class Game {
       this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
     const dayEv = this.day.update(dt);
-    if (dayEv === 'dusk') this.showBanner('DUSK', 'GET THEM HOME, THE LIGHT IS GOING', 2.6);
+    if (dayEv === 'dusk') this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);
     if (dayEv === 'nightfall') {
+      if (this.tier >= 2) this.startNight();
+      else {
+        this.endDay();
+        return;
+      }
+    }
+    if (dayEv === 'dawn') {
       this.endDay();
       return;
+    }
+    if (this.day.phase === 'night') {
+      this.updateNight(dt);
+      if (this.mode !== 'play') return;
     }
 
     this.dog.update(dt, this.input, this.map, this.fx);
     for (const ev of this.dog.events) this.onDogEvent(ev);
     this.dog.events.length = 0;
     updateHerd(this.animals, this.herdCtx(), dt);
-    for (const ev of this.ranch.update(dt, this.animals, false, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
-    updateProduce(this, dt);
+    const night = this.day.phase === 'night';
+    for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
+    if (!night) updateProduce(this, dt);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
       this.groupT = 0.25;
@@ -350,10 +373,87 @@ export class Game {
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
   }
 
+  // ---- Night ----
+
+  sheltered(p: Pen): boolean {
+    return this.ranch.buildings.some((b) => b instanceof Barn && Math.hypot(b.cx - p.cx, b.cy - p.cy) <= b.shelterRadius);
+  }
+
+  startNight() {
+    this.day.startNight();
+    this.predators = [];
+    const coyotes = Math.min(4, 1 + Math.floor((this.day.day + this.tier) / 5));
+    const wolves = this.tier >= 4 ? Math.min(2, 1 + Math.floor(this.day.day / 8)) : 0;
+    let t = 3;
+    for (let i = 0; i < coyotes + wolves; i++) {
+      this.predators.push(new Predator(i < coyotes ? 'coyote' : 'wolf', t));
+      t += 5 + Math.random() * 6;
+    }
+    this.quietT = 0;
+    this.showBanner('NIGHT FALLS', wolves ? 'WOLVES AND COYOTES ARE ABOUT. GUARD THE STOCK' : 'COYOTES ARE ABOUT. GUARD THE STOCK', 3);
+    if (!this.tipsSeen.has('night')) {
+      this.tipsSeen.add('night');
+      this.tip = { text: this.input.touchMode ? 'BARK AT A COYOTE TO SEND IT RUNNING. PENS IN A BARN\'S RING ARE SAFE.' : 'SPACE TO BARK A COYOTE AWAY (WOLVES NEED TWO). PENS IN A BARN\'S RING ARE SAFE.', t: 9 };
+    }
+    this.audio?.play('howl');
+  }
+
+  private predCtx(): PredCtx {
+    const claimed = new Map<object, Predator>();
+    for (const p of this.predators) {
+      if (p.state === 'hunt' || p.state === 'dig') {
+        if (p.target) claimed.set(p.target, p);
+        if (p.pen) claimed.set(p.pen, p);
+      }
+    }
+    return {
+      map: this.map,
+      dogX: this.dog.x,
+      dogY: this.dog.y,
+      dogLying: this.dog.lying,
+      animals: this.animals,
+      pens: this.ranch.pens,
+      sheltered: (p) => this.sheltered(p),
+      fx: this.fx,
+      claimed,
+      onGrab: (a, p) => {
+        this.audio?.play('yelp', { x: p.x, y: p.y });
+        if (this.isOnScreen(a.x, a.y, 40)) this.fx.float(a.x, a.y - 12, '!', C.butter, 0.8);
+      },
+      onLoss: (a, p) => {
+        this.stats.lost[a.sp.id] = (this.stats.lost[a.sp.id] ?? 0) + 1;
+        this.totals.lost++;
+        this.showBanner(`A ${p.kind.toUpperCase()} TOOK A ${a.sp.name.toUpperCase()}`, undefined, 2.2);
+        this.audio?.play('howl');
+      },
+    };
+  }
+
+  private updateNight(dt: number) {
+    const ctx = this.predCtx();
+    for (const p of this.predators) {
+      p.update(dt, ctx);
+      // Catch a thief and it lets go.
+      if (p.carry && Math.hypot(p.x - this.dog.x, p.y - this.dog.y) < 11) {
+        p.scare(2);
+        const a = p.dropCarry();
+        if (a) this.fx.float(a.x, a.y - 12, 'SAVED!', C.butter, 1.2);
+      }
+    }
+    // A quiet night ends early once every visitor is gone.
+    const left = this.predators.some((p) => p.state !== 'gone');
+    if (!left) {
+      this.quietT += dt;
+      if (this.quietT > 2.5) this.endDay();
+    }
+  }
+
   private herdCtx(): HerdCtx {
     const d = this.dog;
     this.sources.length = 0;
     this.sources.push({ x: d.x, y: d.y, vx: d.vx, vy: d.vy, strength: 1, range: 1, kind: 'dog', lying: d.lying });
+    for (const p of this.predators)
+      if (p.active && p.state !== 'flee') this.sources.push({ x: p.x, y: p.y, vx: p.vx, vy: p.vy, strength: 1.3, range: 1.5, kind: 'predator', lying: false });
     const gates = this.ranch.pens.map((p: Pen) => {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
@@ -365,7 +465,15 @@ export class Game {
     const d = this.dog;
     if (ev === 'bark') {
       barkAt(this.animals, d.x, d.y, d.stats.barkRange);
+      for (const p of this.predators) {
+        const dd = Math.hypot(p.x - d.x, p.y - d.y);
+        if (dd < d.stats.barkRange * 1.15) p.scare((p.kind === 'wolf' ? 0.55 : 1.05) * (1 - (dd / (d.stats.barkRange * 1.15)) * 0.4));
+      }
     } else {
+      for (const p of this.predators) {
+        const dx = p.x - d.x, dy = p.y - d.y, dd = Math.hypot(dx, dy);
+        if (p.active && dd < 12 && (dx * d.hx + dy * d.hy) / (dd || 1) > 0) p.scare(1.5 * d.stats.nipPower);
+      }
       const hit = nipFrom(this.animals, d.x + d.hx * 4, d.y + d.hy * 4, d.hx, d.hy, d.stats.nipPower);
       const nx = d.x + d.hx * 7, ny = d.y + d.hy * 7 - 2;
       for (let i = 0; i < 4; i++)
@@ -418,7 +526,7 @@ export class Game {
   }
 
   tip: { text: string; t: number } | null = null;
-  private tipsSeen = new Set<string>();
+  tipsSeen = new Set<string>();
 
   hint(): string | null {
     if (this.tip) return this.tip.text;

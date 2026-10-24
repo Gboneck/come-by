@@ -117,7 +117,7 @@ export class Ranch {
         if (!a.pen && d < a.sp.r + 9) inGateway++;
       }
       const was = p.open;
-      if (night || (p.full && p.batch.length === 0)) {
+      if (p.full && p.batch.length === 0) {
         if (inGateway === 0) p.open = false;
       } else if (waiting > 0) {
         p.open = true;
@@ -130,6 +130,9 @@ export class Ranch {
           p.batch = [];
           p.shutFlash = 1;
         }
+      } else if (night && inGateway === 0) {
+        // Shut up for the night unless someone is being driven in.
+        p.open = false;
       }
       if (!was && p.open) ev.push({ kind: 'open', pen: p });
       const before = p.swing;

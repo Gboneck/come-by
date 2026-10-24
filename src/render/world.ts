@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { ring } from '../gfx/draw';
 import type { Game } from '../game';
-import { drawAnimal, drawAnimalShadow } from '../entities/animal';
+import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from '../entities/animal';
 import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
 import { Barn, FieldGate, Fence, Kennel, Market, Windmill } from '../ranch/structures';
 import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
@@ -28,6 +28,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
 
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a);
   game.dog.drawShadow(g);
+  for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
   game.fx.drawLow(g);
 
   // Lying down lets you read the flock: its flight zone shows faintly.
@@ -58,6 +59,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   }
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t) });
   ents.push({ y: game.dog.y, draw: () => game.dog.draw(g) });
+  for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
   ents.sort((p, q) => p.y - q.y);
   for (const e of ents) e.draw();
   if (game.mode === 'build') game.build.drawWorld(game, g);
@@ -74,12 +76,22 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // Dusk and night.
   const dark = game.day.darkness();
   if (dark > 0) {
-    const lights: Light[] = [{ x: game.dog.x - ox, y: game.dog.y - oy, r: 34 }];
+    const lights: Light[] = [{ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 }];
     const f = game.ranch.farmhouse;
-    if (f) lights.push({ x: f.cx - ox, y: f.y1 - 6 - oy, r: 56 });
+    if (f) lights.push({ x: f.cx - ox, y: f.y1 - 6 - oy, r: 64 });
     for (const l of decorLights(game.tier)) lights.push({ x: l.x - ox, y: l.y - oy, r: l.r });
+    for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 - oy, r: 64 });
     game.night.draw(g, W, H, ox, oy, dark, lights);
+    // Eyes in the dark.
+    g.save();
+    g.translate(-ox, -oy);
+    for (const p of game.predators) if (inView(p.x, p.y)) p.drawEyes(g, game.t);
+    g.restore();
   }
+  g.save();
+  g.translate(-ox, -oy);
+  for (const a of game.animals) if (inView(a.x, a.y)) drawAnimalMarks(g, a, game.t);
+  g.restore();
 }
 
 export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: number, night: boolean, sign = false): Drawable[] {
