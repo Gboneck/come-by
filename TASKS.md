@@ -17,15 +17,15 @@
 - [x] Screenshot + console check, commit
 
 ## M2 Flock
-- [ ] Sheep sprites (distinct silhouette, walk cycle, graze frame)
-- [ ] Boids: cohesion, separation, alignment, per-species weights
-- [ ] Flight zone + point of balance steering
-- [ ] Bark (ring, impulse, scatter, stress), nip, lie down (hold)
-- [ ] Stress meter: bunching when nervous, panic + splitting when high
-- [ ] Strays that wander off
-- [ ] Obstacle avoidance and collision against the tile map
-- [ ] Tune until pushing a flock around is fun on its own
-- [ ] Screenshot + console check, commit
+- [x] Sheep sprites (distinct silhouette, walk cycle, graze frame)
+- [x] Boids: cohesion, separation, alignment, per-species weights
+- [x] Flight zone + point of balance steering
+- [x] Bark (ring, impulse, scatter, stress), nip, lie down (hold)
+- [x] Stress meter: bunching when nervous, panic + splitting when high
+- [x] Strays that wander off
+- [x] Obstacle avoidance and collision against the tile map
+- [x] Tune until pushing a flock around is fun on its own
+- [x] Screenshot + console check, commit
 
 ## M3 Home
 - [ ] Ranch area with farmhouse, yard fence and openings
@@ -87,4 +87,14 @@
   lower-left side) rather than random noise.
 - `scripts/zoom.mjs` crops and enlarges any PNG for pixel inspection;
   `scripts/mapshot.mjs` exports the whole baked world to `shots/map.png`.
+- Herding is tuned with a bot harness (`src/bot.ts`, `scripts/tune.mjs`,
+  `scripts/trace.mjs`): a collect-and-drive dog after Strömbom et al. 2014
+  plus naive "chase" and "bark spam" players. Target gradient (sheep x12):
+  calm walk reaches the goal with ~0 stress; barking every 2s is faster but
+  peaks ~0.75 stress; bark spam and chasing split the flock and cause panics.
+- Stress comes from crowding (pressure above 0.4), being run flat out,
+  being startled (relative approach speed), barks, nips, isolation and
+  predators. A dog walking at the flock's pace adds none.
+- Lying down shows the nearest flock's flight zone as a faint dashed ring, so
+  the "settle" command doubles as a way to read the flock.
 

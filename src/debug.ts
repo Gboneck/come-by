@@ -4,16 +4,30 @@ import { drawSpr, type Sprite } from './gfx/sprite';
 import { text } from './gfx/font';
 import { makeDogSprites } from './art/dog';
 import type { Game } from './game';
+import { runSim, type BotOpts } from './bot';
+import type { SpeciesId } from './world/map';
 
 declare global {
   interface Window {
     game?: Game;
+    sim?: (o: BotOpts, seconds: number) => ReturnType<typeof runSim>;
+    resetFlock?: (species: SpeciesId, x: number, y: number, n: number, dogX: number, dogY: number) => void;
   }
 }
 
 export function installDebug(game: Game) {
   game.debug = true;
   window.game = game;
+  window.sim = (o, seconds) => runSim(game, o, seconds);
+  window.resetFlock = (species, x, y, n, dogX, dogY) => {
+    game.animals.length = 0;
+    game.spawnFlock(species, x, y, n);
+    game.dog.x = dogX;
+    game.dog.y = dogY;
+    game.dog.vx = game.dog.vy = 0;
+    game.cam.x = dogX;
+    game.cam.y = dogY;
+  };
 }
 
 let sheet: { label: string; sprites: Sprite[] }[] | null = null;

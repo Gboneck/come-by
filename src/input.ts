@@ -78,6 +78,8 @@ export class Input {
   stick = { id: -1, ox: 0, oy: 0, x: 0, y: 0, active: false };
   stickEnabled = true;
   readonly stickRadius = 20;
+  // Scripted control (debug bots and tests).
+  override: { x: number; y: number; sprint: boolean; lie: boolean } | null = null;
 
   constructor(private screen: Screen) {
     this.touchMode = window.matchMedia?.('(pointer: coarse)').matches ?? false;
@@ -163,15 +165,18 @@ export class Input {
   }
 
   get lie(): boolean {
+    if (this.override) return this.override.lie;
     return this.key('KeyQ', 'KeyL', 'KeyC') || this.uiHeld.has('lie');
   }
 
   get sprint(): boolean {
+    if (this.override) return this.override.sprint;
     if (this.key('ShiftLeft', 'ShiftRight')) return true;
     return this.stick.active && Math.hypot(this.stick.x, this.stick.y) > 0.94;
   }
 
   get move(): { x: number; y: number } {
+    if (this.override) return { x: this.override.x, y: this.override.y };
     let x = 0, y = 0;
     if (this.key('KeyA', 'ArrowLeft')) x -= 1;
     if (this.key('KeyD', 'ArrowRight')) x += 1;
