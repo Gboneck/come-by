@@ -29,6 +29,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a);
   game.dog.drawShadow(g);
   for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
+  for (const h of game.helpers) if (inView(h.x, h.y)) h.drawShadow(g);
   game.fx.drawLow(g);
 
   // Lying down lets you read the flock: its flight zone shows faintly.
@@ -60,6 +61,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t) });
   ents.push({ y: game.dog.y, draw: () => game.dog.draw(g) });
   for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
+  for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => h.draw(g) });
   ents.sort((p, q) => p.y - q.y);
   for (const e of ents) e.draw();
   if (game.mode === 'build') game.build.drawWorld(game, g);
@@ -77,6 +79,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   const dark = game.day.darkness();
   if (dark > 0) {
     const lights: Light[] = [{ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 }];
+    for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
     const f = game.ranch.farmhouse;
     if (f) lights.push({ x: f.cx - ox, y: f.y1 - 6 - oy, r: 64 });
     for (const l of decorLights(game.tier)) lights.push({ x: l.x - ox, y: l.y - oy, r: l.r });
@@ -110,7 +113,7 @@ export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: n
 // A small bar beside the dog, only while stamina is not full.
 function drawStamina(game: Game, g: CanvasRenderingContext2D) {
   const d = game.dog;
-  if (d.stamina >= d.stats.stamina - 0.01) return;
+  if (game.mode === 'title' || d.stamina >= d.stats.stamina - 0.01) return;
   const h = 10;
   const x = Math.round(d.x + 8), y = Math.round(d.y - 12);
   g.fillStyle = C.plum;

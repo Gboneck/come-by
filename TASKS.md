@@ -59,11 +59,11 @@
 - [x] Screenshot + console check, commit
 
 ## M7 Helpers and polish
-- [ ] Helper dogs: hold a flank by day, guard pens at night
-- [ ] Web Audio sound effects
-- [ ] Save/load in localStorage
-- [ ] Title screen
-- [ ] Screenshot + console check, commit
+- [x] Helper dogs: hold a flank by day, guard pens at night
+- [x] Web Audio sound effects
+- [x] Save/load in localStorage
+- [x] Title screen
+- [x] Screenshot + console check, commit
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -185,4 +185,25 @@
   the forest. It now always rescues to the nearest open cell.
 - Predators path-find with A* over the tile grid (`src/world/path.ts`);
   helper dogs will reuse it.
+- Helper dogs (tier 4, hired in the kennel's DOG tab: 50$ then 90$, two at
+  most) wear a buttercup bandana. By day they hold the far flank of the
+  flock you are working, a little behind its shoulder at the edge of its
+  flight zone, and lie down when you do; H (or HELP) cycles FLANK / STAY /
+  HOME. At night each guards the most crowded unsheltered pen, which
+  predators then leave alone, and chases off anything that comes close.
+  Measured: a helper halves the time to nip cattle home and makes calm goat
+  drives far more reliable, without getting in the way of sheep.
+- Sound is all Web Audio synthesis (`src/systems/audio.ts`): bark, nip,
+  gate clack plus a two-note shepherd's whistle for "that'll do", coin,
+  build, tier fanfare, dusk bell, a call for each species (barked-at or
+  frightened flocks answer), coyote yips and howls, birds by day and
+  crickets by night. Distance falloff and stereo pan from the camera.
+  M mutes (remembered).
+- Saves (`src/systems/save.ts`, localStorage) are "the morning of day N":
+  written each morning, after building, on Save and Quit, and when the
+  page is hidden. Continue restores the ranch, herds, goods, upgrades,
+  helpers, tier and lifetime record; it never re-spawns the pastures.
+- The title screen runs the game in attract mode (the heeler driving a
+  flock round the ranch). `?debug` skips the title unless `&title` is
+  added; `?play` skips it too.
 

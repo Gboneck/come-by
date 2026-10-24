@@ -9,6 +9,7 @@ import { Barn, FieldGate, Fence, Kennel, Market, Windmill } from '../ranch/struc
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
 import { SPECIES } from '../entities/species';
+import { HELPER_COSTS } from '../entities/helper';
 import { buildingDrawables } from '../render/world';
 
 export type Tab = 'build' | 'dog' | 'market';
@@ -215,9 +216,13 @@ export class BuildMode {
       if (inp.pressed('remove') && under) this.remove(game, under);
       if (inp.pressed('upgrade') && under) this.upgrade(game, under);
     } else if (this.tab === 'dog') {
-      if (inp.pressed('up')) this.row = (this.row + UPGRADES.length - 1) % UPGRADES.length;
-      if (inp.pressed('down')) this.row = (this.row + 1) % UPGRADES.length;
-      if (inp.pressed('confirm')) this.buyUpgrade(game, UPGRADES[this.row].key);
+      const rows = UPGRADES.length + 1;
+      if (inp.pressed('up')) this.row = (this.row + rows - 1) % rows;
+      if (inp.pressed('down')) this.row = (this.row + 1) % rows;
+      if (inp.pressed('confirm')) {
+        if (this.row < UPGRADES.length) this.buyUpgrade(game, UPGRADES[this.row].key);
+        else this.hire(game);
+      }
     } else {
       const pens = game.ranch.pens.filter((p) => p.animals.length);
       if (pens.length) {
@@ -243,6 +248,15 @@ export class BuildMode {
     game.onBuilt(`up-${key}`);
     this.say(`${def.name} UP!`, true);
     game.audio?.play('build');
+  }
+
+  hire(game: Game) {
+    const err = game.hireHelper();
+    if (err) this.say(err);
+    else {
+      this.say(`${game.helpers[game.helpers.length - 1].name} JOINS THE RANCH!`, true);
+      game.audio?.play('tierup');
+    }
   }
 
   sellOne(game: Game, p: Pen) {
@@ -431,7 +445,7 @@ export class BuildMode {
 
   private drawDog(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
     const ui = game.ui;
-    const pw = Math.min(W - 8, 170), ph = 20 + UPGRADES.length * 16;
+    const pw = Math.min(W - 8, 170), ph = 20 + (UPGRADES.length + 1) * 16;
     const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
     panel(g, x0, y0, pw, ph);
     const hasKennel = game.ranch.buildings.some((b) => b.kind === 'kennel');
@@ -454,6 +468,23 @@ export class BuildMode {
       }
       if (ui.click(`row-${u.key}`, x0, y - 2, pw - 40, 15)) this.row = i;
     });
+    // Helper dogs.
+    {
+      const i = UPGRADES.length, y = y0 + 16 + i * 16;
+      if (this.row === i) rect(g, x0 + 3, y - 2, pw - 6, 15, C.teal);
+      const n = game.helpers.length;
+      text(g, 'HELPER DOG', x0 + 7, y, C.wool);
+      for (let k = 0; k < HELPER_COSTS.length; k++) rect(g, x0 + 7 + k * 5, y + 7, 4, 3, k < n ? C.butter : C.sage);
+      const note = game.tier < 4 ? 'AT TIER 4' : n >= HELPER_COSTS.length ? 'FULL PACK' : 'HOLDS A FLANK';
+      text(g, note, x0 + 36, y + 6, C.wool);
+      if (n < HELPER_COSTS.length && game.tier >= 4) {
+        const cost = HELPER_COSTS[n];
+        const bw = 28, bx = x0 + pw - bw - 6;
+        panel(g, bx, y, bw, 11, C.plum, hasKennel && game.coins >= cost ? C.butter : C.sage);
+        text(g, `${cost}$`, bx + bw / 2, y + 3, game.coins >= cost ? C.butter : C.sage, { align: 'center', iconColor: C.butter });
+        if (ui.click('hire', bx, y, bw, 11)) { this.row = i; this.hire(game); }
+      }
+    }
   }
 
   private drawMarket(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {

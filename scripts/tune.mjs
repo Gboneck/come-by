@@ -16,6 +16,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto('http://localhost:5197/?debug');
 await page.waitForFunction(() => window.sim);
+const helpArg = process.argv.find((x) => x.startsWith('--helpers='));
 const tierArg = process.argv.find((x) => x.startsWith('--tier='));
 if (tierArg) await page.evaluate((n) => window.game.setTier(n, false), Number(tierArg.slice(7)));
 
@@ -46,10 +47,14 @@ const scenarios = [
 for (const sc of scenarios.filter((s) => !only || only.includes(s.name))) {
   const runs = [];
   for (let i = 0; i < 3; i++) {
-    const r = await page.evaluate(({ species, count, start, goal, dog, o }) => {
+    const r = await page.evaluate(async ({ species, count, start, goal, dog, o, helpers }) => {
       window.resetFlock(species, start.x, start.y, count, dog.x, dog.y);
+      if (helpers) {
+        const { Helper } = await import('/src/entities/helper.ts');
+        window.game.helpers = Array.from({ length: helpers }, (_, i) => new Helper('H' + i, dog.x - 10, dog.y + 10, 'flank', i));
+      }
       return window.sim({ goalX: goal.x, goalY: goal.y, ...o }, o.chase ? 20 : 120);
-    }, { species, count, start, goal, dog, o: sc.o });
+    }, { species, count, start, goal, dog, o: sc.o, helpers: helpArg ? Number(helpArg.slice(10)) : 0 });
     runs.push(r);
   }
   const avg = (k) => (runs.reduce((s, r) => s + Number(r[k]), 0) / runs.length).toFixed(2);

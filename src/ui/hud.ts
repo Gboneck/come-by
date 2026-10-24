@@ -92,14 +92,36 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   panel(g, W - cw - 2, 2, cw, 11);
   text(g, coinStr, W - 6, 5, C.wool, { align: 'right', iconColor: C.butter });
 
+  // ---- Pause (touch) ----
+  let rightY = 15;
+  if (game.input.touchMode) {
+    const pw = 13;
+    panel(g, W - pw - 2, rightY, pw, 11, game.ui.isActive('hud-pause') ? C.teal : C.plum, C.sage);
+    rect(g, W - pw + 2, rightY + 3, 1, 5, C.wool);
+    rect(g, W - pw + 5, rightY + 3, 1, 5, C.wool);
+    if (game.ui.click('hud-pause', W - pw - 2, rightY, pw, 11)) game.input.push('pause');
+  }
+
   // ---- Build button (on the ranch) ----
   if (game.inRanch()) {
     const label = game.input.touchMode ? 'BUILD' : 'B: BUILD';
     const bw = textWidth(label) + 8;
     const hot = game.ui.isActive('hud-build');
-    panel(g, W - bw - 2, 15, bw, 11, hot ? C.teal : C.plum, C.butter);
-    text(g, label, W - bw / 2 - 2, 18, C.wool, { align: 'center' });
-    if (game.ui.click('hud-build', W - bw - 2, 15, bw, 11)) game.input.push('build');
+    const bx = W - bw - 2 - (game.input.touchMode ? 15 : 0);
+    panel(g, bx, rightY, bw, 11, hot ? C.teal : C.plum, C.butter);
+    text(g, label, bx + bw / 2, rightY + 3, C.wool, { align: 'center' });
+    if (game.ui.click('hud-build', bx, rightY, bw, 11)) game.input.push('build');
+  }
+  rightY += 13;
+
+  // ---- Helper dogs: what they are doing, and the command button ----
+  if (game.helpers.length) {
+    const mode = game.day.phase === 'night' ? 'GUARD' : game.helpers[0].mode === 'flank' ? 'FLANK' : game.helpers[0].mode === 'stay' ? 'STAY' : 'HOME';
+    const label = game.input.touchMode ? `HELP: ${mode}` : `H: ${game.helpers.map((h) => h.name).join('+')} ${mode}`;
+    const hw = textWidth(label) + 8;
+    panel(g, W - hw - 2, rightY, hw, 11, game.ui.isActive('hud-help') ? C.teal : C.plum, C.butter);
+    text(g, label, W - hw / 2 - 2, rightY + 3, C.wool, { align: 'center' });
+    if (game.ui.click('hud-help', W - hw - 2, rightY, hw, 11)) game.input.push('helper');
   }
 
   // ---- Next goal (always visible; tap or Tab for the ledger) ----

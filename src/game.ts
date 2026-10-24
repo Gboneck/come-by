@@ -24,9 +24,15 @@ import { drawLedger } from './ui/ledger';
 import { REGIONS } from './world/map';
 import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
+import { Helper, HELPER_COSTS, HELPER_NAMES, type HelperMode } from './entities/helper';
+import { CALLS, type Sound } from './systems/audio';
+import { saveGame } from './systems/save';
+import { drawPause, drawTitle, titleKeys, type MenuState } from './ui/title';
+import { botStep } from './bot';
 import { clamp, damp } from './util';
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause';
+export type Request = 'new' | 'continue' | 'title' | null;
 
 export interface DayStats {
   delivered: Partial<Record<SpeciesId, number>>;
@@ -54,9 +60,6 @@ const REGION_TIPS: Partial<Record<string, string>> = {
 
 const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0, built: 0, sold: 0 });
 
-export interface AudioLike {
-  play(name: string, opts?: { x?: number; y?: number; vol?: number }): void;
-}
 
 // Delivery value multiplier from how stressed an animal was on the way home.
 export function calmRating(stress: number): { mult: number; label: string } {
@@ -95,11 +98,18 @@ export class Game {
   build = new BuildMode();
   buildFromSummary = false;
   upgrades: Record<UpKey, number> = { stamina: 1, speed: 1, bark: 1, nip: 1 };
-  audio: AudioLike | null = null;
+  audio: Sound | null = null;
   // Things built or bought, for the progression goals.
   owned = new Set<string>();
   totals: Totals = newTotals();
-  helpers: unknown[] = [];
+  helpers: Helper[] = [];
+  demo = false;
+  menu: MenuState = { sel: 0, confirmNew: false };
+  pauseSel = 0;
+  request: Request = null;
+  loading = true; // no autosave until construction (and any load) is done
+  private demoLeg = 0;
+  private callT = 4;
   won = false;
   predators: Predator[] = [];
   private quietT = 0;
@@ -107,7 +117,9 @@ export class Game {
   tutT = 0;
   private tierCheckT = 0;
 
-  constructor(public screen: Screen, public input: Input) {
+  constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null } = {}) {
+    this.demo = !!opts.demo;
+    this.audio = opts.audio ?? null;
     this.g = screen.g;
     this.ui = new UI(input);
     this.map = new WorldMap();
@@ -118,7 +130,45 @@ export class Game {
     this.dog = new Dog(door.x, door.y);
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
-    this.startDay(true);
+    if (this.demo) {
+      // Attract mode behind the title: the heeler working a flock at home.
+      this.mode = 'title';
+      this.tut = 99;
+      this.day.t = 90;
+      this.spawnFlock('sheep', 800, 860, 11);
+      this.dog.x = 700;
+      this.dog.y = 900;
+      for (const p of this.ranch.pens) { p.open = false; p.swing = 0; }
+      this.ranch.restamp();
+    } else this.startDay(true);
+    this.loading = false;
+  }
+
+  // ---- Helpers ----
+
+  hireHelper(): string | null {
+    const n = this.helpers.length;
+    if (n >= HELPER_COSTS.length) return 'TWO HELPERS IS PLENTY';
+    if (this.tier < 4) return 'HELPERS COME AT TIER 4';
+    if (!this.ranch.buildings.some((b) => b.kind === 'kennel')) return 'BUILD A KENNEL FIRST';
+    const cost = HELPER_COSTS[n];
+    if (this.coins < cost) return `NEED ${cost}$`;
+    this.coins -= cost;
+    const k = this.ranch.buildings.find((b) => b.kind === 'kennel')!;
+    this.helpers.push(new Helper(HELPER_NAMES[n], k.cx, k.y1 + 6, 'flank', n));
+    this.onBuilt('helper');
+    return null;
+  }
+
+  cycleHelpers() {
+    if (!this.helpers.length) return;
+    const order: HelperMode[] = ['flank', 'stay', 'home'];
+    const next = order[(order.indexOf(this.helpers[0].mode) + 1) % order.length];
+    for (const h of this.helpers) h.mode = next;
+    const names = this.helpers.map((h) => h.name).join(' + ');
+    const what = next === 'flank' ? 'HOLD THE FLANK' : next === 'stay' ? 'STAY. LIE DOWN' : 'GO HOME';
+    this.showBanner(`${names}: ${what}`, undefined, 1.8);
+    this.audio?.play('click');
   }
 
   applyUpgrades() {
@@ -194,7 +244,10 @@ export class Game {
     this.build.exit(this);
     this.input.clearQueue();
     if (this.buildFromSummary) this.startDay();
-    else this.mode = 'play';
+    else {
+      this.mode = 'play';
+      saveGame(this);
+    }
   }
 
   // What the purse can buy right now (for the end-of-day choice).
@@ -231,7 +284,7 @@ export class Game {
 
   // ---- Day flow ----
 
-  startDay(first = false) {
+  startDay(first = false, spawn = true) {
     if (!first) this.day.nextDay();
     this.stats = newStats();
     const door = this.doorPoint();
@@ -243,11 +296,18 @@ export class Game {
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     for (const a of this.animals) a.stress *= 0.3;
-    this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => this.isUnlocked(r)));
+    if (spawn) this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => this.isUnlocked(r)));
+    this.animals = this.animals.filter((a) => !a.gone);
     for (const p of this.ranch.pens) if (!p.full) p.open = true;
+    for (const [i, h] of this.helpers.entries()) {
+      h.x = door.x + (i ? 10 : -10);
+      h.y = door.y + 6;
+      h.vx = h.vy = 0;
+    }
     this.mode = 'play';
     this.summary = null;
     this.showBanner(`DAY ${this.day.day}`, 'BRING THEM HOME BEFORE DUSK', 2.6);
+    saveGame(this);
   }
 
   endDay() {
@@ -285,6 +345,25 @@ export class Game {
 
   update(dt: number) {
     this.t += dt;
+    if (this.audio) {
+      this.audio.lx = this.cam.x;
+      this.audio.ly = this.cam.y;
+      if (this.mode === 'play' || this.mode === 'title') this.audio.ambient(dt, this.day.phase === 'night');
+    }
+    if (this.input.pressed('mute') && this.audio) this.audio.setMuted(!this.audio.muted);
+    if (this.mode === 'title') {
+      this.updateDemo(dt);
+      const act = titleKeys(this, this.menu);
+      if (act) this.request = act;
+      return;
+    }
+    if (this.mode === 'pause') {
+      if (this.input.pressed('up')) this.pauseSel = (this.pauseSel + 2) % 3;
+      if (this.input.pressed('down')) this.pauseSel = (this.pauseSel + 1) % 3;
+      if (this.input.pressed('pause') || this.input.pressed('cancel')) this.mode = 'play';
+      else if (this.input.pressed('confirm')) this.pauseAction(['resume', 'sound', 'quit'][this.pauseSel] as 'resume' | 'sound' | 'quit');
+      return;
+    }
     if (this.mode === 'summary') {
       this.fx.update(dt);
       if (this.input.pressed('build')) this.enterBuild(true);
@@ -313,6 +392,12 @@ export class Game {
       this.input.clearQueue();
       return;
     }
+    if (this.input.pressed('pause')) {
+      this.mode = 'pause';
+      this.pauseSel = 0;
+      this.input.clearQueue();
+      return;
+    }
     if ((this.tierCheckT -= dt) <= 0) {
       this.tierCheckT = 0.5;
       this.checkTier();
@@ -326,7 +411,10 @@ export class Game {
       this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
     const dayEv = this.day.update(dt);
-    if (dayEv === 'dusk') this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);
+    if (dayEv === 'dusk') {
+      this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);
+      this.audio?.play('dusk');
+    }
     if (dayEv === 'nightfall') {
       if (this.tier >= 2) this.startNight();
       else {
@@ -354,7 +442,12 @@ export class Game {
       this.groups = findGroups(this.animals);
       this.groupT = 0.25;
     }
-    if (this.debug && this.input.pressed('helper')) this.showZones = !this.showZones;
+    if (this.input.pressed('helper')) {
+      if (this.helpers.length) this.cycleHelpers();
+      else if (this.debug) this.showZones = !this.showZones;
+    }
+    this.helpers.forEach((h, i) => h.update(this, dt, i));
+    this.animalCalls(dt);
     this.fx.update(dt);
     this.updateCamera(dt);
 
@@ -376,12 +469,17 @@ export class Game {
   // ---- Night ----
 
   sheltered(p: Pen): boolean {
-    return this.ranch.buildings.some((b) => b instanceof Barn && Math.hypot(b.cx - p.cx, b.cy - p.cy) <= b.shelterRadius);
+    if (this.ranch.buildings.some((b) => b instanceof Barn && Math.hypot(b.cx - p.cx, b.cy - p.cy) <= b.shelterRadius)) return true;
+    // A helper lying by a pen's gate guards it.
+    return this.day.phase === 'night' && this.helpers.some((h) => h.guardPen === p && Math.hypot(h.x - p.cx, h.y - p.cy) < 60);
   }
 
   startNight() {
     this.day.startNight();
     this.predators = [];
+    // Helpers each take the most crowded pen nobody else is guarding.
+    const open = this.ranch.pens.filter((p) => p.animals.length && !this.sheltered(p)).sort((a, b) => b.animals.length - a.animals.length);
+    this.helpers.forEach((h, i) => (h.guardPen = open[i] ?? null));
     const coyotes = Math.min(4, 1 + Math.floor((this.day.day + this.tier) / 5));
     const wolves = this.tier >= 4 ? Math.min(2, 1 + Math.floor(this.day.day / 8)) : 0;
     let t = 3;
@@ -454,6 +552,7 @@ export class Game {
     this.sources.push({ x: d.x, y: d.y, vx: d.vx, vy: d.vy, strength: 1, range: 1, kind: 'dog', lying: d.lying });
     for (const p of this.predators)
       if (p.active && p.state !== 'flee') this.sources.push({ x: p.x, y: p.y, vx: p.vx, vy: p.vy, strength: 1.3, range: 1.5, kind: 'predator', lying: false });
+    for (const h of this.helpers) this.sources.push(h.source());
     const gates = this.ranch.pens.map((p: Pen) => {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
@@ -465,6 +564,13 @@ export class Game {
     const d = this.dog;
     if (ev === 'bark') {
       barkAt(this.animals, d.x, d.y, d.stats.barkRange);
+      this.audio?.play('bark', { x: d.x, y: d.y });
+      // Something in range answers back.
+      const near = this.animals.filter((a) => !a.gone && !a.carried && Math.hypot(a.x - d.x, a.y - d.y) < d.stats.barkRange);
+      if (near.length) {
+        const a = near[Math.floor(Math.random() * near.length)];
+        setTimeout(() => this.audio?.play(CALLS[a.sp.id], { x: a.x, y: a.y, vol: 0.9 }), 120 + Math.random() * 200);
+      }
       for (const p of this.predators) {
         const dd = Math.hypot(p.x - d.x, p.y - d.y);
         if (dd < d.stats.barkRange * 1.15) p.scare((p.kind === 'wolf' ? 0.55 : 1.05) * (1 - (dd / (d.stats.barkRange * 1.15)) * 0.4));
@@ -475,6 +581,8 @@ export class Game {
         if (p.active && dd < 12 && (dx * d.hx + dy * d.hy) / (dd || 1) > 0) p.scare(1.5 * d.stats.nipPower);
       }
       const hit = nipFrom(this.animals, d.x + d.hx * 4, d.y + d.hy * 4, d.hx, d.hy, d.stats.nipPower);
+      this.audio?.play('nip', { x: d.x, y: d.y });
+      if (hit) setTimeout(() => this.audio?.play(CALLS[hit.sp.id], { x: hit.x, y: hit.y }), 60);
       const nx = d.x + d.hx * 7, ny = d.y + d.hy * 7 - 2;
       for (let i = 0; i < 4; i++)
         this.fx.add({ kind: 'spark', x: nx, y: ny, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, max: 0.18, color: hit ? C.butter : C.wool });
@@ -494,7 +602,10 @@ export class Game {
       if (this.tut === 3) this.tut = 4;
       if (mult > 1) this.stats.calm++;
       this.fx.float(a.x, a.y - 10, `+${value}$`, C.butter, 1.1);
+      this.audio?.play('coin', { x: a.x, y: a.y, vol: 0.7 });
     } else if (ev.kind === 'shut') {
+      this.audio?.play('gate', { x: ev.pen.cx, y: ev.pen.cy });
+      setTimeout(() => this.audio?.play('thatlldo'), 180);
       const n = ev.batch.length;
       const avg = ev.batch.reduce((s, a) => s + a.peakStress, 0) / Math.max(1, n);
       const { label } = calmRating(avg);
@@ -506,6 +617,57 @@ export class Game {
       for (let i = 0; i < 10; i++)
         this.fx.add({ kind: 'spark', x: gp.x, y: gp.y - 4, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, max: 0.5, color: C.butter });
     }
+  }
+
+  pauseAction(a: 'resume' | 'sound' | 'quit') {
+    if (a === 'resume') this.mode = 'play';
+    else if (a === 'sound') this.audio?.setMuted(!this.audio.muted);
+    else {
+      saveGame(this);
+      this.request = 'title';
+    }
+  }
+
+  // Attract mode: the bot drives the demo flock back and forth.
+  private updateDemo(dt: number) {
+    const legs = [{ x: 700, y: 880 }, { x: 880, y: 880 }];
+    const goal = legs[this.demoLeg % 2];
+    let cx = 0, cy = 0;
+    for (const a of this.animals) { cx += a.x; cy += a.y; }
+    cx /= Math.max(1, this.animals.length);
+    cy /= Math.max(1, this.animals.length);
+    if (Math.hypot(cx - goal.x, cy - goal.y) < 30) this.demoLeg++;
+    const c = botStep(this, { goalX: goal.x, goalY: goal.y }, this.t);
+    const save = this.input.override;
+    this.input.override = { x: c.x, y: c.y, sprint: c.sprint, lie: c.lie };
+    this.dog.update(dt, this.input, this.map, this.fx);
+    this.input.override = save;
+    this.dog.events.length = 0;
+    updateHerd(this.animals, this.herdCtx(), dt);
+    if ((this.groupT -= dt) <= 0) {
+      this.groups = findGroups(this.animals);
+      this.groupT = 0.25;
+    }
+    this.fx.update(dt);
+    const k = damp(1.5, dt);
+    this.cam.x += ((cx + this.dog.x) / 2 - this.cam.x) * k;
+    this.cam.y += ((cy + this.dog.y) / 2 + 20 - this.cam.y) * k;
+    const { W, H } = this.screen;
+    this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
+    this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+  }
+
+  // Now and then a flock near the dog calls out; frightened ones more often.
+  private animalCalls(dt: number) {
+    if (!this.audio) return;
+    this.callT -= dt;
+    if (this.callT > 0) return;
+    const gr = this.nearestGroup(130);
+    this.callT = 4 + Math.random() * 5;
+    if (!gr) return;
+    if (gr.stress > 0.5) this.callT *= 0.5;
+    const a = gr.members[Math.floor(Math.random() * gr.members.length)];
+    this.audio.play(CALLS[a.sp.id], { x: a.x, y: a.y, vol: 0.5 + gr.stress * 0.5 });
   }
 
   // Contextual first-day hints. Steps advance on what the player does.
@@ -595,6 +757,17 @@ export class Game {
     const v = this.view();
     drawWorld(this, g, v);
     this.input.uiHeld.clear();
+    if (this.mode === 'title') {
+      const act = drawTitle(this, g, v.W, v.H, this.menu);
+      if (act) this.request = act;
+      return;
+    }
+    if (this.mode === 'pause') {
+      drawHud(this, g, v.W, v.H);
+      const a = drawPause(this, g, v.W, v.H, this.pauseSel);
+      if (a) this.pauseAction(a);
+      return;
+    }
     if (this.mode === 'play') {
       drawHud(this, g, v.W, v.H);
       drawTouchControls(g, this.ui, this.input, v.W, v.H);

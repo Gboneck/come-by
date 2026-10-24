@@ -15,8 +15,18 @@ original and drawn in code. No external art files, ever.
   (`.github/workflows/deploy.yml`, relative `base: './'`).
 - `npm run dev` for the dev server, `npm run typecheck`, `npm run shot` for a
   Playwright screenshot + console-error check (writes to `shots/`).
-- Debug: `?debug` in the URL exposes `window.game` and enables debug keys
-  (see `src/debug.ts`). `?sprites` shows the sprite sheet.
+- URL switches: `?debug` exposes `window.game`, `window.sim` and
+  `window.resetFlock` (see `src/debug.ts`) and skips the title (add
+  `&title` to keep it); `?play` skips the title; `?sprites=N` shows the
+  sprite sheet from row N.
+- Scripts (all Playwright, all start their own Vite server):
+  `scripts/shot.mjs` screenshots + console errors (`--hold`, `--press`,
+  `--eval` steps), `scripts/zoom.mjs` enlarges part of a PNG,
+  `scripts/mapshot.mjs` exports the whole world, `scripts/tune.mjs` runs
+  bot herding scenarios per species and prints stress/time/splits,
+  `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
+  `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
+  `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end.
 
 ## Rendering rules
 
@@ -94,8 +104,12 @@ stays unique.
 - `src/world/` tile map, regions, terrain/canopy baking.
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
-- `src/systems/` day cycle, economy, progression, save, audio, particles.
-- `src/ui/` HUD, touch controls, ledger, summary, menus, title.
+- `src/systems/` day cycle, economy, progression, save, audio, particles,
+  spawner.
+- `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
+- `src/render/` world drawing and the night dither.
+- `src/bot.ts` the herding bot used for tuning, the attract mode and as
+  the model for helper dogs.
 
 ## Working rules
 
