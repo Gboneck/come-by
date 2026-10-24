@@ -67,6 +67,8 @@
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
+  It is gitignored and was removed from history before the first push: it
+  is a phone screenshot of another game, not ours to publish.
   Read from it: near top-down view, flat meadow ground, tiny (~7px) sheep
   blobs with dark faces and merged sage shadows, forest as one teal mass with
   heavy irregular plum dithering, sage shadow cast down-left, grass tufts as

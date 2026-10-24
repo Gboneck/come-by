@@ -5,7 +5,8 @@ animals home to a ranch, and the ranch grows into a thriving valley as you go.
 A herding sim crossed with a cozy kingdom builder, with a clear sense of
 progression.
 
-`reference.png` (in the repo root) is a **style reference only**. All art is
+`reference.png` (kept in the project folder but not committed: it is a
+screenshot of someone else's work) is a **style reference only**. All art is
 original and drawn in code. No external art files, ever.
 
 ## Tech
