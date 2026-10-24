@@ -16,8 +16,8 @@ export interface Summary {
   lost?: number;
 }
 
-// End-of-day card. Returns true when the player taps "next day".
-export function drawSummary(g: CanvasRenderingContext2D, ui: UI, s: Summary, W: number, H: number, t: number): boolean {
+// End-of-day card. Every day ends with a choice: build, or go again.
+export function drawSummary(g: CanvasRenderingContext2D, ui: UI, s: Summary, W: number, H: number, t: number): 'next' | 'build' | null {
   const pw = Math.min(W - 16, 168);
   const lines: [string, string, string?][] = [];
   const delivered = SPECIES_ORDER.filter((id) => s.stats.delivered[id]);
@@ -56,10 +56,16 @@ export function drawSummary(g: CanvasRenderingContext2D, ui: UI, s: Summary, W: 
     });
     y += Math.ceil(build.length / 2) * 8;
   }
-  // Button.
-  const bw = 70, bh = 13, bx = Math.round(W / 2 - bw / 2), by = py0 + ph - 18;
-  const hot = ui.isActive('next') || Math.floor(t * 2) % 2 === 0;
-  panel(g, bx, by, bw, bh, hot ? C.teal : C.plum, C.butter);
-  text(g, 'NEXT DAY', W / 2, by + 4, C.wool, { align: 'center' });
-  return ui.click('next', bx, by, bw, bh);
+  // Buttons: BUILD (B) is the recommended choice when something is affordable.
+  const bw = Math.min(74, (pw - 18) / 2), bh = 13, by = py0 + ph - 18;
+  const bx1 = Math.round(W / 2 - bw - 3), bx2 = Math.round(W / 2 + 3);
+  const pulse = Math.floor(t * 2) % 2 === 0;
+  const wantBuild = build.length > 0;
+  panel(g, bx1, by, bw, bh, ui.isActive('sbuild') || (wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.butter : C.sage);
+  text(g, 'B: BUILD', bx1 + bw / 2, by + 4, C.wool, { align: 'center' });
+  panel(g, bx2, by, bw, bh, ui.isActive('next') || (!wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.sage : C.butter);
+  text(g, 'NEXT DAY', bx2 + bw / 2, by + 4, C.wool, { align: 'center' });
+  if (ui.click('sbuild', bx1, by, bw, bh)) return 'build';
+  if (ui.click('next', bx2, by, bw, bh)) return 'next';
+  return null;
 }

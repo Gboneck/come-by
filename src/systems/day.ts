@@ -28,7 +28,6 @@ export class DayCycle {
   darkness(): number {
     if (this.phase === 'night') return 0.62;
     const f = this.frac;
-    if (f < 0.03) return 0.13 * (1 - f / 0.03); // dawn fading out
     if (f < DUSK_AT) return 0;
     return Math.min(0.62, ((f - DUSK_AT) / (1 - DUSK_AT)) * 0.62);
   }

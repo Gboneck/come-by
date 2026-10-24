@@ -1,6 +1,7 @@
 import type { Animal } from '../entities/animal';
 import { BLOCK_ANIMAL, CW, CH, REGIONS, TS, type WorldMap } from '../world/map';
 import { Building, Farmhouse, Pen, RegionGate, type Rot } from './buildings';
+import { FieldGate } from './structures';
 
 export type RanchEvent =
   | { kind: 'penned'; animal: Animal; pen: Pen }
@@ -36,6 +37,17 @@ export class Ranch {
     return this.buildings.filter((b): b is Pen => b instanceof Pen);
   }
 
+  // Room kept free around the farmhouse so it can grow.
+  farmhouseLot(): { x0: number; y0: number; x1: number; y1: number } | null {
+    const f = this.farmhouse;
+    if (!f) return null;
+    return { x0: f.tx - 2, y0: f.ty - 3, x1: f.tx + f.w + 2, y1: f.ty + f.h + 2 };
+  }
+
+  get fieldGates(): FieldGate[] {
+    return this.buildings.filter((b): b is FieldGate => b instanceof FieldGate);
+  }
+
   get farmhouse(): Farmhouse | undefined {
     return this.buildings.find((b): b is Farmhouse => b instanceof Farmhouse);
   }
@@ -61,7 +73,7 @@ export class Ranch {
     this.add(new Pen(104, 93, 0 as Rot));
   }
 
-  update(dt: number, animals: Animal[], night: boolean): RanchEvent[] {
+  update(dt: number, animals: Animal[], night: boolean, dogX = -1e9, dogY = -1e9): RanchEvent[] {
     const ev: RanchEvent[] = [];
     // Penning.
     for (const a of animals) {
@@ -111,6 +123,22 @@ export class Ranch {
       p.swing = Math.max(0, Math.min(1, p.swing + (p.open ? 1 : -1) * dt * 2.2));
       if ((before > 0.85) !== (p.swing > 0.85)) p.applyGate(this.map);
       p.shutFlash = Math.max(0, p.shutFlash - dt * 1.5);
+    }
+    // Field gates open for the dog and for animals being driven through.
+    for (const gt of this.fieldGates) {
+      let want = !night && Math.hypot(dogX - gt.cx, dogY - gt.cy) < 22;
+      if (!night && !want)
+        for (const a of animals)
+          if (!a.pen && !a.gone && (a.pressure > 0.05 || a.fleeT > 0) && Math.hypot(a.x - gt.cx, a.y - gt.cy) < 30) { want = true; break; }
+      if (want) gt.open = true;
+      else if (gt.open) {
+        let blocked = Math.hypot(dogX - gt.cx, dogY - gt.cy) < 10;
+        for (const a of animals) if (!a.gone && Math.hypot(a.x - gt.cx, a.y - gt.cy) < a.sp.r + 8) blocked = true;
+        if (!blocked) gt.open = false;
+      }
+      const before = gt.swing;
+      gt.swing = Math.max(0, Math.min(1, gt.swing + (gt.open ? 1 : -1) * dt * 3));
+      if ((before > 0.85) !== (gt.swing > 0.85)) this.restamp();
     }
     // Region gates swing open once unlocked.
     for (const g of this.regionGates) {

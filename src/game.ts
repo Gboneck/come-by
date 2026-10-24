@@ -16,9 +16,12 @@ import { NightOverlay } from './render/night';
 import { drawWorld } from './render/world';
 import { drawHud } from './ui/hud';
 import { drawSummary, type Summary } from './ui/summary';
+import { BuildMode } from './ui/build';
+import { CATALOG } from './ranch/catalog';
+import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
 import { clamp, damp } from './util';
 
-export type Mode = 'play' | 'summary';
+export type Mode = 'play' | 'summary' | 'build';
 
 export interface DayStats {
   delivered: Partial<Record<SpeciesId, number>>;
@@ -26,6 +29,8 @@ export interface DayStats {
   calm: number;
   lost: Partial<Record<SpeciesId, number>>;
   goodsValue: number;
+  built: number;
+  sold: number;
 }
 
 export interface Banner {
@@ -35,7 +40,11 @@ export interface Banner {
   max: number;
 }
 
-const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0 });
+const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0, built: 0, sold: 0 });
+
+export interface AudioLike {
+  play(name: string, opts?: { x?: number; y?: number; vol?: number }): void;
+}
 
 // Delivery value multiplier from how stressed an animal was on the way home.
 export function calmRating(stress: number): { mult: number; label: string } {
@@ -71,6 +80,12 @@ export class Game {
   private sources: PressureSource[] = [];
   debug = false;
   showZones = false;
+  build = new BuildMode();
+  buildFromSummary = false;
+  upgrades: Record<UpKey, number> = { stamina: 1, speed: 1, bark: 1, nip: 1 };
+  audio: AudioLike | null = null;
+  // Things built or bought, for the progression goals.
+  owned = new Set<string>();
 
   constructor(public screen: Screen, public input: Input) {
     this.g = screen.g;
@@ -84,6 +99,53 @@ export class Game {
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     this.startDay(true);
+  }
+
+  applyUpgrades() {
+    this.dog.stats = dogStatsFor(this.upgrades);
+  }
+
+  onBuilt(id: string) {
+    this.owned.add(id);
+  }
+
+  isOnScreen(x: number, y: number, m = 8) {
+    const { ox, oy, W, H } = this.view();
+    return x > ox - m && x < ox + W + m && y > oy - m && y < oy + H + m;
+  }
+
+  inRanch() {
+    return this.map.regionAt(this.dog.x, this.dog.y)?.id === 'ranch';
+  }
+
+  enterBuild(fromSummary = false) {
+    this.buildFromSummary = fromSummary;
+    this.mode = 'build';
+    this.build.enter(this);
+    this.input.clearQueue();
+  }
+
+  exitBuild() {
+    this.build.exit(this);
+    this.input.clearQueue();
+    if (this.buildFromSummary) this.startDay();
+    else this.mode = 'play';
+  }
+
+  // What the purse can buy right now (for the end-of-day choice).
+  buildable(): string[] {
+    const out: string[] = [];
+    for (const d of CATALOG) {
+      if (d.tier > this.tier || d.cost > this.coins) continue;
+      if (d.max && this.ranch.buildings.filter((b) => b.kind === d.kind).length >= d.max) continue;
+      out.push(`${d.name} ${d.cost}$`);
+    }
+    if (this.ranch.buildings.some((b) => b.kind === 'kennel'))
+      for (const u of UPGRADES) {
+        const l = this.upgrades[u.key];
+        if (l < MAX_UP && u.costs[l - 1] <= this.coins) out.push(`${u.name} ${u.costs[l - 1]}$`);
+      }
+    return out.slice(0, 8);
   }
 
   doorPoint() {
@@ -124,6 +186,9 @@ export class Game {
   }
 
   endDay() {
+    const sale = sellAllGoods(this);
+    this.coins += sale.value;
+    this.stats.goodsValue += sale.value;
     const wild = this.animals.filter((a) => !a.pen && !a.gone);
     const strays = wild.filter((a) => a.stray).length;
     this.summary = {
@@ -133,6 +198,7 @@ export class Game {
       strays,
       coins: this.coins,
       penned: this.ranch.pens.reduce((s, p) => s + p.animals.length, 0),
+      buildable: this.buildable(),
     };
     this.mode = 'summary';
     this.input.clearQueue();
@@ -148,8 +214,28 @@ export class Game {
     this.t += dt;
     if (this.mode === 'summary') {
       this.fx.update(dt);
-      if (this.input.pressed('confirm') || this.input.pressed('bark')) this.startDay();
+      if (this.input.pressed('build')) this.enterBuild(true);
+      else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.startDay();
       return;
+    }
+    if (this.mode === 'build') {
+      this.fx.update(dt);
+      this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
+      if (this.build.update(this, dt) === 'exit') this.exitBuild();
+      const k = damp(6, dt);
+      this.cam.x += ((this.build.cx + 0.5) * 8 - this.cam.x) * k;
+      this.cam.y += ((this.build.cy + 0.5) * 8 - this.cam.y) * k;
+      const { W, H } = this.screen;
+      this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
+      this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+      return;
+    }
+    if (this.input.pressed('build')) {
+      if (this.inRanch()) {
+        this.enterBuild();
+        return;
+      }
+      this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
     const dayEv = this.day.update(dt);
     if (dayEv === 'dusk') this.showBanner('DUSK', 'GET THEM HOME, THE LIGHT IS GOING', 2.6);
@@ -162,7 +248,8 @@ export class Game {
     for (const ev of this.dog.events) this.onDogEvent(ev);
     this.dog.events.length = 0;
     updateHerd(this.animals, this.herdCtx(), dt);
-    for (const ev of this.ranch.update(dt, this.animals, false)) this.onRanchEvent(ev);
+    for (const ev of this.ranch.update(dt, this.animals, false, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
+    updateProduce(this, dt);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
       this.groupT = 0.25;
@@ -283,7 +370,11 @@ export class Game {
       drawHud(this, g, v.W, v.H);
       drawTouchControls(g, this.ui, this.input, v.W, v.H);
     } else if (this.mode === 'summary' && this.summary) {
-      if (drawSummary(g, this.ui, this.summary, v.W, v.H, this.t)) this.input.push('confirm');
+      const r = drawSummary(g, this.ui, this.summary, v.W, v.H, this.t);
+      if (r === 'next') this.input.push('confirm');
+      if (r === 'build') this.input.push('build');
+    } else if (this.mode === 'build') {
+      if (this.build.drawUI(this, g, v.W, v.H) === 'exit') this.input.push('cancel');
     }
   }
 }

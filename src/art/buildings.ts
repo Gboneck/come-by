@@ -2,6 +2,7 @@ import { C } from '../palette';
 import { line, rect, px } from '../gfx/draw';
 import { text } from '../gfx/font';
 import type { Building, Pen, RegionGate } from '../ranch/buildings';
+import type { FieldGate, Fence, Barn, Kennel, Market, Windmill } from '../ranch/structures';
 import { CS } from '../world/map';
 
 export interface Drawable {
@@ -89,6 +90,34 @@ export function penDrawables(g: CanvasRenderingContext2D, p: Pen, t: number, sho
     },
   });
 
+  // Trough along the back fence, goods piling up along the side.
+  if (p.hasTrough) {
+    const tx0 = Math.round(p.cx - 7), ty0 = p.iy0 + 2;
+    out.push({
+      y: ty0 + 4,
+      draw: () => {
+        rect(g, tx0, ty0, 14, 4, C.plum);
+        rect(g, tx0 + 1, ty0 + 1, 12, 1, C.teal);
+        px(g, tx0 + 4 + (Math.floor(t * 2) % 5), ty0 + 1, C.wool);
+        rect(g, tx0 + 1, ty0 + 4, 1, 1, C.plum);
+        rect(g, tx0 + 12, ty0 + 4, 1, 1, C.plum);
+      },
+    });
+  }
+  if (p.goods > 0 && p.species) {
+    const n = Math.min(12, p.goods);
+    const sp = p.species;
+    out.push({
+      y: p.iy1 - 2,
+      draw: () => {
+        for (let i = 0; i < n; i++) {
+          const gx = p.ix0 + 3 + (i % 6) * 4, gy = p.iy1 - 4 - Math.floor(i / 6) * 4;
+          drawGood(g, sp, gx, gy);
+        }
+      },
+    });
+  }
+
   const top = p.rot === 2 ? [s.x0, s.x1] as [number, number] : undefined;
   const bot = p.rot === 0 ? [s.x0, s.x1] as [number, number] : undefined;
   out.push({ y: topBase, draw: () => hFence(g, x0, x1 - 2, topBase, top) });
@@ -123,6 +152,29 @@ export function penDrawables(g: CanvasRenderingContext2D, p: Pen, t: number, sho
   }
   void t;
   return out;
+}
+
+// Tiny goods: egg, wool tuft, cheese wedge, milk can.
+export function drawGood(g: CanvasRenderingContext2D, sp: string, x: number, y: number) {
+  switch (sp) {
+    case 'duck':
+      rect(g, x, y, 2, 2, C.wool);
+      px(g, x, y + 2, C.sage);
+      break;
+    case 'sheep':
+      rect(g, x, y + 1, 3, 2, C.wool);
+      px(g, x + 1, y, C.wool);
+      break;
+    case 'goat':
+      rect(g, x, y + 1, 3, 2, C.butter);
+      px(g, x, y, C.butter);
+      px(g, x + 1, y + 2, C.plum);
+      break;
+    case 'cow':
+      rect(g, x, y, 2, 3, C.wool);
+      rect(g, x, y, 2, 1, C.plum);
+      break;
+  }
 }
 
 // ---- Farmhouse: a whitewashed cabin that grows with the ranch. ----
@@ -238,4 +290,157 @@ function lockSign(g: CanvasRenderingContext2D, x: number, y: number, _t: number)
   rect(g, x - 1, y - 3, 3, 1, C.plum);
   px(g, x, y + 4, C.plum);
   px(g, x, y + 5, C.plum);
+}
+
+// ---- Free-standing fence panels and field gates ----
+
+export function fenceDrawables(g: CanvasRenderingContext2D, f: Fence): Drawable[] {
+  if (f.vertical) {
+    const x = f.x0 + CS + 1;
+    return [
+      { y: f.y0 + 4, draw: () => vFenceSeg(g, x, f.y0 + 4, f.y1 + 4, true) },
+      { y: f.y1 + 4, draw: () => vFenceSeg(g, x, f.y1 + 4, f.y1 + 4, false) },
+    ];
+  }
+  return [{ y: f.y1 - 1, draw: () => hFence(g, f.x0, f.x1, f.y1 - 1) }];
+}
+
+export function fieldGateDrawables(g: CanvasRenderingContext2D, gt: FieldGate): Drawable[] {
+  if (gt.vertical) {
+    const x = gt.x0 + CS + 1;
+    return [
+      { y: gt.y0 + 2, draw: () => vFenceSeg(g, x, gt.y0 + 2, gt.y0 + 2, false) },
+      { y: gt.y0 + 3, draw: () => gateLeaf(g, x, gt.y0 + 3, [0, 1], [1, 0], 13, gt.swing, 0) },
+      { y: gt.y1 + 2, draw: () => vFenceSeg(g, x, gt.y1 + 2, gt.y1 + 2, false) },
+    ];
+  }
+  const base = gt.y1 - 1;
+  return [
+    {
+      y: base,
+      draw: () => {
+        rect(g, gt.x0, base - 5, 2, 6, C.plum);
+        rect(g, gt.x1 - 2, base - 5, 2, 6, C.plum);
+        gateLeaf(g, gt.x0 + 1, base, [1, 0], [0, 1], 13, gt.swing, 0);
+      },
+    },
+  ];
+}
+
+function shadowRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  rect(g, x - 4, y + 3, w, h, C.sage);
+}
+
+// Barn: plum boards, wool trim and X-braced doors, a teal roof and cupola.
+export function barnDrawable(g: CanvasRenderingContext2D, b: Barn, night: boolean): Drawable {
+  return {
+    y: b.y1,
+    draw: () => {
+      const x0 = b.x0, x1 = b.x1, y1 = b.y1, w = x1 - x0;
+      const wallH = 15, eave = y1 - wallH, roofTop = b.y0 - 8;
+      shadowRect(g, x0, eave, w, wallH);
+      rect(g, x0 + 1, eave, w - 2, wallH, C.plum);
+      for (let x = x0 + 3; x < x1 - 2; x += 3) rect(g, x, eave + 1, 1, wallH - 2, C.teal);
+      rect(g, x0 + 1, eave, 1, wallH, C.wool);
+      rect(g, x1 - 2, eave, 1, wallH, C.wool);
+      // Doors.
+      const dw = 16, dx = Math.round(b.cx - dw / 2), dh = 12;
+      rect(g, dx - 1, y1 - dh - 1, dw + 2, dh + 1, C.wool);
+      rect(g, dx, y1 - dh, dw, dh, night ? C.butter : C.plum);
+      line(g, dx, y1 - dh, dx + dw / 2 - 1, y1 - 1, C.wool);
+      line(g, dx + dw / 2 - 1, y1 - dh, dx, y1 - 1, C.wool);
+      line(g, dx + dw / 2, y1 - dh, dx + dw - 1, y1 - 1, C.wool);
+      line(g, dx + dw - 1, y1 - dh, dx + dw / 2, y1 - 1, C.wool);
+      rect(g, dx + dw / 2 - 1, y1 - dh, 1, dh, C.wool);
+      // Roof.
+      rect(g, x0 - 2, roofTop, w + 4, eave - roofTop, C.teal);
+      for (let y = roofTop + 3; y < eave - 1; y += 3) for (let x = x0 - 1; x < x1 + 1; x++) if ((x * 3 + y) % 7 !== 0) px(g, x, y, C.plum);
+      rect(g, x0 - 2, roofTop, w + 4, 1, C.sage);
+      rect(g, x0 - 2, eave - 1, w + 4, 1, C.plum);
+      // Cupola.
+      const cx = Math.round(b.cx);
+      rect(g, cx - 3, roofTop - 4, 7, 5, C.wool);
+      rect(g, cx - 4, roofTop - 6, 9, 2, C.plum);
+      rect(g, cx - 1, roofTop - 3, 3, 2, night ? C.butter : C.plum);
+    },
+  };
+}
+
+// Kennel: a little A-frame doghouse with a bowl.
+export function kennelDrawable(g: CanvasRenderingContext2D, k: Kennel): Drawable {
+  return {
+    y: k.y1,
+    draw: () => {
+      const cx = Math.round(k.cx), y1 = k.y1 - 2;
+      shadowRect(g, cx - 9, y1 - 10, 18, 10);
+      rect(g, cx - 8, y1 - 10, 16, 10, C.wool);
+      // A-frame roof.
+      for (let i = 0; i < 9; i++) rect(g, cx - 10 + i, y1 - 10 - i, 21 - i * 2, 1, i % 3 === 0 ? C.teal : C.plum);
+      rect(g, cx - 10, y1 - 10, 21, 1, C.plum);
+      // Arched door.
+      rect(g, cx - 3, y1 - 7, 6, 7, C.plum);
+      rect(g, cx - 2, y1 - 8, 4, 1, C.plum);
+      // Bowl.
+      rect(g, cx + 10, y1 - 2, 5, 2, C.teal);
+      rect(g, cx + 11, y1 - 3, 3, 1, C.plum);
+    },
+  };
+}
+
+// Market stall: striped awning, counter with goods.
+export function marketDrawable(g: CanvasRenderingContext2D, m: Market): Drawable {
+  return {
+    y: m.y1,
+    draw: () => {
+      const x0 = m.x0 + 1, x1 = m.x1 - 1, y1 = m.y1 - 1, w = x1 - x0;
+      shadowRect(g, x0, y1 - 8, w, 8);
+      // Posts.
+      rect(g, x0 + 1, y1 - 18, 2, 18, C.plum);
+      rect(g, x1 - 3, y1 - 18, 2, 18, C.plum);
+      // Counter.
+      rect(g, x0, y1 - 7, w, 7, C.plum);
+      rect(g, x0, y1 - 7, w, 1, C.moss);
+      for (let x = x0 + 2; x < x1 - 2; x += 4) {
+        px(g, x, y1 - 9, C.wool);
+        px(g, x + 1, y1 - 9, C.wool);
+        px(g, x + 2, y1 - 8, C.butter);
+      }
+      // Awning stripes and scalloped edge.
+      for (let x = x0 - 1; x < x1 + 1; x++) {
+        const col = Math.floor((x - x0 + 1) / 3) % 2 === 0 ? C.wool : C.butter;
+        rect(g, x, y1 - 24, 1, 7, col);
+        if ((x - x0) % 3 !== 2) px(g, x, y1 - 17, col);
+      }
+      rect(g, x0 - 1, y1 - 25, w + 2, 1, C.plum);
+    },
+  };
+}
+
+// Windmill: whitewashed tower and four turning sails.
+export function windmillDrawable(g: CanvasRenderingContext2D, wm: Windmill, t: number): Drawable {
+  return {
+    y: wm.y1,
+    draw: () => {
+      const cx = Math.round(wm.cx), y1 = wm.y1 - 1;
+      shadowRect(g, cx - 6, y1 - 20, 12, 20);
+      for (let i = 0; i < 22; i++) {
+        const hw = Math.round(7 - i * 0.18);
+        rect(g, cx - hw, y1 - i, hw * 2 + 1, 1, C.wool);
+        px(g, cx - hw, y1 - i, C.plum);
+        px(g, cx + hw, y1 - i, C.plum);
+      }
+      rect(g, cx - 2, y1 - 6, 5, 6, C.plum);
+      rect(g, cx - 5, y1 - 26, 11, 4, C.plum);
+      const hx = cx, hy = y1 - 24;
+      const a0 = t * 1.1;
+      for (let k = 0; k < 4; k++) {
+        const a = a0 + (k * Math.PI) / 2;
+        const ex = hx + Math.cos(a) * 15, ey = hy + Math.sin(a) * 15;
+        line(g, hx, hy, ex, ey, C.plum);
+        const ox = -Math.sin(a) * 2, oy = Math.cos(a) * 2;
+        line(g, hx + Math.cos(a) * 5 + ox, hy + Math.sin(a) * 5 + oy, ex + ox, ey + oy, C.wool);
+      }
+      rect(g, hx - 1, hy - 1, 3, 3, C.butter);
+    },
+  };
 }

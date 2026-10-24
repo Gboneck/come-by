@@ -61,6 +61,16 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   panel(g, W - cw - 2, 2, cw, 11);
   text(g, coinStr, W - 6, 5, C.wool, { align: 'right', iconColor: C.butter });
 
+  // ---- Build button (on the ranch) ----
+  if (game.inRanch()) {
+    const label = game.input.touchMode ? 'BUILD' : 'B: BUILD';
+    const bw = textWidth(label) + 8;
+    const hot = game.ui.isActive('hud-build');
+    panel(g, W - bw - 2, 15, bw, 11, hot ? C.teal : C.plum, C.butter);
+    text(g, label, W - bw / 2 - 2, 18, C.wool, { align: 'center' });
+    if (game.ui.click('hud-build', W - bw - 2, 15, bw, 11)) game.input.push('build');
+  }
+
   // ---- Flock card ----
   const gr = game.nearestGroup();
   if (gr) {

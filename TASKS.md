@@ -36,11 +36,11 @@
 - [x] Screenshot + console check, commit
 
 ## M4 Coin and building
-- [ ] Penned animals produce goods (eggs, wool, milk) scaled by stress
-- [ ] Selling goods for coin (end of day; market stall improves price)
-- [ ] Build mode: place/upgrade pens, fences, gates, trough, barn, kennel, market stall
-- [ ] Kennel dog upgrades: stamina, speed, bark range, nip strength
-- [ ] Screenshot + console check, commit
+- [x] Penned animals produce goods (eggs, wool, milk) scaled by stress
+- [x] Selling goods for coin (end of day; market stall improves price)
+- [x] Build mode: place/upgrade pens, fences, gates, trough, barn, kennel, market stall
+- [x] Kennel dog upgrades: stamina, speed, bark range, nip strength
+- [x] Screenshot + console check, commit
 
 ## M5 Progression
 - [ ] Ranch Ledger panel: current tier, goals, what next tier unlocks
@@ -106,6 +106,39 @@
   stress on the way home: CALM x1.5, STEADY x1, RATTLED x0.6, FRANTIC x0.35.
 - Until M6 the night is skipped: nightfall goes straight to the summary.
 - A second Claude session ("Hairline skill for game animations") is editing
-  `src/art/dog.ts`, `src/art/fx.ts` and `src/systems/particles.ts` in this
-  same checkout. Milestone commits leave those files to that session.
+  `src/art/dog.ts`, `src/art/fx.ts`, `src/systems/particles.ts` and
+  `src/entities/dog.ts` in this same checkout. Milestone commits leave those
+  files to that session.
+- Dog animation: every frame is a whole grid, grouped per facing
+  (`DogPoses` in `src/art/dog.ts`), so tail, ears and spine move with the
+  legs. Trot: tail wags up/back/down, ears flop back on the passing frames.
+  Sprint: double-suspension gallop, ears pinned, back arched when gathered.
+  Lie down sinks through in-between poses (70ms each), then breathes and
+  thumps its tail every few seconds; getting up plays them in reverse.
+- Bark has no wind-up: the mouth opens on the key press so it never lags the
+  input, and the head dips afterwards as follow-through. The burst (three
+  sound lines, buttercup flash on the first frame) is drawn facing right and
+  quarter-turned for up/down, which is exact on a pixel grid.
+- Effects are sprite strips in `src/art/fx.ts`, played once by an `anim`
+  particle; puffs fade by thinning pixels, never alpha. Puffs sit on the
+  ground layer under entities; the bark burst is in the effects layer,
+  pinned to the dog's mouth while it plays.
+- Dust: each gallop landing kicks a puff (synced to the frames, not a
+  timer); letting go at a gallop or reversing at speed throws a big skid
+  puff; lying down puffs a little each side. Trotting raises no dust, so calm
+  movement looks calm.
+- Build mode pauses the clock (cozy, and it keeps building a deliberate
+  choice). It opens with B on the ranch, from the HUD button, or from the
+  end-of-day summary, whose BUILD / NEXT DAY buttons make every day end with
+  that choice. Leaving build mode entered from the summary starts the day.
+- Ranch land you can build on grows with tier (72% of the clearing at tier 1
+  up to all of it at tier 4). A lot around the farmhouse stays free so the
+  house can grow.
+- The trough is a pen add-on (aim it at a pen), not a free-standing object:
+  +40% goods and calmer animals in that pen.
+- Goods are made only by day, scaled by (1 - 0.75 x stress), and sold at
+  dusk. A market stall pays x1.5 and lets you sell livestock to free pen
+  space. Dog upgrades are bought in the DOG tab once a kennel is built.
+- Tier gates (first pass): T1 pen, fence, trough, kennel; T2 market, barn;
+  T3 field gate, pen and barn upgrades; T5 windmill.
 

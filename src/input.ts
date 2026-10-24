@@ -18,6 +18,10 @@ export type Action =
   | 'prev'
   | 'next'
   | 'remove'
+  | 'upgrade'
+  | 'tab1'
+  | 'tab2'
+  | 'tab3'
   | 'any';
 
 const KEYMAP: Record<string, Action[]> = {
@@ -43,6 +47,10 @@ const KEYMAP: Record<string, Action[]> = {
   KeyX: ['remove'],
   Backspace: ['remove', 'cancel'],
   Delete: ['remove'],
+  KeyU: ['upgrade'],
+  Digit1: ['tab1'],
+  Digit2: ['tab2'],
+  Digit3: ['tab3'],
   KeyW: ['up'],
   ArrowUp: ['up'],
   KeyS: ['down'],
