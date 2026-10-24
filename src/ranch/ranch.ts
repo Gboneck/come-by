@@ -38,10 +38,22 @@ export class Ranch {
   }
 
   // Room kept free around the farmhouse so it can grow.
-  farmhouseLot(): { x0: number; y0: number; x1: number; y1: number } | null {
+  private lot: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  farmhouseLot() {
+    return this.lot;
+  }
+
+  // The house grows a size at tier 3.
+  growFarmhouse(tier: number) {
     const f = this.farmhouse;
-    if (!f) return null;
-    return { x0: f.tx - 2, y0: f.ty - 3, x1: f.tx + f.w + 2, y1: f.ty + f.h + 2 };
+    if (!f) return;
+    f.level = tier;
+    if (tier >= 3 && f.w === 7) {
+      f.tx -= 1;
+      f.ty -= 1;
+      f.w = 9;
+      f.h = 5;
+    }
   }
 
   get fieldGates(): FieldGate[] {
@@ -70,6 +82,7 @@ export class Ranch {
 
   setupStarter() {
     this.add(new Farmhouse(86, 95));
+    this.lot = { x0: 84, y0: 92, x1: 96, y1: 101 };
     this.add(new Pen(104, 93, 0 as Rot));
   }
 

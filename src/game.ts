@@ -19,9 +19,12 @@ import { drawSummary, type Summary } from './ui/summary';
 import { BuildMode } from './ui/build';
 import { CATALOG } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
+import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
+import { drawLedger } from './ui/ledger';
+import { REGIONS } from './world/map';
 import { clamp, damp } from './util';
 
-export type Mode = 'play' | 'summary' | 'build';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger';
 
 export interface DayStats {
   delivered: Partial<Record<SpeciesId, number>>;
@@ -39,6 +42,13 @@ export interface Banner {
   t: number;
   max: number;
 }
+
+const REGION_TIPS: Partial<Record<string, string>> = {
+  hills: 'SHEEP STICK TOGETHER. KEEP A STEADY DISTANCE AND THEY FLOW.',
+  rocky: 'GOATS SPLIT UP AND CLIMB ROCKS YOU CANNOT. LIE DOWN, LET THEM COME DOWN.',
+  ford: 'CATTLE ONLY MOVE FOR CLOSE PRESSURE OR A NIP (E). THEY BALK AT WATER.',
+  high: 'PONIES SPOOK FROM FAR OFF. WORK WIDE, SLOW AND QUIET.',
+};
 
 const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0, built: 0, sold: 0 });
 
@@ -86,6 +96,12 @@ export class Game {
   audio: AudioLike | null = null;
   // Things built or bought, for the progression goals.
   owned = new Set<string>();
+  totals: Totals = newTotals();
+  helpers: unknown[] = [];
+  won = false;
+  tut = 0; // tutorial step
+  tutT = 0;
+  private tierCheckT = 0;
 
   constructor(public screen: Screen, public input: Input) {
     this.g = screen.g;
@@ -107,7 +123,52 @@ export class Game {
 
   onBuilt(id: string) {
     this.owned.add(id);
+    if (id.startsWith('up-')) this.totals.upgrades++;
   }
+
+  earn(n: number) {
+    this.coins += n;
+    this.totals.earned += n;
+  }
+
+  // ---- Progression ----
+
+  private checkTier() {
+    if (!tierComplete(this)) return;
+    if (this.tier >= TIERS.length) {
+      if (!this.won) {
+        this.won = true;
+        this.showBanner('THE VALLEY THRIVES!', 'THAT WILL DO. KEEP HERDING AS LONG AS YOU LIKE', 5);
+        this.audio?.play('tierup');
+      }
+      return;
+    }
+    this.setTier(this.tier + 1, true);
+  }
+
+  // Apply everything a tier brings. `fresh` = it just happened (fanfare).
+  setTier(n: number, fresh = false) {
+    this.tier = n;
+    for (const g of this.ranch.regionGates) {
+      const reg = REGIONS.find((r) => r.id === g.region)!;
+      if (reg.tier <= n && !g.unlocked) {
+        g.unlocked = true;
+        if (!fresh) g.swing = 1;
+      }
+    }
+    this.ranch.growFarmhouse(n);
+    this.ranch.restamp();
+    if (fresh) {
+      const t = tierOf(n);
+      this.showBanner(`TIER ${n}: ${t.name}`, t.blurb, 4.5);
+      this.audio?.play('tierup');
+      // The new region's animals turn up straight away.
+      this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => r.tier === n));
+      this.ledgerNew = true;
+    }
+  }
+
+  ledgerNew = false;
 
   isOnScreen(x: number, y: number, m = 8) {
     const { ox, oy, W, H } = this.view();
@@ -187,8 +248,9 @@ export class Game {
 
   endDay() {
     const sale = sellAllGoods(this);
-    this.coins += sale.value;
+    this.earn(sale.value);
     this.stats.goodsValue += sale.value;
+    this.totals.days++;
     const wild = this.animals.filter((a) => !a.pen && !a.gone);
     const strays = wild.filter((a) => a.stray).length;
     this.summary = {
@@ -218,6 +280,10 @@ export class Game {
       else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.startDay();
       return;
     }
+    if (this.mode === 'ledger') {
+      if (this.input.pressed('ledger') || this.input.pressed('cancel') || this.input.pressed('confirm')) this.mode = 'play';
+      return;
+    }
     if (this.mode === 'build') {
       this.fx.update(dt);
       this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
@@ -230,6 +296,17 @@ export class Game {
       this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
       return;
     }
+    if (this.input.pressed('ledger')) {
+      this.mode = 'ledger';
+      this.ledgerNew = false;
+      this.input.clearQueue();
+      return;
+    }
+    if ((this.tierCheckT -= dt) <= 0) {
+      this.tierCheckT = 0.5;
+      this.checkTier();
+    }
+    this.updateTutorial(dt);
     if (this.input.pressed('build')) {
       if (this.inRanch()) {
         this.enterBuild();
@@ -262,7 +339,13 @@ export class Game {
     if (reg && reg !== this.lastRegion) {
       this.place = { text: reg.name.toUpperCase(), t: 2.4 };
       this.lastRegion = reg;
+      const tip = REGION_TIPS[reg.id];
+      if (tip && !this.tipsSeen.has(reg.id) && reg.tier <= this.tier) {
+        this.tipsSeen.add(reg.id);
+        this.tip = { text: this.input.touchMode ? tip.replace('(E)', '') : tip, t: 8 };
+      }
     }
+    if (this.tip && (this.tip.t -= dt) <= 0) this.tip = null;
     if (this.place && (this.place.t -= dt) <= 0) this.place = null;
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
   }
@@ -296,15 +379,18 @@ export class Game {
       const { mult } = calmRating(a.peakStress);
       const value = Math.max(1, Math.round(a.sp.value * mult));
       a.deliveryValue = value;
-      this.coins += value;
+      this.earn(value);
       this.stats.deliveredValue += value;
       this.stats.delivered[a.sp.id] = (this.stats.delivered[a.sp.id] ?? 0) + 1;
+      this.totals.delivered[a.sp.id] = (this.totals.delivered[a.sp.id] ?? 0) + 1;
+      if (this.tut === 3) this.tut = 4;
       if (mult > 1) this.stats.calm++;
       this.fx.float(a.x, a.y - 10, `+${value}$`, C.butter, 1.1);
     } else if (ev.kind === 'shut') {
       const n = ev.batch.length;
       const avg = ev.batch.reduce((s, a) => s + a.peakStress, 0) / Math.max(1, n);
       const { label } = calmRating(avg);
+      if (label === 'CALM') this.totals.calmBatches++;
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
       this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}  +${value}$`, 2.8);
@@ -312,6 +398,41 @@ export class Game {
       for (let i = 0; i < 10; i++)
         this.fx.add({ kind: 'spark', x: gp.x, y: gp.y - 4, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, max: 0.5, color: C.butter });
     }
+  }
+
+  // Contextual first-day hints. Steps advance on what the player does.
+  private updateTutorial(dt: number) {
+    if (this.tut >= 7) return;
+    this.tutT += dt;
+    const near = this.nearestGroup(90);
+    const step = (n: number) => { this.tut = n; this.tutT = 0; };
+    switch (this.tut) {
+      case 0: if (near) step(1); break;
+      case 1: if (this.animals.some((a) => !a.pen && a.pressure > 0.15)) { if (this.tutT > 4) step(2); } else this.tutT = Math.min(this.tutT, 3.5); break;
+      case 2: if ((this.dog.lying && this.tutT > 1) || this.tutT > 14) step(3); break;
+      case 3: break; // advanced by the first penned animal
+      case 4: if (this.tutT > 5) step(5); break;
+      case 5: if (this.tutT > 5) step(6); break;
+      case 6: if (this.ranch.buildings.some((b) => b.kind === 'kennel')) step(7); break;
+    }
+  }
+
+  tip: { text: string; t: number } | null = null;
+  private tipsSeen = new Set<string>();
+
+  hint(): string | null {
+    if (this.tip) return this.tip.text;
+    const touch = this.input.touchMode;
+    switch (this.tut) {
+      case 0: return 'YOUR DUCKS ARE OUT IN THE HOME MEADOW. HEAD EAST!';
+      case 1: return 'CIRCLE ROUND BEHIND THEM, THEN WALK IN SLOWLY TO DRIVE THEM HOME.';
+      case 2: return touch ? 'HOLD DOWN TO LIE DOWN: THEY SETTLE AND SLOW.' : 'HOLD Q TO LIE DOWN: THEY SETTLE AND SLOW.';
+      case 3: return 'EASE THEM IN THROUGH THE OPEN PEN GATE.';
+      case 4: return 'CALM DRIVES PAY X1.5. A BARK MOVES THEM FAST BUT SCARES THEM.';
+      case 5: return touch ? 'TAP YOUR GOAL (TOP LEFT) FOR THE RANCH LEDGER.' : 'TAB OPENS THE RANCH LEDGER: GOALS AND WHAT COMES NEXT.';
+      case 6: return this.coins >= 20 ? (touch ? 'YOU CAN AFFORD A KENNEL: TAP BUILD AT THE RANCH.' : 'YOU CAN AFFORD A KENNEL: PRESS B AT THE RANCH.') : null;
+    }
+    return null;
   }
 
   nearestGroup(maxD = 140): Group | null {
@@ -375,6 +496,8 @@ export class Game {
       if (r === 'build') this.input.push('build');
     } else if (this.mode === 'build') {
       if (this.build.drawUI(this, g, v.W, v.H) === 'exit') this.input.push('cancel');
+    } else if (this.mode === 'ledger') {
+      if (drawLedger(this, g, v.W, v.H)) this.input.push('ledger');
     }
   }
 }

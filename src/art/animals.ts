@@ -56,33 +56,35 @@ const DUCK_UP = [
   ['.ww.', '.ww.', 'wwww', 'wwww', '.ww.', 'y..y'],
 ];
 
-// ---- Goats: lean, horned, bearded; wool coat with plum patches. ----
+// ---- Goats: lean, horned, bearded; upright tail, longer legs. ----
 const GOAT_TOP = [
-  '.......pp.',
-  '........p.',
-  'w.....wppw',
-  'wwwwwwwwp.',
-  'wpwwwppw..',
+  '......p...',
+  '.....pp...',
+  'w....pwww.',
+  'w....wwpwp',
+  'wwwwwwww..',
+  'wppwwwwwp.',
   'wwwwwww...',
 ];
 const GOAT_LEGS = [
-  ['.p.p..p.p.', '.p..p.p..p'],
+  ['.p.p..p.p.', '.p.p..p.p.'],
+  ['.p.p..p.p.', 'p...p.p..p'],
   ['..pp...pp.', '..pp...pp.'],
-  ['.p.p..p.p.', 'p..p.p..p.'],
 ];
 const GOAT_GRAZE = [
   '..........',
   '..........',
   'w.........',
-  'wwwwwwww..',
-  'wpwwwppwpp',
-  'wwwwwwwwpw',
-  '.p.p..p.p.',
+  'w.........',
+  'wwwwwww...',
+  'wppwwwwwpp',
+  'wwwwwwwwww',
+  '.p.p..p.pp',
   '.p.p..p.p.',
 ];
-const GOAT_DOWN_TOP = ['p...p', '.ppp.', '.wpw.', 'wwwww', 'wpwww', 'wwwpw', '.wpw.'];
-const GOAT_UP_TOP = ['p...p', '.ppp.', '.www.', 'wwwww', 'wwpww', 'wpwww', '.www.'];
-const V_LEGS = ['.p.p.', 'p...p'];
+const GOAT_DOWN_TOP = ['.www.', 'wpwww', 'wwwpw', 'p.w.p', '.pwp.', '.www.', '.pwp.', '..w..', '..p..'];
+const GOAT_UP_TOP = ['p...p', '.pwp.', '.www.', 'wwwww', 'wpwww', 'wwwpw', '.www.', '..w..'];
+const V_LEGS = ['p...p', '.p.p.'];
 
 // ---- Cattle: big, boxy, dark; wool horns and blaze. ----
 const COW_TOP = [
@@ -185,9 +187,9 @@ export function animalSprites(id: SpeciesId, coat: Coat = 0): AnimalSprites {
       s = set(
         GOAT_LEGS.map((l) => c([...GOAT_TOP, ...l])),
         c(GOAT_GRAZE),
-        V_LEGS.map((l, i) => c([...GOAT_DOWN_TOP, i ? V_LEGS[1] : V_LEGS[0]])),
-        V_LEGS.map((l, i) => c([...GOAT_UP_TOP, i ? V_LEGS[1] : l])),
-        5, 7, 2, 7,
+        V_LEGS.map((l) => c([...GOAT_DOWN_TOP, l])),
+        V_LEGS.map((l) => c([...GOAT_UP_TOP, l])),
+        5, 8, 2, 8,
       );
       break;
     }

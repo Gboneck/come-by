@@ -3,6 +3,9 @@ import { panel, rect, px } from '../gfx/draw';
 import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import { DUSK_AT } from '../systems/day';
+import { nextGoal } from '../systems/progression';
+import { wrap } from '../gfx/font';
+import { touchLayout } from './touch';
 
 // Rasterised triangle arrow pointing along `ang`.
 export function arrow(g: CanvasRenderingContext2D, cx: number, cy: number, ang: number, size: number, color: string) {
@@ -42,6 +45,23 @@ export function edgeArrow(g: CanvasRenderingContext2D, game: Game, wx: number, w
 }
 
 export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
+  // ---- Edge arrows: groups out in the pastures, and home when driving ----
+  const top = 14;
+  const gr = game.nearestGroup();
+  const driving = gr && Math.hypot(gr.x - game.dog.x, gr.y - game.dog.y) < 90;
+  if (driving) {
+    const pen = game.ranch.pens.find((p) => p.hasRoomFor(gr!.members[0]));
+    if (pen) {
+      const gp = pen.gatePoint(10);
+      edgeArrow(g, game, gp.x, gp.y, C.wool, 'PEN', top);
+    }
+  } else {
+    const groups = [...game.groups]
+      .sort((a, b) => Math.hypot(a.x - game.dog.x, a.y - game.dog.y) - Math.hypot(b.x - game.dog.x, b.y - game.dog.y))
+      .slice(0, 2);
+    for (const grp of groups) edgeArrow(g, game, grp.x, grp.y, C.butter, `${grp.members.length}`, top);
+  }
+
   // ---- Clock (top-left) ----
   const d = game.day;
   panel(g, 2, 2, 52, 18);
@@ -71,8 +91,23 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     if (game.ui.click('hud-build', W - bw - 2, 15, bw, 11)) game.input.push('build');
   }
 
+  // ---- Next goal (always visible; tap or Tab for the ledger) ----
+  let cardY = 22;
+  {
+    const ng = nextGoal(game);
+    const blink = game.ledgerNew && Math.floor(game.t * 3) % 2 === 0;
+    const label = game.ledgerNew ? 'NEW TIER! SEE LEDGER' : ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
+    const w = textWidth(label) + 13;
+    panel(g, 2, cardY, w, 11, blink ? C.teal : C.plum, C.butter);
+    // Little ledger book icon.
+    rect(g, 5, cardY + 3, 4, 5, C.butter);
+    rect(g, 6, cardY + 4, 2, 1, C.plum);
+    text(g, label, 11, cardY + 3, C.wool, { iconColor: C.butter });
+    if (game.ui.click('hud-ledger', 2, cardY, w, 11)) game.input.push('ledger');
+    cardY += 13;
+  }
+
   // ---- Flock card ----
-  const gr = game.nearestGroup();
   if (gr) {
     const sp = gr.members[0].sp;
     const n = gr.members.length;
@@ -80,27 +115,23 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const col = gr.stress < 0.3 ? C.butter : C.wool;
     const label = `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}`;
     const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8;
-    panel(g, 2, 22, w, 19);
-    text(g, label, 6, 25, C.wool);
+    panel(g, 2, cardY, w, 19);
+    text(g, label, 6, cardY + 3, C.wool);
     const pips = 5, lit = Math.max(1, Math.round((1 - gr.stress) * pips));
-    for (let i = 0; i < pips; i++) rect(g, 6 + i * 4, 33, 3, 4, i < lit ? col : C.sage);
-    if (mood !== 'PANIC' || Math.floor(game.t * 6) % 2 === 0) text(g, mood, 27, 32, col);
+    for (let i = 0; i < pips; i++) rect(g, 6 + i * 4, cardY + 11, 3, 4, i < lit ? col : C.sage);
+    if (mood !== 'PANIC' || Math.floor(game.t * 6) % 2 === 0) text(g, mood, 27, cardY + 10, col);
   }
 
-  // ---- Edge arrows: groups out in the pastures, and home when driving ----
-  const top = 22;
-  const driving = gr && Math.hypot(gr.x - game.dog.x, gr.y - game.dog.y) < 90;
-  if (driving) {
-    const pen = game.ranch.pens.find((p) => p.hasRoomFor(gr!.members[0]));
-    if (pen) {
-      const gp = pen.gatePoint(10);
-      edgeArrow(g, game, gp.x, gp.y, C.wool, 'PEN', top);
-    }
-  } else {
-    const groups = [...game.groups]
-      .sort((a, b) => Math.hypot(a.x - game.dog.x, a.y - game.dog.y) - Math.hypot(b.x - game.dog.x, b.y - game.dog.y))
-      .slice(0, 2);
-    for (const grp of groups) edgeArrow(g, game, grp.x, grp.y, C.butter, `${grp.members.length}`, top);
+  // ---- Hint line (tutorial and region tips) ----
+  const hint = game.hint();
+  const bottomY = game.input.touchMode ? touchLayout(W, H).lie.y - 20 : H - 4;
+  if (hint) {
+    const lines = wrap(hint, Math.min(W - 16, 200));
+    const hw = Math.max(...lines.map((l) => textWidth(l))) + 10;
+    const hh = lines.length * 7 + 5;
+    const hy = Math.round(bottomY - hh);
+    panel(g, Math.round(W / 2 - hw / 2), hy, hw, hh);
+    lines.forEach((l, i) => text(g, l, W / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
   }
 
   // ---- Place name and banners ----
@@ -109,15 +140,17 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const show = p.t > 2.2 ? Math.floor(p.t * 20) % 2 === 0 : true;
     if (show) {
       const tw2 = textWidth(p.text);
-      panel(g, Math.round(W / 2 - tw2 / 2 - 5), H - 34, tw2 + 10, 11);
-      text(g, p.text, W / 2, H - 31, C.wool, { align: 'center' });
+      const py = hint ? 40 : Math.round(bottomY - 12);
+      panel(g, Math.round(W / 2 - tw2 / 2 - 5), py, tw2 + 10, 11);
+      text(g, p.text, W / 2, py + 3, C.wool, { align: 'center' });
     }
   }
   if (game.banner) {
     const b = game.banner;
     const age = b.max - b.t;
-    const y = Math.round(28 + Math.max(0, 1 - age * 5) * -20);
-    text(g, b.big, W / 2, y, C.butter, { align: 'center', scale: 2, shadow: C.plum });
-    if (b.small) text(g, b.small, W / 2, y + 14, C.wool, { align: 'center', shadow: C.plum });
+    const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
+    const sc = textWidth(b.big, 2) <= W - 8 ? 2 : 1;
+    text(g, b.big, W / 2, y, C.butter, { align: 'center', scale: sc, shadow: C.plum });
+    if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, y + 7 * sc + 4 + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
   }
 }

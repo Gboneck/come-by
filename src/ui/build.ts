@@ -252,7 +252,7 @@ export class BuildMode {
     const price = livestockPrice(game, a.sp.id);
     a.gone = true;
     p.animals = p.animals.filter((x) => x !== a);
-    game.coins += price;
+    game.earn(price);
     game.stats.sold += price;
     this.say(`SOLD A ${a.sp.name.toUpperCase()} +${price}$`, true);
     game.audio?.play('coin');

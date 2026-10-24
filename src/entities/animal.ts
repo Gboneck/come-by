@@ -2,7 +2,7 @@ import { C } from '../palette';
 import { ellipse, rect } from '../gfx/draw';
 import { drawSpr } from '../gfx/sprite';
 import { animalSprites, type Coat } from '../art/animals';
-import { BLOCK_ANIMAL, BLOCK_CLIMBER, GATE, SHALLOW, type SpeciesId, type WorldMap } from '../world/map';
+import { BLOCK_ANIMAL, BLOCK_CLIMBER, CS, GATE, ROCK, SHALLOW, type SpeciesId, type WorldMap } from '../world/map';
 import { collideCircle, wallRepulse } from '../world/collide';
 import { SPECIES, type Species } from './species';
 import { angleDiff, clamp } from '../util';
@@ -64,6 +64,13 @@ export class Animal {
   inWater = false;
   gone = false; // taken by a predator / sold
   carried = false; // being dragged off
+  // Goats: nearest rock to scramble up, and how long they have sat on one.
+  rockX = 0;
+  rockY = 0;
+  rockSeek = 0;
+  hasRock = false;
+  onRock = false;
+  rockT = 0;
   // For the "stress at delivery" calm bonus.
   peakStress = 0;
   deliveryValue = 0;
@@ -147,7 +154,9 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   if (a.pen) a.penT += dt;
 
   // ---- Flocking ----
-  const stressBunch = 1 + 1.4 * smooth01((a.stress - 0.15) / 0.45) * (a.stress < 0.8 ? 1 : 0.3);
+  const stressBunch = sp.splitter
+    ? Math.max(0.1, 1 - 1.4 * smooth01((a.stress - 0.15) / 0.45))
+    : 1 + 1.4 * smooth01((a.stress - 0.15) / 0.45) * (a.stress < 0.8 ? 1 : 0.3);
   const sepR = sp.sep * (1 - 0.25 * smooth01((a.stress - 0.2) / 0.5));
   let cx = 0, cy = 0, avx = 0, avy = 0, n = 0, sx = 0, sy = 0;
   grid.near(a.x, a.y, Math.max(sp.nbr, 16), nbrs);
@@ -182,12 +191,23 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     follow = Math.hypot(avx / n, avy / n);
   }
 
+  // Goats keep track of the nearest rock, and feel safe on one.
+  if (sp.climbs && !a.pen) {
+    a.onRock = (ctx.map.flagsAtPx(a.x, a.y) & ROCK) !== 0;
+    a.rockT = a.onRock ? a.rockT + dt : 0;
+    if ((a.rockSeek -= dt) <= 0) {
+      a.rockSeek = 0.6 + Math.random() * 0.3;
+      findRock(ctx.map, a);
+    }
+  }
+  const safety = a.onRock ? 0.55 : 1;
+
   // ---- Pressure from dogs and predators ----
   let fx = 0, fy = 0, P = 0, threat = 0, approachMax = 0, startle = 0;
   let mainX = 0, mainY = 0, mainI = 0;
   for (const s of ctx.sources) {
     if (s.lying) continue;
-    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen ? 0.5 : 1);
+    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen ? 0.5 : 1) * safety;
     const dx = a.x - s.x, dy = a.y - s.y;
     const d = Math.hypot(dx, dy);
     if (d >= R || d < 1e-3) continue;
@@ -222,6 +242,8 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   }
   a.pressure = P;
   if (P > 0.9 && sp.balksWater) a.commitT = Math.max(a.commitT, 0.6);
+  // Heavy animals, once pushed, keep plodding on for a while.
+  if (sp.momentum && P > 0.25 && !a.pen) a.fleeT = Math.max(a.fleeT, sp.momentum * Math.min(1, P));
 
   // Lying dog nearby: settle.
   const dDog = Math.hypot(a.x - ctx.dogX, a.y - ctx.dogY);
@@ -256,6 +278,15 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
       spd = Math.max(spd, sp.run * Math.min(1, a.fleeT * 1.3));
       if (P < 0.03) { dirX += a.hx * 1.5; dirY += a.hy * 1.5; }
     }
+    // Goats scramble for the rocks when pushed.
+    if (sp.climbs && a.hasRock && !a.onRock && !a.pen) {
+      const rx = a.rockX - a.x, ry = a.rockY - a.y, rd = Math.hypot(rx, ry);
+      if (rd > 1) {
+        const w = 1.5 * Math.min(1, P + 0.2);
+        dirX += (rx / rd) * w;
+        dirY += (ry / rd) * w;
+      }
+    }
     // Pressured animals near an open pen gate drift through it.
     for (const gt of ctx.gates) {
       if (!gt.open || !gt.accepts(a)) continue;
@@ -275,7 +306,20 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   } else {
     // Calm: graze, amble, keep loosely together.
     a.grazeT -= dt * (settling ? 0.5 : 1);
-    if (a.grazeT <= 0) pickGraze(a, cohX, cohY, n);
+    if (a.grazeT <= 0) {
+      pickGraze(a, cohX, cohY, n);
+      if (a.onRock) {
+        // Safe up here. After a while the grass below wins.
+        if (a.rockT < 7) { a.grazeMode = 'eat'; a.grazeT = 1.5 + Math.random() * 2; }
+        else if (a.hasRock) {
+          const ang = Math.atan2(a.y - a.rockY, a.x - a.rockX) + (Math.random() - 0.5);
+          a.grazeMode = 'amble';
+          a.grazeT = 2.5;
+          a.gdx = Math.cos(ang);
+          a.gdy = Math.sin(ang);
+        }
+      }
+    }
     const far = Math.hypot(cohX, cohY) > 0.45 ? 1 : 0.25;
     if (n === 0 && !a.wanderer && !a.pen) {
       // Alone: look for the others a little further off.
@@ -368,6 +412,24 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     if (Math.abs(a.vx) > Math.abs(a.vy) * bias) a.face = a.vx > 0 ? 'r' : 'l';
     else a.face = a.vy > 0 ? 'd' : 'u';
   }
+}
+
+// Nearest rock cell centre within ~48px (goats only).
+function findRock(map: WorldMap, a: Animal) {
+  const R = 12;
+  const cx0 = Math.floor(a.x / CS), cy0 = Math.floor(a.y / CS);
+  let best = 1e9;
+  a.hasRock = false;
+  for (let dy = -R; dy <= R; dy += 1)
+    for (let dx = -R; dx <= R; dx += 1) {
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= best || d2 > R * R) continue;
+      if ((map.cell(cx0 + dx, cy0 + dy) & ROCK) === 0) continue;
+      best = d2;
+      a.rockX = (cx0 + dx) * CS + CS / 2;
+      a.rockY = (cy0 + dy) * CS + CS / 2;
+      a.hasRock = true;
+    }
 }
 
 function pickGraze(a: Animal, cohX: number, cohY: number, n: number) {

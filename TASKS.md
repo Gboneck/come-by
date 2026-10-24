@@ -43,14 +43,14 @@
 - [x] Screenshot + console check, commit
 
 ## M5 Progression
-- [ ] Ranch Ledger panel: current tier, goals, what next tier unlocks
-- [ ] Tier 1 Homestead: ducks, Home Meadow (tutorial)
-- [ ] Tier 2 Smallholding: sheep, Rolling Hills
-- [ ] Tier 3 Farmstead: goats, Rocky Rise (climb rocks, split up)
-- [ ] Tier 4 Ranch: cattle, River Ford (nips, balk at water)
-- [ ] Tier 5 Valley Estate: wild ponies, High Range (endgame)
-- [ ] Regions open on the map; ranch visibly grows (farmhouse, fencing)
-- [ ] Screenshot + console check, commit
+- [x] Ranch Ledger panel: current tier, goals, what next tier unlocks
+- [x] Tier 1 Homestead: ducks, Home Meadow (tutorial)
+- [x] Tier 2 Smallholding: sheep, Rolling Hills
+- [x] Tier 3 Farmstead: goats, Rocky Rise (climb rocks, split up)
+- [x] Tier 4 Ranch: cattle, River Ford (nips, balk at water)
+- [x] Tier 5 Valley Estate: wild ponies, High Range (endgame)
+- [x] Regions open on the map; ranch visibly grows (farmhouse, lanterns, decor)
+- [x] Screenshot + console check, commit
 
 ## M6 Night
 - [ ] Night phase with dither darkness and lanterns
@@ -141,4 +141,27 @@
   space. Dog upgrades are bought in the DOG tab once a kennel is built.
 - Tier gates (first pass): T1 pen, fence, trough, kennel; T2 market, barn;
   T3 field gate, pen and barn upgrades; T5 windmill.
+- Tier goals (`src/systems/progression.ts`): T1 pen 6 ducks, a calm drive,
+  build a kennel. T2 pen 8 sheep, earn 150$, build a market. T3 pen 8 goats,
+  build a barn, train the dog 3x. T4 pen 6 cattle, a night with no losses,
+  hire a helper. T5 pen 6 ponies, 50 animals penned, build the windmill.
+  Tier-ups happen the moment the goals are met: the region gate swings
+  open, its animals arrive, the farmhouse grows, new decor appears.
+- "Ranch visibly grows" is done with the farmhouse (cabin, flower boxes,
+  two storeys at T3, a flag at T4), lanterns that light the night, a well,
+  hay, flowers, a bench and a ranch sign that names the tier. Auto-placed
+  yard fencing was dropped: it fought with the player's own layout.
+- Species personalities, tuned with the bot harness:
+  ducks forgive everything; sheep are the classic flock; goats split up
+  under stress (`splitter`) and run for rocks they can climb, where they
+  feel safe (flight zone x0.55) until they get bored and come down; cattle
+  ignore all but close pressure (`stubborn` 0.45), keep plodding once
+  pushed (`momentum`), balk at water unless nipped (nip commits them for
+  3s) — heel nips get 5 cattle across the ford in ~25s; ponies spook from
+  78px but drive calmly down the north corridor in ~20s, while chasing
+  them panics and shatters the herd.
+- The goal tracker under the clock always shows the next open goal and
+  opens the Ledger (Tab / tap). First-day hints walk through finding,
+  circling, lying down, penning, the calm bonus, the ledger and the kennel;
+  each region shows a one-time tip on first visit.
 

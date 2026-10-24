@@ -6,6 +6,9 @@ import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
 import { Barn, FieldGate, Fence, Kennel, Market, Windmill } from '../ranch/structures';
 import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
 import type { Light } from './night';
+import { DECOR, decorDrawable, decorLights } from '../ranch/decor';
+import { tierOf } from '../systems/progression';
+import { TS } from '../world/map';
 
 export interface View {
   ox: number;
@@ -47,6 +50,12 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     const near = Math.hypot(game.dog.x - b.cx, game.dog.y - b.cy) < 120 || game.mode === 'build';
     ents.push(...buildingDrawables(g, b, game.t, night, near));
   }
+  const tierName = tierOf(game.tier).name;
+  for (const d of DECOR) {
+    if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, d.x * TS + 8, d.y * TS + 8, 40)) continue;
+    if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && d.x >= b.tx && d.x < b.tx + b.w && d.y >= b.ty && d.y < b.ty + b.h)) continue;
+    ents.push(decorDrawable(g, d, game.t, tierName, night));
+  }
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t) });
   ents.push({ y: game.dog.y, draw: () => game.dog.draw(g) });
   ents.sort((p, q) => p.y - q.y);
@@ -68,6 +77,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     const lights: Light[] = [{ x: game.dog.x - ox, y: game.dog.y - oy, r: 34 }];
     const f = game.ranch.farmhouse;
     if (f) lights.push({ x: f.cx - ox, y: f.y1 - 6 - oy, r: 56 });
+    for (const l of decorLights(game.tier)) lights.push({ x: l.x - ox, y: l.y - oy, r: l.r });
     game.night.draw(g, W, H, ox, oy, dark, lights);
   }
 }

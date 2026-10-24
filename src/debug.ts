@@ -3,6 +3,8 @@ import { rect } from './gfx/draw';
 import { drawSpr, type Sprite } from './gfx/sprite';
 import { text } from './gfx/font';
 import { makeDogSprites } from './art/dog';
+import { animalSprites, type Coat } from './art/animals';
+import { SPECIES_ORDER, SPECIES } from './entities/species';
 import type { Game } from './game';
 import { runSim, type BotOpts } from './bot';
 import type { SpeciesId } from './world/map';
@@ -21,6 +23,9 @@ export function installDebug(game: Game) {
   window.sim = (o, seconds) => runSim(game, o, seconds);
   window.resetFlock = (species, x, y, n, dogX, dogY) => {
     game.animals.length = 0;
+    game.mode = 'play';
+    game.day.t = 20;
+    game.day.phase = 'day';
     game.spawnFlock(species, x, y, n);
     game.dog.x = dogX;
     game.dog.y = dogY;
@@ -41,6 +46,12 @@ function buildSheet() {
     { label: 'DOG DOWN', sprites: [d.downStand, ...d.down, d.downBark, d.downLie] },
     { label: 'DOG UP', sprites: [d.upStand, ...d.up, d.upLie] },
     { label: 'HELPER', sprites: [h.sideStand, h.downStand, h.upStand] },
+    ...SPECIES_ORDER.flatMap((id) =>
+      Array.from({ length: SPECIES[id].coats }, (_, c) => {
+        const s = animalSprites(id, c as Coat);
+        return { label: `${id.toUpperCase()} ${c}`, sprites: [...s.side, s.graze, ...s.down, ...s.up] };
+      }),
+    ),
   ];
 }
 
@@ -54,7 +65,8 @@ export function drawSpriteSheet(g: CanvasRenderingContext2D, W: number, H: numbe
   sheet ??= buildSheet();
   rect(g, 0, 0, W, H, C.meadow);
   let y = 4;
-  for (const row of sheet) {
+  const skip = Number(new URLSearchParams(location.search).get('sprites') || 0);
+  for (const row of sheet.slice(skip)) {
     text(g, row.label, 3, y, C.plum);
     y += 8;
     let x = 4;

@@ -49,7 +49,7 @@ export const CATALOG: BuildDef[] = [
     icon: icon('market', ['ywywywywy', 'ywywywywy', '.p.....p.', '.p.....p.', 'ppppppppp', '.pwyw.yp.']),
   },
   {
-    id: 'barn', kind: 'barn', name: 'BARN', cost: 60, tier: 2, w: 6, h: 5, rotates: false,
+    id: 'barn', kind: 'barn', name: 'BARN', cost: 80, tier: 2, w: 6, h: 5, rotates: false,
     upgrade: { cost: 50, tier: 3, desc: 'SHELTERS A WIDER RING' },
     desc: 'PENS INSIDE ITS RING ARE SAFE AT NIGHT.',
     icon: icon('barn', ['....p....', '..ppppp..', '.ppppppp.', 'ppppppppp', '.wwwwwww.', '.wpwwwpw.', '.wwpwpww.']),
@@ -60,7 +60,7 @@ export const CATALOG: BuildDef[] = [
     icon: icon('gate', ['.........', 'p.......p', 'pwwwwwwwp', 'p.w.w.w.p', 'pwwwwwwwp', 'p.......p']),
   },
   {
-    id: 'windmill', kind: 'windmill', name: 'MILL', cost: 80, tier: 5, w: 3, h: 3, rotates: false, max: 1,
+    id: 'windmill', kind: 'windmill', name: 'MILL', cost: 180, tier: 5, w: 3, h: 3, rotates: false, max: 1,
     desc: 'THE VALLEY PROSPERS: +20% GOODS.',
     icon: icon('windmill', ['p.....p', '.p...p.', '..pwp..', '...w...', '..pwp..', '.p.w.p.', 'p.www.p']),
   },

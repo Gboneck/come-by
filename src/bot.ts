@@ -10,10 +10,11 @@ export interface BotOpts {
   sprint?: boolean;
   crowd?: number; // 0..1: how far inside the flight zone the bot pushes
   keyboard?: boolean; // 8 directions, full speed or stopped, like a key player
-  chase?: boolean; // naive: run straight at the middle of the flock
+  chase?: boolean; // naive: run straight at the nearest animal
+  nip?: boolean; // nip the heel of a rearmost animal when close behind it
 }
 
-export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: number; sprint: boolean; lie: boolean; bark: boolean } {
+export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: number; sprint: boolean; lie: boolean; bark: boolean; nip?: boolean } {
   const d = game.dog;
   const flock: Animal[] = game.animals.filter((a) => !a.pen && !a.gone);
   if (!flock.length) return { x: 0, y: 0, sprint: false, lie: false, bark: false };
@@ -30,7 +31,9 @@ export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: numb
   }
   let tx: number, ty: number;
   if (o.chase) {
-    const mx = cx - d.x, my = cy - d.y;
+    let tgt = flock[0], td = 1e9;
+    for (const a of flock) { const dd = Math.hypot(a.x - d.x, a.y - d.y); if (dd < td) { td = dd; tgt = a; } }
+    const mx = tgt.x - d.x, my = tgt.y - d.y;
     const l = Math.hypot(mx, my) || 1;
     return { x: mx / l, y: my / l, sprint: !!o.sprint, lie: false, bark: false };
   }
@@ -69,6 +72,19 @@ export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: numb
     const bark = !!o.bark && Math.floor(t / o.bark) !== Math.floor((t - 1 / 60) / o.bark);
     return { x: Math.cos(ang), y: Math.sin(ang), sprint: !!o.sprint, lie: false, bark };
   }
+  if (o.nip && fd <= fN) {
+    // Get right behind the rearmost animal and nip it on.
+    const gx = o.goalX - cx, gy = o.goalY - cy;
+    const gl = Math.hypot(gx, gy) || 1;
+    let rear = flock[0], rd = 1e9;
+    for (const a of flock) { const p = (a.x - cx) * gx / gl + (a.y - cy) * gy / gl; if (p < rd) { rd = p; rear = a; } }
+    const bx = rear.x - (gx / gl) * (rear.sp.r + 6), by = rear.y - (gy / gl) * (rear.sp.r + 6);
+    const nx = bx - d.x, ny = by - d.y, nl = Math.hypot(nx, ny);
+    const close = Math.hypot(rear.x - d.x, rear.y - d.y) < rear.sp.r + 9;
+    const nipNow = close && d.nipCd <= 0 && Math.floor(t * 1.2) !== Math.floor((t - 1 / 60) * 1.2);
+    if (nipNow) { d.hx = (rear.x - d.x) / (Math.hypot(rear.x - d.x, rear.y - d.y) || 1); d.hy = (rear.y - d.y) / (Math.hypot(rear.x - d.x, rear.y - d.y) || 1); }
+    return { x: nl > 1 ? (nx / nl) * Math.min(1, nl / 6) : 0, y: nl > 1 ? (ny / nl) * Math.min(1, nl / 6) : 0, sprint: false, lie: false, bark: false, nip: nipNow };
+  }
   const k = ml > 0 ? Math.min(1, dist / 6) / ml : 0;
   const bark = !!o.bark && Math.floor(t / o.bark) !== Math.floor((t - 1 / 60) / o.bark);
   return { x: mx * k, y: my * k, sprint: !!o.sprint || dist > 120, lie: false, bark };
@@ -89,9 +105,12 @@ export function runSim(game: Game, o: BotOpts & { untilPenned?: boolean }, maxSe
   let t = 0, sumS = 0, nS = 0, peak = 0, maxGroups = 0, panics = 0, reached = false;
   const wasPanic = new Set<Animal>();
   while (t < maxSeconds) {
+    // Keep the clock in daylight so long runs never end the day.
+    if (game.day.t > 200) game.day.t = 20;
     const c = botStep(game, o, t);
     game.input.override = { x: c.x, y: c.y, sprint: c.sprint, lie: c.lie };
     if (c.bark) game.input.push('bark');
+    if (c.nip) game.input.push('nip');
     game.update(dt);
     game.input.clearQueue();
     t += dt;
