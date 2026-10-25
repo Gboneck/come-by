@@ -107,6 +107,13 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       line(g, x - 4, y - 2, x + 3, y - 2, C.moss);
       rect(g, x - 1, y - 4, 1, 5, C.plum);
       rect(g, x - 4, y, 8, 1, C.moss);
+      // Loose wisps at the ends and scattered round it.
+      px(g, x - 5, y - 3, C.butter);
+      px(g, x + 4, y - 2, C.butter);
+      px(g, x + 4, y - 4, C.butter);
+      px(g, x - 6, y + 1, C.butter);
+      px(g, x + 6, y, C.butter);
+      px(g, x + 2, y + 2, C.butter);
       break;
     case 'well':
       rect(g, x - 6, y + 1, 11, 1, C.sage);

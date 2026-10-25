@@ -37,6 +37,8 @@ function post(g: CanvasRenderingContext2D, x: number, base: number, sturdy: bool
   const h = postH(x, base);
   rect(g, x, base - h + 1, 2, h, C.plum);
   px(g, x + (hash2(x, base, 403) < 0.5 ? 0 : 1), base - h + 1, postCap(x, base));
+  if (hash2(x, base, 407) < 0.4) px(g, x - 1, base, C.moss);
+  if (hash2(x, base, 408) < 0.2) px(g, x + 1, base - 2, C.teal);
 }
 
 export function hFence(g: CanvasRenderingContext2D, xa: number, xb: number, base: number, gap?: [number, number], sturdy = false) {
@@ -93,6 +95,11 @@ function gateLeaf(g: CanvasRenderingContext2D, hx: number, hy: number, along: [n
   // Diagonal brace.
   line(g, hx, hy - 4, (hx + ex) / 2, (hy + ey) / 2 - 2, C.wool);
   rect(g, ex - 0.5, ey - 5, 1, 6, C.plum);
+  // Hinge straps on the rails at the post, a latch at the free end.
+  const ux = (ex - hx) / Math.max(1, len), uy = (ey - hy) / Math.max(1, len);
+  px(g, hx + ux, hy - 2 + uy, C.plum);
+  px(g, hx + ux, hy - 4 + uy, C.plum);
+  px(g, ex - ux, ey - 3 - uy, C.butter);
   if (flash > 0 && Math.floor(flash * 12) % 2 === 0) {
     px(g, ex + 1, ey - 6, C.butter);
     px(g, ex - 2, ey - 7, C.butter);
@@ -231,6 +238,18 @@ function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top: numbe
   const inset = hip;
   rect(g, xa + inset, top, xb - xa - inset * 2, 1, C.sage);
   rect(g, xa, eave - 1, xb - xa, 1, C.plum);
+  // Moss creeping up from the eaves on the shady side, and along the hip.
+  for (let x = xa; x < xb; x++) {
+    const shade = 1 - (x - xa) / (xb - xa);
+    if (hash2(x, eave, 420) < 0.55 * shade) px(g, x, eave - 1, C.moss);
+    if (hash2(x, eave, 421) < 0.25 * shade) px(g, x, eave - 2, C.moss);
+  }
+  for (let y = top + 2; y < eave - 1; y++) {
+    const k = y - top;
+    const a = xa + Math.round(hip * (1 - k / Math.max(1, rh - 1)));
+    if (hash2(a, y, 422) < 0.35) px(g, a + 1, y, C.moss);
+    if (hash2(xa, y, 423) < 0.03) px(g, xa + 4 + Math.floor(hash2(y, xa, 424) * (xb - xa - 8)), y, C.plum);
+  }
 }
 
 // A window with a plum frame, mullions, sage shutters and a glint on the
@@ -295,6 +314,15 @@ function drawFarmhouse(g: CanvasRenderingContext2D, b: Building, night: boolean,
   rect(g, x0 + 1, y1 - 1, w - 2, 1, C.sage);
   if (two) for (let x = x0 + 1; x < x1 - 1; x += 3) px(g, x, y1 - 1, C.plum);
   if (two) rect(g, x0 + 1, eave + 9, w - 2, 1, C.sage); // floor line
+  // Damp and moss along the footing, thicker at the shady corner; a
+  // drainpipe down the right-hand corner.
+  for (let x = x0 + 1; x < x1 - 1; x++) {
+    const shade = 1 - (x - x0) / w;
+    if (hash2(x, y1, 430) < 0.5 * shade + 0.1) px(g, x, y1 - 2, C.moss);
+    if (hash2(x, y1, 431) < 0.3 * shade) px(g, x, y1 - 3, C.moss);
+  }
+  rect(g, x1 - 3, eave + 1, 1, wallH - 1, C.sage);
+  px(g, x1 - 3, y1 - 1, C.plum);
 
   // Roof and chimneys.
   hipRoof(g, x0 - 2, x1 + 2, roofTop, eave, two ? 7 : 5);
@@ -499,6 +527,11 @@ export function barnDrawable(g: CanvasRenderingContext2D, b: Barn, night: boolea
         }
         rect(g, x0 + 1, eave, w - 2, wallH, C.plum);
         for (let x = x0 + 3; x < x1 - 2; x += 3) rect(g, x, eave + 1, 1, wallH - 2, C.teal);
+        // Knots in the boards, moss and splashed mud at their feet.
+        for (let x = x0 + 2; x < x1 - 2; x++) {
+          if (hash2(x, eave, 432) < 0.08) px(g, x, eave + 3 + Math.floor(hash2(x, 0, 433) * (wallH - 6)), C.sage);
+          if (hash2(x, y1, 434) < 0.45) px(g, x, y1 - 1, hash2(x, y1, 435) < 0.5 ? C.moss : C.sage);
+        }
         rect(g, x0 + 1, eave, 1, wallH, C.wool);
         rect(g, x1 - 2, eave, 1, wallH, C.wool);
         rect(g, x0 + 1, eave, w - 2, 1, C.wool);
@@ -512,7 +545,7 @@ export function barnDrawable(g: CanvasRenderingContext2D, b: Barn, night: boolea
         line(g, dx + dw - 1, y1 - dh, dx + dw / 2, y1 - 1, C.wool);
         rect(g, dx + dw / 2 - 1, y1 - dh, 1, dh, C.wool);
         // Hay spilling from the doorway.
-        for (let i = 0; i < 6; i++) px(g, dx + 2 + ((i * 5) % 13), y1 + (i % 2), C.butter);
+        for (let i = 0; i < 11; i++) px(g, dx - 2 + ((i * 7) % 21), y1 + (i % 3 === 0 ? 2 : i % 2), C.butter);
         if (big) {
           for (const lx of [dx - 4, dx + dw + 3]) {
             px(g, lx, y1 - 9, C.plum);
