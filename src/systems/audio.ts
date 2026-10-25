@@ -8,7 +8,8 @@
 // music bed; a limiter at the end means nothing ever clips.
 
 import type { Game } from '../game';
-import { FORD_Y0, FORD_Y1, RIVER_SPRING_Y, TS, riverX } from '../world/map';
+import { FORD_Y0, FORD_Y1, REGIONS, RIVER_SPRING_Y, TS, riverX } from '../world/map';
+import type { Animal } from '../entities/animal';
 import { Bank } from './synth';
 import { Music, type MusicState, type PieceId, type StingerKind } from './music';
 import { Ambience, type AmbState, type HerdVoice } from './soundscape';
@@ -25,6 +26,26 @@ const STRIDE: Record<string, number> = { duck: 3, sheep: 6, goat: 6, cow: 9, pon
 const curve = (level: number) => (level / 10) ** 2;
 
 export type TapKind = 'play' | 'stinger' | 'thatllDo' | 'voice';
+
+export interface PlayOpts {
+  x?: number;
+  y?: number;
+  vol?: number;
+  delay?: number;
+  force?: boolean;
+  who?: number; // co-op player slot: each friend's bark and whistle has its own pitch
+  far?: boolean; // carries further (a lost lamb you need to find)
+  pitch?: number; // multiplier
+}
+
+// Co-op: each player's pitch, by slot (0 is the host).
+const WHO_PITCH = [1, 1.12, 0.89, 1.26, 0.8, 1.06];
+const whoPitch = (who?: number) => (who ? WHO_PITCH[who % WHO_PITCH.length] : 1);
+
+// What the gameplay side is expected to provide for lambing and the fair
+// (read loosely, so the audio stays quiet if they are not there yet).
+type LambLike = Animal & { lamb?: boolean; mother?: Animal | null };
+interface FairLike { on?: boolean; x?: number; y?: number; sold?: number }
 
 export class Sound {
   ctx: BaseAudioContext | null = null;
@@ -50,13 +71,19 @@ export class Sound {
   private game: Game | null = null;
   private region = 'ranch';
   private scanT = 0;
-  private amb: AmbState = { region: 'ranch', phase: 'day', wind: 0.35, river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, storm: 0, speed: 1 };
+  private amb: AmbState = { region: 'ranch', phase: 'day', wind: 0.35, river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, storm: 0, speed: 1, bloom: 0, leaves: 0, snow: 0, dawn: 0, fair: 0, fairPan: 0 };
   private pumpAt = 0;
   private stepPh = 0;
   private stepI = 0;
   private lastMode = '';
   private lastSel = -1;
   private gates = new WeakMap<object, number>();
+  private roster: Set<number> | null = null;
+  private lambT = new WeakMap<object, number>();
+  private lambApart = new WeakMap<object, number>();
+  private fairAt: { x: number; y: number } | null = null;
+  private fairSold = 0;
+  private auctT = 3;
   // Trials and orders, watched for what changed since the last frame.
   private run: Run | null = null;
   private runStep = 0;
@@ -397,7 +424,8 @@ export class Sound {
   footstep(x: number, y: number) {
     const dx = x - this.lx, dy = y - this.ly;
     const vol = 0.07 * Math.max(0, 1 - Math.hypot(dx, dy) / 240);
-    this.sample('step-dog', vol, dx / 220, 0.7 + Math.random() * 0.1);
+    if (this.amb.snow > 0.5) this.sample('step-snow', vol * 1.3, dx / 220, 0.85 + Math.random() * 0.1);
+    else this.sample('step-dog', vol, dx / 220, 0.7 + Math.random() * 0.1);
   }
 
   // The soundscape calls this when lightning strikes (its thunder is
@@ -445,6 +473,12 @@ export class Sound {
     o.stop(t0 + dur + 0.05);
   }
 
+  // A gavel (or any hard wooden knock).
+  private knock(dest: AudioNode, t: number) {
+    this.tone(dest, 'triangle', 620, 330, t, 0.06, 0.3);
+    this.noise(dest, t, 0.02, 0.2, 'bandpass', 2600, 2);
+  }
+
   private noise(dest: AudioNode, t0: number, dur: number, vol: number, filter: BiquadFilterType, ff: number, q = 1, ff1?: number) {
     const ctx = this.ctx!;
     const buf = this.bank.get('noise');
@@ -469,11 +503,11 @@ export class Sound {
 
   // ---- Sounds ----
 
-  play(name: string, opts: { x?: number; y?: number; vol?: number; delay?: number; force?: boolean } = {}) {
+  play(name: string, opts: PlayOpts = {}) {
     this.relay('play', [name, opts], () => this.playNow(name, opts));
   }
 
-  private playNow(name: string, opts: { x?: number; y?: number; vol?: number; delay?: number; force?: boolean }) {
+  private playNow(name: string, opts: PlayOpts) {
     if (!this.ctx || this.muted) return;
     // Rate-limit identical sounds a little.
     const now = this.ctx.currentTime;
@@ -485,10 +519,11 @@ export class Sound {
     if (opts.x !== undefined && opts.y !== undefined) {
       const dx = opts.x - this.lx, dy = opts.y - this.ly;
       const d = Math.hypot(dx, dy);
-      vol *= Math.max(0, 1 - d / 320);
+      const range = opts.far ? 480 : 320;
+      vol *= Math.max(0, 1 - d / range);
       if (vol <= 0.01) return;
       pan = dx / 220;
-      far = Math.min(1, d / 250);
+      far = Math.min(1, d / (range * 0.78));
     }
     if (name === 'tierup') {
       this.stinger('tierup');
@@ -508,7 +543,7 @@ export class Sound {
     const r = (a: number, b: number) => a + Math.random() * (b - a);
     switch (name) {
       case 'bark': {
-        const p = r(0.92, 1.08);
+        const p = r(0.92, 1.08) * whoPitch(opts.who);
         this.tone(o, 'sawtooth', 420 * p, 170 * p, t, 0.09, 0.35, { filter: 'lowpass', ff: 1400, q: 2 });
         this.noise(o, t, 0.05, 0.25, 'bandpass', 900, 1.5);
         this.tone(o, 'sawtooth', 380 * p, 160 * p, t + 0.11, 0.07, 0.22, { filter: 'lowpass', ff: 1200, q: 2 });
@@ -590,11 +625,16 @@ export class Sound {
         src.start(t);
         break;
       }
-      case 'thatlldo':
-        // A shepherd's two-note whistle (the music answers it).
-        this.tone(o, 'sine', 1500, 2300, t, 0.22, 0.16, { vib: 6, vibDepth: 30 });
-        this.tone(o, 'sine', 2300, 1700, t + 0.26, 0.3, 0.14, { vib: 6, vibDepth: 25 });
+      case 'thatlldo': {
+        // A shepherd's two-note whistle (the music answers it); a human
+        // whistle is never quite the same twice, and now and then it has a
+        // little lift at the end.
+        const p = r(0.94, 1.06), gap = r(0.22, 0.3);
+        this.tone(o, 'sine', 1500 * p, 2300 * p, t, 0.22, 0.16, { vib: 6, vibDepth: 30 });
+        this.tone(o, 'sine', 2300 * p, 1700 * p, t + gap, 0.3, 0.14, { vib: 6, vibDepth: 25 });
+        if (Math.random() < 0.25) this.tone(o, 'sine', 1800 * p, 2200 * p, t + gap + 0.36, 0.12, 0.1, { vib: 6, vibDepth: 20 });
         break;
+      }
       case 'coin':
         this.tone(o, 'square', 988, 988, t, 0.05, 0.06, { filter: 'lowpass', ff: 3000 });
         this.tone(o, 'square', 1319, 1319, t + 0.05, 0.08, 0.06, { filter: 'lowpass', ff: 3000 });
@@ -643,6 +683,58 @@ export class Sound {
       case 'splash':
         this.noise(o, t, 0.18, 0.18, 'lowpass', 1800, 1, 400);
         break;
+      case 'lamb': {
+        // A lamb: high, thin and quavering; two parts, "meh-eh".
+        const f = r(560, 660) * (opts.pitch ?? 1);
+        this.tone(o, 'sawtooth', f, f * 0.94, t, 0.22, 0.32, { vib: 14, vibDepth: 28, filter: 'bandpass', ff: 1700, q: 2, attack: 0.02 });
+        this.tone(o, 'sawtooth', f * 1.06, f * 0.9, t + 0.24, 0.2, 0.25, { vib: 15, vibDepth: 30, filter: 'bandpass', ff: 1700, q: 2, attack: 0.02 });
+        break;
+      }
+      case 'ewe':
+        // The ewe answering: deeper and longer than a lamb.
+        this.tone(o, 'sawtooth', r(205, 235), r(185, 205), t, 0.6, 0.3, { vib: 6, vibDepth: 10, filter: 'bandpass', ff: 850, q: 2, attack: 0.05 });
+        break;
+      case 'auction': {
+        // The auctioneer's chant: a rattle of syllables on a reciting tone,
+        // lifting every few beats, ending on a long "SOLD".
+        const base = r(210, 240);
+        const n = 30 + Math.floor(Math.random() * 10);
+        for (let i = 0; i < n; i++) {
+          const lift = i % 4 === 3 ? 1.26 : i % 8 === 1 ? 1.12 : 1;
+          const f = base * lift * (1 + (Math.random() - 0.5) * 0.04);
+          this.tone(o, 'square', f, f * 0.96, t + i * 0.085, 0.07, 0.16, { filter: 'bandpass', ff: 1300, q: 1.5, attack: 0.005 });
+        }
+        const end = t + n * 0.085 + 0.1;
+        this.tone(o, 'square', base * 1.33, base * 0.95, end, 0.5, 0.18, { filter: 'bandpass', ff: 1200, q: 1.5, attack: 0.02 });
+        this.knock(o, end + 0.55);
+        break;
+      }
+      case 'gavel':
+        this.knock(o, t);
+        break;
+      case 'ping-here': {
+        // Co-op "over here": a rising come-hither whistle, twice.
+        const p = whoPitch(opts.who);
+        this.tone(o, 'sine', 1400 * p, 2300 * p, t, 0.18, 0.2, { vib: 6, vibDepth: 25 });
+        this.tone(o, 'sine', 1900 * p, 2450 * p, t + 0.24, 0.13, 0.17, { vib: 6, vibDepth: 25 });
+        break;
+      }
+      case 'ping-hold': {
+        // Co-op "hold": the long level whistle that means stop.
+        const p = whoPitch(opts.who);
+        this.tone(o, 'sine', 2050 * p, 1950 * p, t, 0.65, 0.13, { vib: 5, vibDepth: 18, attack: 0.03 });
+        break;
+      }
+      case 'friend-join':
+      case 'friend-leave': {
+        // A friend arrives (a chime that rises) or heads home (it falls).
+        const [a, b] = name === 'friend-join' ? [784, 1175] : [1175, 784];
+        for (const [f, at] of [[a, 0], [b, 0.13]] as const) {
+          this.tone(o, 'sine', f, f, t + at, 0.9, 0.07, { attack: 0.004 });
+          this.tone(o, 'sine', f * 2.01, f * 2.01, t + at, 0.35, 0.025, { attack: 0.004 });
+        }
+        break;
+      }
       case 'baa':
         this.tone(o, 'sawtooth', r(250, 300), r(230, 260), t, 0.42, 0.12, { vib: 7, vibDepth: 14, filter: 'bandpass', ff: 1000, q: 2, attack: 0.04 });
         break;
@@ -694,12 +786,14 @@ export class Sound {
       this.lastSel = -1;
       this.gates = new WeakMap();
       this.scanT = 0;
+      this.roster = null;
     }
     if (this.muted) return;
     if (this.musicLevel > 0) this.music.update(this.musicState(g), dt);
     this.menuSounds(g);
     this.watchTrial(g);
     this.watchOrders(g);
+    this.friends(g);
     if (this.soundLevel === 0) return;
     if (g.mode === 'play') this.dogSteps(g, dt);
     if ((this.scanT -= dt) <= 0) {
@@ -708,6 +802,60 @@ export class Sound {
       this.gateCreaks(g);
     }
     this.ambience.update(this.amb, dt);
+    this.lambCalls(g, dt);
+    // The auctioneer at the fair, in bursts, when you are near enough.
+    if (this.amb.fair > 0.15 && this.fairAt && (this.auctT -= dt) <= 0) {
+      this.auctT = 9 + Math.random() * 10;
+      this.play('auction', { ...this.fairAt, force: true });
+    }
+  }
+
+  // Co-op: a chime when a friend arrives or heads home. Both host and guest
+  // see the roster (the host's players list, the guest's players map).
+  private friends(g: Game) {
+    const p = g.net?.players;
+    const now = new Set<number>(p instanceof Map ? [...p.keys()] : Array.isArray(p) ? p.map((x) => x.slot) : []);
+    const before = this.roster;
+    this.roster = now;
+    if (!before) return;
+    if ([...now].some((s) => !before.has(s))) this.play('friend-join', { force: true });
+    else if ([...before].some((s) => !now.has(s))) this.play('friend-leave', { force: true });
+  }
+
+  // Lambs (on the gameplay side: an animal with `lamb` and its `mother`).
+  // Cut off from its mother a lamb calls, and she answers from wherever she
+  // is: both carry further than other calls, so you can hear where the
+  // lost one is. The longer apart, the more often and the higher it calls.
+  private lambCalls(g: Game, dt: number) {
+    let calling = 0;
+    for (const an of g.animals as LambLike[]) {
+      if (!an.lamb || an.gone || an.carried) continue;
+      const m = an.mother && !an.mother.gone ? an.mother : null;
+      const sep = !m || Math.hypot(m.x - an.x, m.y - an.y) > 60 || m.pen !== an.pen;
+      const apart = sep ? (this.lambApart.get(an) ?? 0) + dt : 0;
+      const was = (this.lambApart.get(an) ?? 0) > 1.5;
+      this.lambApart.set(an, apart);
+      let t = (this.lambT.get(an) ?? Math.random() * 3) - dt;
+      if (apart > 1.5) {
+        if (t <= 0 && calling < 3) {
+          calling++;
+          const urgency = Math.min(1, apart / 30);
+          t = (3.8 - 2 * urgency) * (0.8 + 0.4 * Math.random());
+          this.play('lamb', { x: an.x, y: an.y, far: true, pitch: 1 + 0.1 * urgency, force: true });
+          if (m) this.play('ewe', { x: m.x, y: m.y, delay: 0.5 + Math.random() * 0.3, far: true, force: true });
+        }
+      } else if (was && !sep) {
+        // Together again: a soft word from each.
+        this.play('lamb', { x: an.x, y: an.y, vol: 0.5, force: true });
+        if (m) this.play('ewe', { x: m.x, y: m.y, vol: 0.4, delay: 0.3, force: true });
+        t = 4 + Math.random() * 6;
+      } else if (t <= 0) {
+        // Content lambs bleat now and then.
+        t = 6 + Math.random() * 10;
+        if (Math.random() < 0.5) this.play('lamb', { x: an.x, y: an.y, vol: 0.45 });
+      }
+      this.lambT.set(an, t);
+    }
   }
 
   private musicState(g: Game): MusicState {
@@ -758,6 +906,7 @@ export class Sound {
       rest: mode === 'summary' || mode === 'build' || mode === 'ledger' || !!tr.result,
       muffle: mode === 'pause',
       rain: w.rain, fog: w.fog, wind: w.wind,
+      bloom: g.season.bloom, leaves: g.season.leaves, snow: g.season.snow,
     };
   }
 
@@ -774,6 +923,7 @@ export class Sound {
     const r = Math.random();
     const pan = (d.x - this.lx) / 220;
     if (d.inWater) this.sample('splash', 0.12 + 0.06 * r, pan, 1.1 + 0.3 * r);
+    else if (this.amb.snow > 0.5) this.sample('step-snow', (d.sprinting ? 0.3 : 0.2) + 0.07 * r, pan, 1.15 + 0.2 * r);
     else if (d.sprinting) this.sample('step-dog-run', 0.2 + 0.08 * r, pan, 0.9 + 0.2 * r);
     else this.sample('step-dog', 0.1 + 0.05 * r, pan, 0.9 + 0.25 * r);
   }
@@ -791,9 +941,31 @@ export class Sound {
     a.rain = Math.max(this.rain, w.rain);
     a.storm = w.sky === 'storm' ? w.rain : 0;
     a.speed = 1 + Math.min(2, Math.max(0, g.rest - 1) / 5.5);
+    // The season, and first light for the dawn chorus.
+    const se = g.season;
+    a.bloom = se.bloom;
+    a.leaves = se.leaves;
+    a.snow = se.snow;
+    a.dawn = g.day.phase === 'day' ? Math.max(0, 1 - g.day.frac / 0.12) : 0;
+    // The fair (on the gameplay side): its crowd, heard from the Show Ground.
+    const fair = (g as unknown as { fair?: FairLike }).fair;
+    if (fair?.on) {
+      const show = REGIONS.find((r) => r.id === 'show');
+      const fx = fair.x ?? (show ? show.cx * TS : 0), fy = fair.y ?? (show ? show.cy * TS : 0);
+      a.fair = Math.max(0, 1 - Math.hypot(fx - lx, fy - ly) / 420);
+      a.fairPan = Math.max(-1, Math.min(1, (fx - lx) / 220));
+      this.fairAt = { x: fx, y: fy };
+      if (fair.sold !== undefined && fair.sold > this.fairSold && a.fair > 0.1) {
+        this.play('gavel', { x: fx, y: fy, force: true });
+        this.applause(0.3, false);
+      }
+      this.fairSold = fair.sold ?? 0;
+    } else a.fair = 0;
     this.fog = w.fog;
     const now = this.ctx!.currentTime;
-    this.ambLp.frequency.setTargetAtTime(18000 * Math.pow(0.1, this.fog), now, 0.5);
+    // Fog closes the world down; snow hushes it (the howl of the wind is
+    // low enough to stay).
+    this.ambLp.frequency.setTargetAtTime(18000 * Math.pow(0.1, this.fog) * Math.pow(0.35, a.snow), now, 0.5);
     if (this.fog > 0.05 && !this.ambSend) {
       this.ambSend = this.ctx!.createGain();
       this.ambIn.connect(this.ambSend).connect(this.fogVerb());

@@ -74,6 +74,25 @@ export class Bank {
     this.add('cheer', (c) => cheer(c, r));
     this.add('cart', (c) => cart(c, r));
     this.add('crack', (c) => crack(c, r));
+    // Round three: the seasons, and the fair.
+    this.add('bird4', (c) => warble(c, r));
+    this.add('bird5', (c) => warble(c, r));
+    this.add('bird6', (c) => wren(c, r));
+    this.add('cuckoo', (c) => cuckoo(c));
+    this.add('robin', (c) => robin(c, r));
+    this.add('rook', (c) => rook(c, r));
+    this.add('step-snow', (c) => crunch(c, r));
+    this.add('ice', (c) => icePing(c, r));
+    this.add('icecreak', (c) => iceCreak(c, r));
+    this.add('wolves', (c) => wolves(c, r));
+    this.add('buzz', (c) => buzz(c, 5, r));
+    this.add('leaves', (c) => leaves(c, 4, r));
+    this.add('crowd~', (c) => crowd(c.createBuffer(1, Math.floor(5 * c.sampleRate), c.sampleRate), 6, false, r));
+    this.add('crowd', () => {
+      const b = this.bufs.get('crowd~')!;
+      this.bufs.delete('crowd~');
+      return crowd(b, 6, true, r);
+    });
     // Thunder is long: one channel per job, sharing the same swells.
     const swells = thunderSwells(r);
     this.add('thunder~', (c) => thunder(c.createBuffer(2, Math.floor(7 * c.sampleRate), c.sampleRate), 0, swells, r));
@@ -670,4 +689,251 @@ function thunder(b: AudioBuffer, c: number, swells: [number, number, number][], 
   fadeEdges(d, sr, 0.01, 0.8);
   normalize(d, 0.85);
   return b;
+}
+
+// ---- Round three: the seasons and the fair ----
+
+// A songbird's phrase: half a dozen quick slides, never the same twice.
+function warble(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 1.3);
+  let t = 0.02;
+  const base = 1900 + r() * 900;
+  for (let i = 0, n = 5 + Math.floor(r() * 4); i < n; i++) {
+    const f0 = base * Math.pow(2, (r() - 0.4) * 0.9), f1 = f0 * Math.pow(2, (r() - 0.5) * 0.6);
+    const d = 0.05 + r() * 0.1;
+    sweep(out, sr, t, d, f0, f1, 0.5 + 0.5 * r(), r() < 0.3 ? 40 : 0, 28);
+    t += d + 0.015 + r() * 0.05;
+  }
+  normalize(out, 0.7);
+  return buf;
+}
+
+// A wren: a fast, loud trill that tumbles down.
+function wren(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 1.1);
+  const top = 4400 + r() * 500;
+  for (let i = 0; i < 20; i++) {
+    const f = top * (1 - i * 0.012) * (i % 2 ? 1.08 : 1);
+    sweep(out, sr, i * 0.038, 0.03, f, f * 0.93, 0.6 + 0.4 * Math.sin((Math.PI * i) / 20));
+  }
+  normalize(out, 0.6);
+  return buf;
+}
+
+// The cuckoo: two soft hollow notes a third apart.
+function cuckoo(ctx: BaseAudioContext) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 0.8);
+  const note = (at: number, dur: number, f0: number, f1: number) => {
+    const s0 = Math.floor(at * sr), len = Math.floor(dur * sr);
+    let ph = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      ph += (2 * Math.PI * (f0 + (f1 - f0) * t)) / sr;
+      const env = Math.min(1, t * 12) * Math.pow(1 - t, 0.7);
+      out[s0 + i] += (Math.sin(ph) + 0.18 * Math.sin(2 * ph)) * env;
+    }
+  };
+  note(0.02, 0.2, 760, 720);
+  note(0.3, 0.36, 620, 590);
+  normalize(out, 0.7);
+  return buf;
+}
+
+// A robin in winter: thin, high, wistful phrases with gaps.
+function robin(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 1.8);
+  let t = 0.02;
+  for (let i = 0; i < 6; i++) {
+    const f0 = 3600 + r() * 2200, f1 = f0 * (0.75 + r() * 0.5);
+    const d = 0.08 + r() * 0.12;
+    sweep(out, sr, t, d, f0, f1, 0.5 + 0.4 * r(), 60, 35);
+    t += d + 0.08 + r() * 0.12;
+  }
+  normalize(out, 0.55);
+  return buf;
+}
+
+// Rooks: a harsh "kraa", twice.
+function rook(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 0.75);
+  for (const [at, f] of [[0.01, 420 + r() * 60], [0.38, 380 + r() * 60]]) {
+    const s0 = Math.floor(at * sr), len = Math.floor(0.24 * sr);
+    let ph = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      ph += (f * (1 - 0.18 * t) * (1 + (r() - 0.5) * 0.08)) / sr;
+      const saw = 2 * (ph - Math.floor(ph)) - 1;
+      out[s0 + i] += saw * Math.min(1, t * 10) * (1 - t);
+    }
+  }
+  const a = Float32Array.from(out), b = Float32Array.from(out);
+  filt(a, bq('bp', 1150, 3, sr));
+  filt(b, bq('bp', 2350, 4, sr));
+  for (let i = 0; i < out.length; i++) out[i] = a[i] + b[i] * 0.7;
+  normalize(out, 0.7);
+  return buf;
+}
+
+// Footsteps in snow: a squeaky crunch of tiny grains.
+function crunch(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 0.16);
+  for (let k = 0; k < 45; k++) {
+    const at = Math.floor((0.005 + r() * r() * 0.11) * sr);
+    const len = Math.floor((0.0008 + r() * 0.002) * sr), a = 0.4 + 0.6 * r();
+    for (let i = 0; i < len && at + i < out.length; i++) out[at + i] += (r() * 2 - 1) * a;
+  }
+  filt(out, bq('hp', 1200, 0.7, sr));
+  filt(out, bq('lp', 6500, 0.7, sr));
+  for (let i = 0; i < Math.floor(0.03 * sr); i++) out[i] += Math.sin((2 * Math.PI * 95 * i) / sr) * 0.35 * Math.exp(-i / sr / 0.01);
+  fadeEdges(out, sr, 0.001, 0.04);
+  normalize(out, 0.75);
+  return buf;
+}
+
+// Ice on the river: the long dispersive "pew" of a sheet settling.
+function icePing(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 0.7);
+  const f0 = 3500 + r() * 1500;
+  let ph = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const f = 220 + (f0 - 220) * Math.exp(-t / 0.07);
+    ph += (2 * Math.PI * f) / sr;
+    out[i] = Math.sin(ph) * Math.exp(-t / 0.18);
+  }
+  fadeEdges(out, sr, 0.001, 0.1);
+  normalize(out, 0.6);
+  return buf;
+}
+
+// ...and its groan: a low creak with a crackle in it.
+function iceCreak(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 1);
+  let ph = 0, crack = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / out.length;
+    ph += (2 * Math.PI * (150 - 70 * t)) / sr;
+    if (r() < 0.004) crack = 1;
+    crack *= 0.995;
+    out[i] = (Math.sin(ph) * (0.6 + 0.4 * crack) + (r() * 2 - 1) * 0.25 * crack) * Math.sin(Math.PI * t);
+  }
+  filt(out, bq('lp', 1800, 0.7, sr));
+  normalize(out, 0.6);
+  return buf;
+}
+
+// Wolves far off on a winter night: two voices, the second joining higher.
+function wolves(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 5);
+  const howl = (at: number, dur: number, lo: number, hi: number, a: number) => {
+    const s0 = Math.floor(at * sr), len = Math.floor(dur * sr);
+    let ph = 0, vib = 0;
+    for (let i = 0; i < len && s0 + i < out.length; i++) {
+      const t = i / len;
+      if ((i & 31) === 0) vib = 7 * Math.sin((2 * Math.PI * 5 * i) / sr);
+      const f = t < 0.2 ? lo + (hi - lo) * (t / 0.2) : t > 0.8 ? hi - (hi - lo) * 0.35 * ((t - 0.8) / 0.2) : hi;
+      ph += (2 * Math.PI * (f + vib)) / sr;
+      const s1 = Math.sin(ph), c1 = Math.cos(ph);
+      const env = Math.min(1, t * 5) * Math.min(1, (1 - t) * 4) * a;
+      out[s0 + i] += (s1 + 0.5 * s1 * c1 + 0.08 * s1 * (3 - 4 * s1 * s1)) * env;
+    }
+  };
+  howl(0, 3, 300, 520 + r() * 40, 1);
+  howl(1 + r() * 0.4, 3.2, 380, 700 + r() * 60, 0.7);
+  filt(out, bq('lp', 1300, 0.7, sr));
+  fadeEdges(out, sr, 0.01, 0.4);
+  normalize(out, 0.65);
+  return buf;
+}
+
+// Summer insects: bees drifting past, and grasshoppers' dry trills.
+function buzz(ctx: BaseAudioContext, secs: number, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, secs);
+  const n = out.length;
+  for (let k = 0; k < 4; k++) {
+    const start = Math.floor(r() * n), len = Math.floor((1.4 + r() * 1.6) * sr);
+    const f = 190 + r() * 60, a = 0.4 + 0.4 * r();
+    let ph = 0, wob = 1, env = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      if ((i & 63) === 0) {
+        wob = 1 + 0.04 * Math.sin(2 * Math.PI * 3 * (i / sr)) + 0.06 * (t - 0.5);
+        env = Math.sin(Math.PI * t) ** 2;
+      }
+      ph += (f * wob) / sr;
+      out[(start + i) % n] += (2 * (ph - Math.floor(ph)) - 1) * a * env;
+    }
+  }
+  filtLoop(out, bq('bp', 900, 0.8, sr));
+  for (let k = 0; k < 5; k++) {
+    const start = Math.floor(r() * n), len = Math.floor((0.5 + r() * 0.9) * sr);
+    const rate = 30 + r() * 12, f = 5200 + r() * 1200, a = 0.25 + 0.2 * r();
+    const w = (2 * Math.PI * f) / sr, k2 = 2 * Math.cos(w);
+    let y1 = Math.sin(-w), y2 = Math.sin(-2 * w);
+    for (let i = 0; i < len; i++) {
+      const y = k2 * y1 - y2;
+      y2 = y1;
+      y1 = y;
+      if (((i / sr) * rate) % 1 < 0.45) out[(start + i) % n] += y * a * Math.sin((Math.PI * i) / len);
+    }
+  }
+  normalize(out, 0.6);
+  return buf;
+}
+
+// Dry leaves rattling in the wind: clusters of tiny crackles.
+function leaves(ctx: BaseAudioContext, secs: number, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, secs);
+  const n = out.length;
+  for (let k = 0; k < secs * 9; k++) {
+    const at = Math.floor(r() * n), spread = (0.05 + r() * 0.25) * sr, a = 0.3 + 0.7 * r();
+    for (let c = 0; c < 6 + r() * 14; c++) {
+      const s0 = at + Math.floor(r() * spread), len = Math.floor((0.0006 + r() * 0.002) * sr);
+      for (let i = 0; i < len; i++) out[(s0 + i) % n] += (r() * 2 - 1) * a;
+    }
+  }
+  filtLoop(out, bq('hp', 2000, 0.7, sr));
+  normalize(out, 0.6);
+  return buf;
+}
+
+// The fair: a crowd talking, a dozen voices in snatches of syllables.
+// Built in two halves (`voices` each); the second finishes it.
+function crowd(buf: AudioBuffer, voices: number, last: boolean, r: Rand) {
+  const sr = buf.sampleRate, out = buf.getChannelData(0), n = out.length, secs = n / sr;
+  const T = 512, vowels = [[1, 0.9, 0.5, 0.2, 0.1], [1, 0.3, 0.6, 0.4, 0.15], [1, 0.6, 0.2, 0.3, 0.2]].map((amps) => {
+    const tab = new Float32Array(T);
+    for (let i = 0; i < T; i++) amps.forEach((a, h) => (tab[i] += (a * Math.sin((2 * Math.PI * (h + 1) * i) / T)) / 2.5));
+    return tab;
+  });
+  for (let v = 0; v < voices; v++) {
+    const f0 = (r() < 0.5 ? 120 : 210) * (0.85 + 0.3 * r());
+    let at = Math.floor(r() * n);
+    for (let s = 0; s < secs * 2.2; s++) {
+      const len = Math.floor((0.07 + r() * 0.15) * sr), tab = vowels[Math.floor(r() * 3)];
+      const f = f0 * (0.9 + 0.25 * r()), a = 0.3 + 0.7 * r();
+      let ph = r() * T;
+      for (let i = 0; i < len; i++) {
+        ph += (T * f) / sr;
+        out[(at + i) % n] += tab[Math.floor(ph) & (T - 1)] * a * Math.sin((Math.PI * i) / len);
+      }
+      at += len + Math.floor((r() < 0.25 ? 0.4 + r() * 0.8 : 0.02 + r() * 0.06) * sr);
+    }
+  }
+  if (last) {
+    filtLoop(out, bq('lp', 2600, 0.7, sr));
+    normalize(out, 0.6);
+  }
+  return buf;
 }

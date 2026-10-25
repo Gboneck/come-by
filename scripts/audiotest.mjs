@@ -19,11 +19,11 @@ const opt = (k, d) => {
 const flag = (k) => args.includes(`--${k}`);
 const SECS = Number(opt('secs', '24'));
 const SEED = Number(opt('seed', '1'));
-const ALL = ['bank', 'tuning', 'sfx', 'live', 'live2', 'sky', 'drive', 'balance', 'title', 'ranch', 'meadow', 'hills', 'rocky', 'ford', 'high', 'dusk', 'night', 'panic', 'prowl', 'stingers', 'ambience', 'mix', 'trial', 'lullaby', 'orders', 'weather'];
+const ALL = ['bank', 'tuning', 'sfx', 'hour', 'hourlevels', 'live', 'live2', 'live3', 'sky', 'drive', 'balance', 'title', 'ranch', 'meadow', 'hills', 'rocky', 'ford', 'high', 'dusk', 'night', 'panic', 'prowl', 'stingers', 'ambience', 'mix', 'trial', 'lullaby', 'orders', 'weather', 'spring', 'summer', 'autumn', 'winter', 'lambs', 'fair', 'coop'];
 const only = args.filter((a) => !a.startsWith('--'));
 const cases = only.length ? only : ALL;
 
-const PORT = 5197;
+const PORT = Number(process.env.AUDIO_PORT || 5197); // AUDIO_PORT when other checkouts run tests too
 const server = await createServer({ server: { port: PORT, strictPort: true }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch();
@@ -36,6 +36,7 @@ await page.goto(`http://localhost:${PORT}/?sprites=999`);
 const MODES = {
   title: [7, 'ion'], ranch: [7, 'ion'], meadow: [2, 'ion'], hills: [4, 'dor'], rocky: [9, 'dor'],
   ford: [0, 'ion'], high: [2, 'mix'], dusk: [9, 'aeo'], night: [2, 'aeo'], trial: [9, 'mix'], lullaby: [7, 'ion'],
+  spring: [2, 'ion'], summer: [4, 'dor'], autumn: [7, 'ion'], winter: [2, 'aeo'],
 };
 const SCALES = { ion: [0, 2, 4, 5, 7, 9, 11], dor: [0, 2, 3, 5, 7, 9, 10], mix: [0, 2, 4, 5, 7, 9, 10], aeo: [0, 2, 3, 5, 7, 8, 10] };
 const NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -129,6 +130,148 @@ for (const name of cases) {
     await lp.close();
     continue;
   }
+  if (name === 'hour') {
+    // An hour of play, scheduled but not rendered (a fake clock): about ten
+    // days of regions, dusk, night and the summary, the seasons turning,
+    // energy wandering and the odd panic. Then: how much repeats?
+    const h = await page.evaluate(async (SEED) => {
+      localStorage.clear();
+      const { Sound } = await import('/src/systems/audio.ts');
+      const { mulberry32 } = await import('/src/rng.ts');
+      const ctx = new OfflineAudioContext(1, 128, 8000);
+      let now = 0;
+      Object.defineProperty(ctx, 'currentTime', { get: () => now });
+      const rnd = mulberry32(SEED);
+      const s = new Sound({ listen: false });
+      s.attach(ctx, rnd);
+      s.bank.generateAll();
+      const log = (s.music.log = []);
+      const DAY = [['ranch', 40], ['meadow', 70], ['ranch', 40], ['hills', 70], ['ranch', 20], ['dusk', 60], ['night', 55], ['ranch', 15]];
+      const len = DAY.reduce((a, [, d]) => a + d, 0);
+      const SEASONS = [{ bloom: 1 }, {}, { leaves: 1 }, { snow: 1 }];
+      let energy = 0.4, tension = 0;
+      const stingers = [];
+      for (let t = 0; t < 3600; t += 0.1) {
+        now = t;
+        const day = Math.floor(t / len), dt0 = t % len;
+        let piece = 'ranch', acc = 0, rest = false;
+        for (const [p, d] of DAY) { if (dt0 < acc + d) { piece = p; rest = acc + d === len; break; } acc += d; }
+        energy = Math.max(0.05, Math.min(1, energy + (rnd() - 0.5) * 0.05));
+        tension = rnd() < 0.0008 ? 0.9 : Math.max(0, tension - 0.004);
+        const season = SEASONS[Math.floor(day / 2.5) % 4];
+        s.music.update({ piece, energy, tension, rest, muffle: false, ...season }, 0.1);
+        // A pen shut every couple of minutes, the summary each evening.
+        if (Math.floor(t * 10) % 1300 === 650) stingers.push(['calm', t, s.music.stingerLog?.length]), s.music.stinger('calm', t + 0.1);
+        if (Math.floor(t * 10) % Math.floor(len * 10) === Math.floor((len - 14) * 10)) s.music.stinger('summary', t + 0.1);
+      }
+      return { log: log.filter((n) => n.inst !== 'chord' || true).map((n) => [n.t, n.inst, n.midi, n.info ?? '']), stingers: stingers.length };
+    }, SEED);
+    // ---- analysis ----
+    const secs = h.log.filter((n) => n[1] === 'section');
+    const byLead = {};
+    for (const s of secs) { const m = /lead=(\w+)/.exec(s[3]); byLead[m[1]] = (byLead[m[1]] ?? 0) + 1; }
+    // Each section's tune as intervals: does any tune come back?
+    const tunes = [];
+    let cur = null;
+    for (const n of h.log) {
+      if (n[1] === 'section') { if (cur) tunes.push(cur); cur = { t: n[0], info: n[3], notes: [] }; }
+      else if (cur && ['whistle', 'fiddle', 'harp-mel', 'bell-mel'].includes(n[1])) cur.notes.push(n[2]);
+    }
+    if (cur) tunes.push(cur);
+    const withTune = tunes.filter((t) => t.notes.length >= 8);
+    const sig = (t) => t.notes.slice(0, 8).map((m, i, a) => (i ? m - a[i - 1] : 0)).join(',');
+    const counts = new Map();
+    for (const t of withTune) counts.set(sig(t), (counts.get(sig(t)) ?? 0) + 1);
+    const repeats = [...counts.values()].filter((c) => c > 1).reduce((a, c) => a + c, 0);
+    // Six-note melodic shapes (intervals), and in how many sections each turns up.
+    const grams = new Map();
+    withTune.forEach((t, k) => {
+      const iv = t.notes.map((m, i, a) => (i ? m - a[i - 1] : null)).slice(1);
+      const seen = new Set();
+      for (let i = 0; i + 5 <= iv.length; i++) seen.add(iv.slice(i, i + 5).join(','));
+      for (const g of seen) grams.set(g, (grams.get(g) ?? 0) + 1);
+    });
+    const top = [...grams.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    // Chord progressions back to back.
+    const prog = [];
+    let chords = [];
+    for (const n of h.log) {
+      if (n[1] === 'section') { if (chords.length) prog.push(chords.join(' ')); chords = []; }
+      else if (n[1] === 'chord') chords.push(n[2]);
+    }
+    let backToBack = 0;
+    for (let i = 1; i < prog.length; i++) if (prog[i] === prog[i - 1]) backToBack++;
+    // Time with a tune playing, and the longest stretch without a breath.
+    const leadTime = secs.filter((s) => !s[3].includes('lead=null')).length;
+    let run = 0, longest = 0;
+    for (const s of secs) { run = s[3].includes('lead=null') ? 0 : run + 1; longest = Math.max(longest, run); }
+    const theme = withTune.filter((t) => t.notes.slice(0, 4).join() === '74,79,81,83' || t.notes.slice(0, 4).join() === '62,67,69,71').length;
+    console.log(`\n== hour (scheduled, not rendered)`);
+    console.log(`  ${secs.length} sections; tunes on: ${Object.entries(byLead).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+    console.log(`  ${withTune.length} tunes; ${counts.size} different openings; ${repeats} sections reuse an opening heard before (the main theme ${theme}x)`);
+    console.log(`  commonest 6-note shapes turn up in ${top.map(([g, c]) => `${c} sections (${g})`).join(', ')}`);
+    console.log(`  same chords twice running: ${backToBack} of ${prog.length - 1}; sections with a tune ${leadTime}/${secs.length}; longest run of sections with a tune: ${longest}`);
+    const rests = secs.filter((s) => s[3].includes('silent=true')).map((s) => s[0]);
+    console.log(`  rests (the music stops for a section): ${rests.length}, at ${rests.map((t) => (t / 60).toFixed(1)).join(', ')} min`);
+    const stv = h.log.filter((n) => n[1] === 'sting-whistle');
+    console.log(`  stinger whistle notes: ${stv.length}`);
+    continue;
+  }
+  if (name === 'hourlevels') {
+    // The same hour, rendered (at 8 kHz, so it is quick): music and the
+    // soundscape together, loudness and peak minute by minute.
+    const h = await page.evaluate(async (SEED) => {
+      localStorage.clear();
+      const { Sound } = await import('/src/systems/audio.ts');
+      const { mulberry32 } = await import('/src/rng.ts');
+      const sr = 8000, secs = 3600;
+      const ctx = new OfflineAudioContext(1, sr * secs, sr);
+      const rnd = mulberry32(SEED);
+      const s = new Sound({ listen: false });
+      s.attach(ctx, rnd);
+      s.bank.generateAll();
+      const DAY = [['ranch', 40], ['meadow', 70], ['ranch', 40], ['hills', 70], ['ranch', 20], ['dusk', 60], ['night', 55], ['ranch', 15]];
+      const len = DAY.reduce((a, [, d]) => a + d, 0);
+      const SEASONS = [{ bloom: 1 }, {}, { leaves: 1 }, { snow: 1 }];
+      let energy = 0.4, tension = 0;
+      const step = 0.25;
+      const tick = (t) => {
+        const day = Math.floor(t / len), dt0 = t % len;
+        let piece = 'ranch', acc = 0, rest = false;
+        for (const [p, d] of DAY) { if (dt0 < acc + d) { piece = p; rest = acc + d === len; break; } acc += d; }
+        energy = Math.max(0.05, Math.min(1, energy + (rnd() - 0.5) * 0.08));
+        tension = rnd() < 0.003 ? 0.9 : Math.max(0, tension - 0.015);
+        const season = SEASONS[Math.floor(day / 2.5) % 4];
+        const phase = piece === 'night' ? 'night' : piece === 'dusk' ? 'dusk' : 'day';
+        s.music.update({ piece, energy, tension, rest, muffle: false, ...season }, step);
+        s.ambience.update({ region: piece === 'dusk' || piece === 'night' ? 'ranch' : piece, phase, wind: 0.4, river: 0, riverPan: 0, ford: 0, herd: [{ sp: 'sheep', rate: 3 * energy, pan: 0, vol: 0.7, water: 0 }],
+          murmur: 4, murmurStress: tension * 0.5, murmurPan: 0, murmurSp: 'sheep', munch: 1 - energy, rain: 0, storm: 0, speed: 1,
+          bloom: 0, leaves: 0, snow: 0, ...season, dawn: piece === 'ranch' && dt0 < 30 ? 1 : 0, fair: 0, fairPan: 0 }, step);
+        if (Math.floor(t / step) % 520 === 260) s.stinger('calm');
+        if (rnd() < 0.004) s.play('bark');
+      };
+      tick(0);
+      for (let t = step; t < secs - step; t += step) {
+        const tt = Math.round(t * 100) / 100;
+        ctx.suspend(tt).then(() => { tick(tt); ctx.resume(); });
+      }
+      const r0 = performance.now();
+      const b = await ctx.startRendering();
+      const d = b.getChannelData(0);
+      const mins = [];
+      for (let m = 0; m < 60; m++) {
+        let e = 0, pk = 0;
+        for (let i = m * 60 * sr; i < (m + 1) * 60 * sr; i++) { e += d[i] * d[i]; pk = Math.max(pk, Math.abs(d[i])); }
+        mins.push([Math.sqrt(e / (60 * sr)), pk]);
+      }
+      return { mins, ms: performance.now() - r0 };
+    }, SEED);
+    const rms = h.mins.map(([r]) => r), pks = h.mins.map(([, p]) => p);
+    console.log(`\n== hourlevels (rendered at 8 kHz in ${(h.ms / 1000).toFixed(0)} s)`);
+    console.log(`  per-minute loudness ${db(Math.min(...rms))}..${db(Math.max(...rms))} dBFS, peaks up to ${db(Math.max(...pks))} dBFS; first 10 min ${db(rms.slice(0, 10).reduce((a, v) => a + v, 0) / 10)}, last 10 min ${db(rms.slice(50).reduce((a, v) => a + v, 0) / 10)}`);
+    console.log('  minutes: ' + rms.map((v) => db(v).replace('.0', '')).join(' '));
+    continue;
+  }
   if (name === 'sky') {
     // How the sky shades the ranch tune: phrases that open on a minor
     // chord, and the tempo, over a few minutes of each.
@@ -160,6 +303,34 @@ for (const name of cases) {
       }, sky);
       console.log(`  ${label.padEnd(6)} ${r.n} sections, ${r.minor} open on a minor chord, ${r.leads} with a tune`);
     }
+    continue;
+  }
+  if (name === 'live3') {
+    // The seasons in the real game: what the music and the soundscape do.
+    const lp = await browser.newPage();
+    lp.on('pageerror', (e) => errors.push(e.message));
+    lp.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
+    await lp.goto(`http://localhost:${PORT}/?debug`);
+    await lp.waitForFunction(() => window.game);
+    await lp.keyboard.press('KeyD');
+    await lp.evaluate(() => {
+      const a = window.game.audio;
+      window.__heard = {};
+      const f = a.sample.bind(a);
+      a.sample = (n, ...rest) => { window.__heard[n] = (window.__heard[n] ?? 0) + 1; return f(n, ...rest); };
+    });
+    console.log('\n== live3 (seasons in the game)');
+    for (const se of ['spring', 'summer', 'autumn', 'winter']) {
+      await lp.evaluate((se) => { const g = window.game; g.season.force(se); window.__heard = {}; g.day.t = 10; g.dog.x = 1180; g.dog.y = 860; }, se);
+      await lp.waitForTimeout(6000);
+      const r = await lp.evaluate(() => {
+        const a = window.game.audio, m = a.music;
+        const heard = Object.entries(window.__heard).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => `${k} ${v}`).join(', ');
+        return `music sees bloom ${m.sky.bloom.toFixed(2)} leaves ${m.sky.leaves.toFixed(2)} snow ${m.sky.snow.toFixed(2)}; heard ${heard}`;
+      });
+      console.log(`  ${se.padEnd(7)} ${r}`);
+    }
+    await lp.close();
     continue;
   }
   if (name === 'live2') {
@@ -277,7 +448,7 @@ for (const name of cases) {
   }
   if (name === 'sfx') {
     // Each sound effect alone, 3 s apart: peak and loudness, next to a bark.
-    const SFX = ['bark', 'coin', 'gate', 'thatlldo', 'judge', 'judge2', 'cart', 'creak', 'applause:0.15', 'applause:0.5', 'applause:0.95', 'crack', 'thunder:near', 'thunder:far', 'sold', 'missed', 'gate:1', 'sour', 'hammer', 'chop', 'voice', 'footstep'];
+    const SFX = ['bark', 'coin', 'gate', 'thatlldo', 'judge', 'judge2', 'cart', 'creak', 'applause:0.15', 'applause:0.5', 'applause:0.95', 'crack', 'thunder:near', 'thunder:far', 'sold', 'missed', 'gate:1', 'sour', 'hammer', 'chop', 'voice', 'footstep', 'baa', 'lamb', 'ewe', 'auction', 'gavel', 'ping-here', 'ping-hold', 'friend-join', 'friend-leave', 'smp:rook:0.07', 'smp:cuckoo:0.08', 'smp:robin:0.08', 'smp:wolves:0.07', 'smp:ice:0.07', 'smp:step-snow:0.15'];
     const rows = await page.evaluate(async (SFX) => {
       localStorage.clear();
       const { Sound } = await import('/src/systems/audio.ts');
@@ -289,7 +460,8 @@ for (const name of cases) {
       SFX.forEach((name, i) => {
         ctx.suspend(i * gap + 0.05).then(() => {
           const [n, arg] = name.split(':');
-          if (n === 'applause') s.applause(Number(arg), Number(arg) > 0.9);
+          if (n === 'smp') s.sample(arg, Number(name.split(':')[2]), 0);
+          else if (n === 'applause') s.applause(Number(arg), Number(arg) > 0.9);
           else if (n === 'thunder') s.sample('thunder', arg === 'near' ? 0.32 : 0.12, 0, 1, undefined, arg === 'near' ? 3450 : 300);
           else if (n === 'gate' && arg) s.stinger('gate', { amt: Number(arg) });
           else if (['sold', 'missed', 'sour'].includes(n)) s.stinger(n);
@@ -316,7 +488,7 @@ for (const name of cases) {
       });
     }, SFX);
     console.log('\n== sfx (alone, at the default volumes: peak / loudest half-second rms, dBFS)');
-    for (const [n, pk, rms] of rows) console.log(`  ${n.padEnd(14)} ${db(pk).padStart(6)}  ${db(rms).padStart(6)}`);
+    for (const [n, pk, rms] of rows) console.log(`  ${n.padEnd(18)} ${db(pk).padStart(6)}  ${db(rms).padStart(6)}`);
     continue;
   }
   if (name === 'balance') {
@@ -406,8 +578,12 @@ for (const name of cases) {
     const log = [];
     s.music.log = log;
     const base = { piece: 'ranch', energy: 0.5, tension: 0, rest: false, muffle: false };
-    const amb = { region: 'ranch', phase: 'day', river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, wind: 0.3, storm: 0, speed: 1 };
+    const amb = { region: 'ranch', phase: 'day', river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, wind: 0.3, storm: 0, speed: 1, bloom: 0, leaves: 0, snow: 0, dawn: 0, fair: 0, fairPan: 0 };
     let strikes = 0;
+    const heard = {};
+    const sample = s.sample.bind(s), play = s.play.bind(s);
+    s.sample = (n, ...rest) => { heard[n] = (heard[n] ?? 0) + 1; return sample(n, ...rest); };
+    s.play = (n, ...rest) => { heard[n] = (heard[n] ?? 0) + 1; return play(n, ...rest); };
     let musicOn = true, ambOn = false;
     let state = () => base;
     let ambState = () => amb;
@@ -473,6 +649,44 @@ for (const name of cases) {
         for (const t of [4, 12, 20]) events.push([t, (s) => { s.fog = sky(t).fog; s.lx = 0; s.play('bark', { x: 150, y: 0 }); }]);
         break;
       }
+      case 'spring': case 'summer': case 'autumn': case 'winter': {
+        // A season: its soundscape (dawn for spring, a winter night by the
+        // river) under a region's music shaded for the season.
+        ambOn = true;
+        const look = { spring: { bloom: 1 }, summer: {}, autumn: { leaves: 1 }, winter: { snow: 1 } }[name];
+        const piece = { spring: 'meadow', summer: 'hills', autumn: 'ranch', winter: 'night' }[name];
+        state = () => ({ ...base, piece, energy: 0.6, ...look });
+        ambState = () => ({ ...amb, bloom: 0, leaves: 0, snow: 0, ...look, region: name === 'winter' ? 'ford' : 'meadow',
+          phase: name === 'winter' ? 'night' : 'day', dawn: name === 'spring' ? 1 : 0, wind: name === 'autumn' ? 0.8 : name === 'winter' ? 0.9 : 0.35,
+          river: name === 'winter' ? 0.8 : 0, riverPan: -0.3, herd: [{ sp: 'sheep', rate: 5, pan: 0.2, vol: 0.8, water: 0 }] });
+        break;
+      }
+      case 'lambs': {
+        // A lamb cut off from its ewe: call and answer, then back together.
+        const ewe = { x: -150, y: 0, gone: false, carried: false, pen: null };
+        const lamb = { x: 140, y: 30, lamb: true, mother: ewe, gone: false, carried: false, pen: null };
+        const g = { animals: [ewe, lamb] };
+        state = () => ({ ...base, piece: 'meadow', energy: 0.3, bloom: 1 });
+        events.push([0.05, () => {}]);
+        for (let t = 0.1; t < secs - 0.1; t += 0.1) events.push([t, (s) => { if (t > 16) { lamb.x = ewe.x + 10; } s.lambCalls(g, 0.1); }]);
+        break;
+      }
+      case 'fair':
+        // The fair: the crowd, the auctioneer's chant and the gavel.
+        ambOn = true;
+        state = () => ({ ...base, piece: 'ranch', energy: 0.3, leaves: 1 });
+        ambState = () => ({ ...amb, fair: 0.9, fairPan: 0.2, leaves: 1 });
+        events.push([3, 'sfx:auction'], [12, 'sfx:auction'], [20, (s) => { s.play('gavel', { force: true }); s.applause(0.3, false); }]);
+        break;
+      case 'coop':
+        // Co-op: a friend arrives, the barks of four players, pings, a friend leaves.
+        state = () => ({ ...base, piece: 'ranch', energy: 0.5 });
+        // The roster as the host sees it (an array), then as a guest (a map).
+        events.push([0.5, (s) => s.friends({ net: { players: [{ slot: 0 }] } })], [1, (s) => s.friends({ net: { players: [{ slot: 0 }, { slot: 2 }] } })]);
+        for (let k = 0; k < 4; k++) events.push([3 + k * 0.8, (s) => s.play('bark', { x: 0, y: 0, who: k, force: true })]);
+        events.push([7, (s) => s.play('ping-here', { x: 60, y: 0, who: 1, force: true })], [9, (s) => s.play('ping-hold', { x: -60, y: 0, who: 2, force: true })]);
+        events.push([11.5, (s) => s.friends({ net: { players: new Map([[0, {}], [2, {}]]) } })], [12, (s) => s.friends({ net: { players: new Map([[0, {}]]) } })]);
+        break;
       default:
         state = (t) => ({ ...base, piece: name, energy: t < secs * 0.4 ? 0.25 : 0.8 });
     }
@@ -568,7 +782,7 @@ for (const name of cases) {
     }
     g.putImageData(img, 0, 0);
     const tot = bands.reduce((a, b) => a + b, 0) || 1;
-    return { peak, rms, clips, dc: dc / L.length / 2, win, log, png: cv.toDataURL('image/png'), secs, bands: [...bands].map((b) => b / tot), speed, strikes };
+    return { peak, rms, clips, dc: dc / L.length / 2, win, log, png: cv.toDataURL('image/png'), secs, bands: [...bands].map((b) => b / tot), speed, strikes, heard };
   }, { name, SECS, SEED });
 
   writeFileSync(`shots/audio-${name}.png`, Buffer.from(r.png.split(',')[1], 'base64'));
@@ -580,6 +794,7 @@ for (const name of cases) {
   console.log(`  spectrum dB (share of energy): ${bandStr}   rendered at ${r.speed.toFixed(0)}x real time`);
   if (flag("windows") || name === 'weather' || name === 'trial' || name === 'orders') console.log("  1s rms: " + r.win.map(db).join(" "));
   if (name === 'weather') console.log(`  lightning strikes: ${r.strikes}`);
+  if (['spring', 'summer', 'autumn', 'winter', 'lambs', 'fair', 'coop'].includes(name)) console.log('  heard: ' + Object.entries(r.heard).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', '));
 
   // Music theory checks on the notes.
   const mk = MODES[name] ?? MODES[{ panic: 'hills', prowl: 'night', stingers: 'ranch', mix: 'meadow', orders: 'ranch', weather: 'ranch' }[name]];

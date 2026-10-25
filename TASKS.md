@@ -409,6 +409,15 @@ novice trial with a calm handler scores 99-100 with or without the change.
       150ms each way; tune.mjs before/after; the existing loop tests
 - [ ] BRACE class at the Show Ground for two dogs (optional, not started)
 
+## M22 Sound, round three (seasons, lambs, the fair, co-op, long sessions)
+- [x] Seasons in the soundscape: a dawn chorus and a cuckoo in spring, lighter showers; insects all summer day and crickets from dusk; dry leaves rattling and rooks in autumn; the winter hush, a robin, a howling wind, snow underfoot, ice on the river and wolves far off
+- [x] The music shades with the season: spring a little quicker and brighter (more whistle, more ornaments); autumn leans on the fiddle and minor openings; winter slower and darker, tunes on a music box, the harp thinned, no bodhran, more drone and reverb
+- [x] Lambs: a lamb cut off from its ewe calls and she answers from where she is, both carrying further than other calls; the longer apart, the more urgent; a soft word from each when they are together again
+- [x] The fair: the crowd's babble near it, the auctioneer's chant in bursts, the gavel and a smattering of applause for each sale
+- [x] Co-op: a chime when a friend arrives or heads home; each player's bark and whistle at their own pitch; "over here" and "hold" whistle pings
+- [x] Long sessions: stinger variants (never the same twice running), a little life in the handler's whistle, the main theme rarer, and a rest every five to nine minutes where the music stops and the valley carries on
+- [x] audiotest: spring, summer, autumn, winter, lambs, fair, coop, hour (an hour scheduled), hourlevels (an hour rendered), live3
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1051,3 +1060,36 @@ novice trial with a calm handler scores 99-100 with or without the change.
   same player after its storage read, not before, and says nothing about a
   drop that was already mended. A host who is back before the relay notices
   never shows guests the waiting card; guests just get a fresh world.
+- Sound, round three. The soundscape reads `game.season` (bloom, leaves,
+  snow, eased) and first light (the first 12% of the day). Birds: a dawn
+  chorus up to four times as busy in spring, half as busy in summer; six
+  songbirds, a cuckoo now and then in spring, a lone robin in the snow.
+  Insects are a looped bed by day in summer; crickets from dusk in summer
+  and fewer in spring and autumn, none in snow. Autumn adds a dry-leaf
+  rattle that follows the wind and rooks (more at dusk). Winter narrows
+  the wind's upper band into a moan, closes the top of the ambience (a
+  hush), swaps every footstep for a crunch, adds ice pings and groans near
+  the river and a wolf chorus far off at night (not the predators).
+- Music by season: phrases opening on a minor chord are favoured with
+  autumn and (more) winter as with rain; the lead's voice leans to the
+  whistle in spring, the fiddle in autumn and a music box in snow (never
+  for the trial march or the title theme); tempo +3% spring, -3% autumn,
+  -8% winter; in snow the harp thins and a music box sparkles over it.
+- Lambs and the fair are read loosely until the gameplay side lands
+  them: a lamb is an animal with `lamb: true` and `mother`; the fair is
+  `game.fair` with `on`, optionally `x`/`y` (default the Show Ground) and a
+  `sold` counter. A separated lamb (more than 60 px from its mother, or a
+  fence between them) calls every 1.8-4 s, answered 0.5-0.8 s later; at
+  most three pairs call at once; lost-lamb calls carry 480 px instead of
+  320.
+- Co-op sounds: `play('bark', { who })` (who = player slot, 0 the host),
+  `play('ping-here' | 'ping-hold', { x, y, who })`; join and leave chimes
+  come from the audio diffing `game.net.players` itself. Names proposed to
+  the co-op session; `who` needs passing through their relay.
+- Long sessions, measured: an hour of varied play (ten days, the seasons
+  turning) scheduled in about a second: 250-260 sections, 95% of tunes
+  open differently, the main theme 5-8 times (it was 11 before the ranch
+  quoted it less), the same chords twice running 1-4 times. Rendered at
+  8 kHz: every minute between -32 and -27 dBFS, peaks under -9, no drift
+  from the first ten minutes to the last. The "that'll do" stinger has
+  three variants, "steady", the end of day and "sold" two each.
