@@ -29,10 +29,14 @@ export interface AmbState {
   murmurSp: string;
   munch: number; // calm grazers close by
   rain: number; // 0..1, the weather hook
+  storm: number; // 0..1, thunder about
+  speed: number; // 1 normally; faster while the dog rests and the day flies
 }
 
 export interface SampleOut {
-  sample(name: string, vol: number, pan: number, rate?: number, at?: number): void;
+  sample(name: string, vol: number, pan: number, rate?: number, at?: number, lp?: number): void;
+  // A lightning strike, `near` 0..1 (the thunder follows by itself).
+  strike(near: number): void;
 }
 
 // [playback rate, murmur band centre (Hz)]
@@ -79,6 +83,7 @@ export class Ambience {
   private crickT = 0;
   private frogT = 1;
   private owlT = 25;
+  private thunderT = 4;
   private lastSet = 0;
 
   constructor(private ctx: BaseAudioContext, private out: AudioNode, private bank: Bank, private sfx: SampleOut, private rnd: () => number = Math.random) {}
@@ -96,8 +101,8 @@ export class Ambience {
       this.lastSet = now;
       this.windLo ??= this.loop('noise', 'lowpass', 400, 0.6);
       this.windHi ??= this.loop('noise', 'bandpass', 1800, 0.8);
-      if ((this.gustT -= 0.1) <= 0) {
-        this.gustT = 1.2 + r() * 2.8;
+      if ((this.gustT -= 0.1 * s.speed) <= 0) {
+        this.gustT = (1.2 + r() * 2.8) / (0.6 + 0.8 * s.wind);
         this.gust = 0.5 + r() * 0.8;
       }
       const forest = s.region === null;
@@ -135,16 +140,18 @@ export class Ambience {
       }
     }
 
-    // Wildlife.
+    // Wildlife. While the dog rests the day runs fast, and so do they:
+    // birds sing sooner and quicker, a little higher.
     const pan = () => (r() * 2 - 1) * 0.85;
+    const fast = s.speed;
     if (s.phase !== 'night') {
-      if ((this.birdT -= dt) <= 0) {
+      if ((this.birdT -= dt * fast) <= 0) {
         const busy = s.region === 'meadow' || s.region === 'hills' || s.region === null ? 0.7 : 1;
         this.birdT = (2.5 + r() * 5) * busy * (s.phase === 'dusk' ? 2.2 : 1) * (s.rain > 0.3 ? 4 : 1);
-        if (s.rain < 0.6) this.sfx.sample(`bird${1 + Math.floor(r() * 3)}`, 0.05 + 0.06 * r(), pan(), 0.88 + 0.25 * r());
+        if (s.rain < 0.6) this.sfx.sample(`bird${1 + Math.floor(r() * 3)}`, 0.05 + 0.06 * r(), pan(), (0.88 + 0.25 * r()) * (1 + 0.1 * (fast - 1)));
       }
     } else {
-      if ((this.crickT -= dt) <= 0) {
+      if ((this.crickT -= dt * fast) <= 0) {
         this.crickT = 0.25 + r() * 0.9;
         this.sfx.sample('cricket', 0.035 + 0.05 * r(), pan(), 0.95 + 0.1 * r());
       }
@@ -158,5 +165,17 @@ export class Ambience {
       }
     }
     if (s.rain > 0.01 && r() < s.rain * 16 * dt) this.sfx.sample('drip', 0.03 + 0.05 * r(), pan(), 0.7 + 0.7 * r());
+
+    // Thunder. Most strikes are far off: a low roll, late and dull. A near
+    // one cracks first, comes almost at once and shakes the speakers.
+    if (s.storm > 0.3 && (this.thunderT -= dt) <= 0) {
+      this.thunderT = (7 + r() * 14) / s.storm;
+      const near = r() * r();
+      const delay = 0.25 + (1 - near) * 4.5; // about 3 s per kilometre
+      const p = pan();
+      this.sfx.strike(near);
+      if (near > 0.55) this.sfx.sample('crack', 0.12 + 0.2 * near, p, 0.9 + 0.2 * r(), now + delay);
+      this.sfx.sample('thunder', (0.1 + 0.22 * near) * s.storm, p * 0.6, 0.8 + 0.3 * r(), now + delay + (near > 0.55 ? 0.08 : 0), 250 + 3200 * near * near);
+    }
   }
 }
