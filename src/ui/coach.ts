@@ -77,6 +77,7 @@ export function coachHint(game: Game): string | null {
 // Which touch button to pulse.
 export function coachButton(game: Game): 'bark' | 'nip' | 'lie' | null {
   if (game.tut === 2 || game.tip?.text.includes('HOLD DOWN')) return 'lie';
+  if (game.tut === 6 && game.coins < 20 && game.inRanch() && game.rest === 1) return 'lie';
   if (game.tip?.text.includes('NIP')) return 'nip';
   if (game.day.phase === 'night' && game.tier <= 3) {
     const d = game.dog;

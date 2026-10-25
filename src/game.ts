@@ -41,6 +41,8 @@ import { drawJobs } from './ui/jobs';
 import { courseDrawables } from './art/course';
 import type { Drawable } from './art/buildings';
 
+const REST_MAX = 12; // a rested hour of daylight takes about 2s
+
 export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause';
 export type Request = 'new' | 'continue' | 'title' | null;
 
@@ -131,6 +133,9 @@ export class Game {
   orders = new Orders();
   trials = new Trials();
   feel = new Feel();
+  rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
+  private restT = 0;
+  private idleT = 0;
   summaryT = 0; // time the end-of-day card has been up
   private buffered: Partial<Record<'bark' | 'nip', number>> = {};
 
@@ -468,7 +473,8 @@ export class Game {
       }
       this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
-    const dayEv = this.trials.run ? null : this.day.update(dt); // the clock waits for a trial run
+    this.updateRest(dt);
+    const dayEv = this.trials.run ? null : this.day.update(dt * this.rest); // the clock waits for a trial run
     if (dayEv === 'dusk') {
       this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);
       this.audio?.play('dusk');
@@ -498,7 +504,7 @@ export class Game {
     const night = this.day.phase === 'night';
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
     jobsUpdate(this, dt);
-    if (!night && !this.trials.run) updateProduce(this, dt);
+    if (!night && !this.trials.run) updateProduce(this, dt * this.rest);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
       this.groupT = 0.25;
@@ -526,6 +532,38 @@ export class Game {
     if (this.tip && (this.tip.t -= dt) <= 0) this.tip = null;
     if (this.place && (this.place.t -= dt) <= 0) this.place = null;
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+  }
+
+  // ---- Resting ----
+  //
+  // Lying down on the ranch with no loose stock about rests the dog: the
+  // clock (and the goods in the pens) speed up, so waiting for dusk or for
+  // the eggs is never dead time. Getting up, or anything wandering close,
+  // ends it at once. Never at night or under the bot.
+  canRest(): boolean {
+    const d = this.dog;
+    if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || !this.inRanch()) return false;
+    return !this.animals.some((a) => !a.pen && !a.gone && !a.trial && Math.hypot(a.x - d.x, a.y - d.y) < 110);
+  }
+
+  private updateRest(dt: number) {
+    if (!this.canRest()) {
+      this.restT = 0;
+      this.rest = 1;
+      // Standing about on a quiet ranch: say once that resting is a thing.
+      const idle = this.inRanch() && this.day.phase !== 'night' && this.dog.speed < 4 && !this.nearestGroup(110);
+      this.idleT = idle ? this.idleT + dt : 0;
+      if (this.idleT > 4 && this.tut >= 7 && !this.tipsSeen.has('rest') && !this.input.override) {
+        this.tipsSeen.add('rest');
+        this.tip = { text: this.restHint(), t: 7 };
+      }
+      return;
+    }
+    this.restT += dt;
+    // A second of lying still, then the clock eases up to full speed.
+    const k = clamp((this.restT - 1) / 1.5, 0, 1);
+    this.rest = 1 + (REST_MAX - 1) * k * k * (3 - 2 * k);
+    if (this.rest > 2 && Math.floor((this.restT - dt) / 0.9) !== Math.floor(this.restT / 0.9)) this.fx.float(this.dog.x + 4, this.dog.y - 8, 'Z', C.wool, 1.4);
   }
 
   // ---- Night ----
@@ -786,7 +824,12 @@ export class Game {
   tip: { text: string; t: number } | null = null;
   tipsSeen = new Set<string>();
 
+  restHint() {
+    return this.input.touchMode ? 'HOLD DOWN ON THE RANCH TO REST: THE DAY PASSES QUICKLY.' : 'HOLD Q ON THE RANCH TO REST: THE DAY PASSES QUICKLY.';
+  }
+
   hint(): string | null {
+    if (this.rest > 1.5) return 'RESTING... THE PENS KEEP MAKING GOODS.';
     if (this.tip) return this.tip.text;
     const jh = jobsHint(this);
     if (jh) return jh;
@@ -798,7 +841,10 @@ export class Game {
       case 3: return 'EASE THEM IN THROUGH THE OPEN PEN GATE.';
       case 4: return 'CALM DRIVES PAY X1.5. A BARK MOVES THEM FAST BUT SCARES THEM.';
       case 5: return touch ? 'TAP YOUR GOAL (TOP LEFT) FOR THE RANCH LEDGER.' : 'TAB OPENS THE RANCH LEDGER: GOALS AND WHAT COMES NEXT.';
-      case 6: return this.coins >= 20 ? (touch ? 'YOU CAN AFFORD A KENNEL: TAP BUILD AT THE RANCH.' : 'YOU CAN AFFORD A KENNEL: PRESS B AT THE RANCH.') : null;
+      case 6:
+        if (this.coins >= 20) return touch ? 'YOU CAN AFFORD A KENNEL: TAP BUILD AT THE RANCH.' : 'YOU CAN AFFORD A KENNEL: PRESS B AT THE RANCH.';
+        // Not enough yet: the eggs sell at the end of the day.
+        return this.day.phase === 'night' ? null : `GOODS SELL AT DAY'S END. ${this.restHint()}`;
     }
     return null;
   }

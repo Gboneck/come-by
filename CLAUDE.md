@@ -28,7 +28,8 @@ original and drawn in code. No external art files, ever.
   bot herding scenarios per species and prints stress/time/splits,
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
-  `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`
+  `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
+  `scripts/resttest.mjs`
   and `scripts/tour.mjs` check the loops end to end,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`), `scripts/uitour.mjs` screenshots every screen at
@@ -76,6 +77,7 @@ stays unique.
 | Bark            | Space / K                        | BARK button                   |
 | Nip             | E / J (also: open a pen gate, start a trial at the post) | NIP button  |
 | Lie down        | Q / L (hold)                     | DOWN button (hold)            |
+| Rest            | lie down on the ranch, no stock near (day passes x12) | same |
 | Build mode      | B (on the ranch)                 | BUILD button                  |
 | Ranch Ledger    | Tab / G                          | LEDGER button                 |
 | Helper command  | H                                | HELP button                   |

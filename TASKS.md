@@ -147,6 +147,14 @@
 - [x] `scripts/audiotest.mjs`: offline renders with levels, peaks, tuning, music-theory checks, layer balance and CPU
 - [x] Typecheck, build, shot, commit
 
+## M12 Day one pacing (from playtesting the merged branch)
+- [x] Resting: lie down on the ranch with no loose stock near and the day
+      (and the pens' goods) runs up to x12; getting up ends it at once
+- [x] Day one: when the kennel is out of reach, the hint says goods sell at
+      day's end and how to rest; the DOWN button / key cap pulses for it
+- [x] One-time tip about resting for players past the tutorial
+- [x] `scripts/resttest.mjs`
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -465,3 +473,12 @@
   random patter whose rate follows their speed over stride near the camera
   (capped at 16 a second per species), so a running herd drums and a
   grazing flock is near silent except for its munching.
+- Day one was slow: after penning the ducks (about 18$) the kennel (20$)
+  waited on the eggs, which sell at the end of the day, with nothing to do
+  meanwhile. Resting fixes the waiting: lying down on the ranch with no
+  loose animal within 110px eases the clock up to x12 after a second (an
+  hour of daylight in under 2s). Only the clock and goods production speed
+  up, not the sim, so it costs nothing on phones and orders still expire
+  on time. No resting at night, during a trial run or under the bot.
+  Measured: from 08:00 a rest reaches the end of day one in ~20s, with
+  47$ in hand.

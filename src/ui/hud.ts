@@ -92,7 +92,10 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   const d = game.day;
   panel(g, L, T, 52, 18);
   text(g, `DAY ${d.day}`, L + 4, T + 3, C.wool);
-  text(g, d.clock(), L + 49, T + 3, d.phase === 'dusk' ? C.butter : C.wool, { align: 'right' });
+  const resting = game.rest > 1.5;
+  text(g, d.clock(), L + 49, T + 3, d.phase === 'dusk' || resting ? C.butter : C.wool, { align: 'right' });
+  // Resting: the clock runs fast.
+  if (resting && Math.floor(game.t * 4) % 2 === 0) text(g, '>>', L + 55, T + 3, C.butter, { shadow: C.plum });
   // Sun track: day in sage, dusk in teal; a sun dot travels along it.
   const tx = L + 4, tky = T + 12, tw = 44;
   rect(g, tx, tky, tw, 2, C.sage);
