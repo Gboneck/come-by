@@ -546,9 +546,13 @@ export class Game {
   canRest(): boolean {
     const d = this.dog;
     if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || !this.inRanch()) return false;
-    // Calm stock grazing nearby (strays that would not fit a pen) does not
-    // stop you resting; anything moving or upset does.
-    return !this.animals.some((a) => !a.pen && !a.gone && !a.trial && Math.hypot(a.x - d.x, a.y - d.y) < 110 && (a.stress > 0.25 || a.pressure > 0.05 || a.fleeT > 0));
+    // Anything loose right by the dog stops it; further off, only stock that
+    // is moving or upset does (calm strays grazing by the yard do not).
+    return !this.animals.some((a) => {
+      if (a.pen || a.gone || a.trial) return false;
+      const d2 = Math.hypot(a.x - d.x, a.y - d.y);
+      return d2 < 40 || (d2 < 110 && (a.stress > 0.25 || a.pressure > 0.05 || a.fleeT > 0));
+    });
   }
 
   private updateRest(dt: number) {

@@ -46,7 +46,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     flight: 30, nbr: 26, sep: 6, wCoh: 1.6, wSep: 1.2, wAli: 0.9,
     stressGain: 0.22, stressDecay: 0.12, barkMul: 0.9, barkStress: 0.5, nipMul: 0.6, nipStress: 0.35,
     stubborn: 0, social: 0.03, wander: 0.08, climbs: false, balksWater: false,
-    space: 1, value: 2, good: 'Eggs', goodEvery: 140, goodValue: 1, spawnGroup: [5, 7], coats: 1,
+    space: 1, value: 2, good: 'Eggs', goodEvery: 80, goodValue: 1, spawnGroup: [5, 7], coats: 1,
   },
   // The classic flock.
   sheep: {
