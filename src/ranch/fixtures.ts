@@ -55,6 +55,7 @@ export function evict(p: Pen, animals: Animal[]) {
 export class Yard implements Fixture {
   pen: Pen;
   leaveT = 0; // countdown to the buyer leading the stock away
+  release = false; // the shearer: the stock comes back out instead
   constructor(public site: YardSite) {
     this.pen = smallPen(site.tx, site.ty, YARD_W, YARD_H, site.rot);
   }
@@ -110,6 +111,19 @@ export class Course implements Fixture {
   stamp(map: WorldMap) {
     for (const g of this.gates) for (const p of g.posts) fillCells(map, p.x - 1, p.y - 2, p.x + 2, p.y + 1, SOLID);
     fillCells(map, this.post.x - 1, this.post.y - 2, this.post.x + 2, this.post.y + 1, SOLID);
+    this.pen.stamp(map);
+  }
+}
+
+// The show ring on the Show Ground: the autumn fair's judging pen, its
+// gate to the north (the way in from the Home Meadow).
+export const RING = { tx: 137, ty: 151, w: 6, h: 5, rot: 2 as Rot };
+export class Ring implements Fixture {
+  pen: Pen;
+  constructor() {
+    this.pen = smallPen(RING.tx, RING.ty, RING.w, RING.h, RING.rot);
+  }
+  stamp(map: WorldMap) {
     this.pen.stamp(map);
   }
 }

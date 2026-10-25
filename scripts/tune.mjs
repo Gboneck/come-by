@@ -1,6 +1,6 @@
 // Herding tuning harness: runs bot-driven scenarios in the real game code,
 // fast-forwarded, and prints metrics. Calm driving should beat barking.
-//   node scripts/tune.mjs [species] [count] [--weather=wind|rain|fog|storm] [--seed=N]
+//   node scripts/tune.mjs [species] [count] [--weather=wind|rain|fog|storm] [--season=winter] [--seed=N]
 // --seed makes a run exact (seeded Math.random, no live frame loop), so a
 // before/after comparison shows only what the code change did.
 import { chromium } from 'playwright';
@@ -32,7 +32,8 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 const skyArg = process.argv.find((x) => x.startsWith('--weather='));
-await page.goto(`http://localhost:${port}/?debug${skyArg ? `&weather=${skyArg.slice(10)}` : ''}`);
+const seasonArg = process.argv.find((x) => x.startsWith('--season='));
+await page.goto(`http://localhost:${port}/?debug${skyArg ? `&weather=${skyArg.slice(10)}` : ''}${seasonArg ? `&season=${seasonArg.slice(9)}` : ''}`);
 await page.waitForFunction(() => window.sim);
 const helpArg = process.argv.find((x) => x.startsWith('--helpers='));
 const tierArg = process.argv.find((x) => x.startsWith('--tier='));

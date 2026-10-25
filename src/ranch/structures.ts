@@ -65,3 +65,13 @@ export class Windmill extends Building {
     super('windmill', tx, ty, 3, 3);
   }
 }
+
+// Winter feed: a stack of hay bales. Penned stock eats from it every winter
+// night; out of a barn's ring the snow spoils some each night.
+export const STACK_BALES = 20;
+export class Haystack extends Building {
+  bales = STACK_BALES;
+  constructor(tx: number, ty: number) {
+    super('haystack', tx, ty, 2, 2);
+  }
+}

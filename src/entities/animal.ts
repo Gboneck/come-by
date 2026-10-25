@@ -4,7 +4,7 @@ import { drawSpr } from '../gfx/sprite';
 import { animalSprites, type Coat } from '../art/animals';
 import { BLOCK_ANIMAL, BLOCK_CLIMBER, CS, GATE, ROCK, SHALLOW, TS, Ter, type SpeciesId, type WorldMap } from '../world/map';
 import { collideCircle, wallRepulse } from '../world/collide';
-import { SPECIES, type Species } from './species';
+import { SPECIES, breedOf, type Species } from './species';
 import { angleDiff, clamp } from '../util';
 import type { Facing } from './dog';
 import type { Weather } from '../systems/weather';
@@ -70,6 +70,13 @@ export class Animal {
   carried = false; // being dragged off
   trial = false; // the Show Ground's own flock, only for a trial run
   home = false; // has been penned before: bringing it back pays nothing
+  // Seasons: lambs and their mothers, shearing, the fair.
+  young = false; // a lamb, at its mother's side until autumn
+  mother: Animal | null = null;
+  lamb: Animal | null = null; // a ewe's lamb (the first, if twins)
+  lambedYear = 0;
+  shorn = 0; // the year it was last shorn
+  forSale = 0; // price at the fair's breeders' pen (0: not for sale)
   // Goats: nearest rock to scramble up, and how long they have sat on one.
   rockX = 0;
   rockY = 0;
@@ -101,7 +108,20 @@ export class Animal {
   get calm() {
     return this.stress < 0.35;
   }
+
+  get rare() {
+    return !!breedOf(this.sp.id, this.coat);
+  }
+
+  // Body radius: a lamb is small.
+  get r() {
+    return this.young ? this.sp.r * 0.7 : this.sp.r;
+  }
 }
+
+// Room an animal takes in a pen, and what it is worth.
+export const spaceOf = (a: Animal) => (a.young ? 1 : a.sp.space);
+export const valueOf = (a: Animal) => (a.young ? 2 : a.rare ? a.sp.value * 2 : a.sp.value);
 
 export interface HerdCtx {
   map: WorldMap;
@@ -113,6 +133,7 @@ export interface HerdCtx {
   // Open gates pull pressured animals towards the opening.
   gates: { x: number; y: number; open: boolean; accepts(a: Animal): boolean }[];
   weather?: Weather;
+  snow?: number; // 0..1 snow on the ground: everyone out in it is slower
   // Co-op: the other players' dogs, which settle a flock and take up room
   // just as yours does (their pressure is in `sources`).
   dogs?: { x: number; y: number; r: number; lying: boolean }[];
@@ -186,7 +207,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     const dx = b.x - a.x, dy = b.y - a.y;
     const d2 = dx * dx + dy * dy;
     // Bodies never overlap, whatever the species.
-    const minD = sp.r + b.sp.r;
+    const minD = a.r + b.r;
     if (d2 < minD * minD && d2 > 1e-4) {
       const d = Math.sqrt(d2);
       const push = (minD - d) * 0.5;
@@ -194,6 +215,10 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
       a.y -= (dy / d) * push;
     }
     if (b.sp !== sp || b.pen !== a.pen || b.trial !== a.trial || d2 > sp.nbr * sp.nbr) continue;
+    // A lamb tucks in closer than a ewe's personal space: the grown flock
+    // neither follows its lambs nor steps away from them (or each pair would
+    // drift off, the lamb chasing the ewe it keeps nudging).
+    if (b.young && !a.young) continue;
     const d = Math.sqrt(d2);
     cx += b.x; cy += b.y; avx += b.vx; avy += b.vy; n++;
     if (d < sepR && d > 1e-3) {
@@ -286,6 +311,37 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   const cohW = sp.wCoh * stressBunch * (a.scatterT > 0 ? 0.2 : 1) * (a.wanderer && P < 0.05 ? 0.4 : 1);
   const sepW = sp.wSep * (a.scatterT > 0 ? 1.8 : 1);
   const driven = P > 0.03 || a.fleeT > 0;
+
+  // ---- Mothers and lambs ----
+  // A lamb keeps to its mother's side; a ewe whose lamb is cut off turns
+  // back for it. Either one apart frets.
+  let bondX = 0, bondY = 0, apart = false, pace = 0;
+  const kin = a.young ? a.mother : a.lamb;
+  if (kin && !kin.gone && !kin.carried) {
+    const kx = kin.x - a.x, ky = kin.y - a.y, kd = Math.hypot(kx, ky);
+    if (a.young) {
+      // Aim where she is going, and keep her pace: a lamb at her side walks
+      // on with her rather than being pulled back across her path.
+      const tx = kx + kin.vx * 0.4, ty = ky + kin.vy * 0.4, td = Math.hypot(tx, ty);
+      if (td > 6) {
+        const w = Math.min(2.4, 0.3 + td / 16);
+        bondX = (tx / td) * w;
+        bondY = (ty / td) * w;
+      }
+      const ks = Math.hypot(kin.vx, kin.vy);
+      if (ks > 2) {
+        bondX += (kin.vx / ks) * Math.min(1, ks / sp.walk);
+        bondY += (kin.vy / ks) * Math.min(1, ks / sp.walk);
+        pace = Math.min(sp.run, ks * (td > 10 ? 1.25 : 1));
+      }
+      apart = kd > 44;
+    } else if (kd > 36) {
+      const w = Math.min(1.8, (kd - 36) / 24);
+      bondX = (kx / kd) * w;
+      bondY = (ky / kd) * w;
+      apart = true;
+    }
+  }
 
   if (a.panicT > 0) {
     dirX = a.pdx + sx * sepW + wallX * 3;
@@ -393,6 +449,17 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     }
   }
 
+  if ((bondX || bondY) && a.panicT <= 0) {
+    dirX += bondX;
+    dirY += bondY;
+    spd = Math.max(spd, pace);
+    if (!driven) {
+      const bw = Math.hypot(bondX, bondY);
+      if (a.young && bw > 0.6) spd = Math.max(spd, sp.walk * Math.min(1.2, bw / 1.6));
+      else if (!a.young && apart) spd = Math.max(spd, sp.walk * 0.7);
+    }
+  }
+
   // Driven into a wall, a building corner or a fence end: feel a little to
   // either side and slide round it rather than pushing into it.
   if ((driven || a.panicT > 0) && !a.pen) {
@@ -444,6 +511,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   if (a.panicT <= 0) spd *= 0.3 + 0.7 * Math.max(0, align);
   spd *= 1 + 0.2 * a.stress;
   if (a.inWater) spd *= 0.6;
+  if (!a.pen && ctx.snow) spd *= 1 - 0.12 * ctx.snow;
   if (settling && !driven) spd *= 0.4;
   const acc = spd > a.speed ? sp.accel : sp.accel * (settling ? 3.5 : 2);
   a.speed += clamp(spd - a.speed, -acc * dt, acc * dt);
@@ -455,20 +523,20 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
 
   // Keep out of the dog's body.
   const ddx = a.x - ctx.dogX, ddy = a.y - ctx.dogY;
-  const dd = Math.hypot(ddx, ddy), minDog = sp.r + ctx.dogR;
+  const dd = Math.hypot(ddx, ddy), minDog = a.r + ctx.dogR;
   if (dd < minDog && dd > 1e-3) {
     a.x += (ddx / dd) * (minDog - dd);
     a.y += (ddy / dd) * (minDog - dd);
   }
   if (ctx.dogs)
     for (const o of ctx.dogs) {
-      const ox = a.x - o.x, oy = a.y - o.y, od = Math.hypot(ox, oy), m = sp.r + o.r;
+      const ox = a.x - o.x, oy = a.y - o.y, od = Math.hypot(ox, oy), m = a.r + o.r;
       if (od < m && od > 1e-3) {
         a.x += (ox / od) * (m - od);
         a.y += (oy / od) * (m - od);
       }
     }
-  collideCircle(ctx.map, a, sp.r, mask);
+  collideCircle(ctx.map, a, a.r, mask);
 
   // ---- Stress ----
   const crowd = Math.max(0, P - 0.4);
@@ -481,6 +549,8 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   const exert = Math.max(0, (a.speed - sp.walk * 1.15) / (sp.run - sp.walk * 1.15));
   if (!a.pen) gain += Math.pow(exert, 1.5) * 0.6 * sp.stressGain;
   const iso = n === 0 && !a.pen ? sp.social : 0;
+  // A ewe and lamb parted fret for each other.
+  if (apart) gain += (a.young ? 0.26 : 0.2) * (sp.stressGain / 0.38);
   const decay = sp.stressDecay * (P < 0.05 ? 1 : 0.2) * (settling ? 2 : 1) * (a.pen ? 2.2 : 1) * (n > 2 ? 1.2 : 1) * (1 - 0.4 * rain);
   const was = a.stress;
   a.stress = clamp(a.stress + (gain + iso - decay) * dt, 0, 1);

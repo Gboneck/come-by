@@ -5,7 +5,7 @@ import { UI } from './ui/ui';
 import { drawTouchControls, touchLayout } from './ui/touch';
 import { Particles } from './systems/particles';
 import { Dog } from './entities/dog';
-import { Animal, barkAt, findGroups, nipFrom, updateHerd, type Group, type HerdCtx, type PressureSource } from './entities/animal';
+import { Animal, barkAt, findGroups, nipFrom, updateHerd, valueOf, type Group, type HerdCtx, type PressureSource } from './entities/animal';
 import { WORLD_H, WORLD_W, WorldMap, type RegionDef, type SpeciesId } from './world/map';
 import { bake, type Baked } from './world/terrain';
 import { Ranch, type RanchEvent } from './ranch/ranch';
@@ -43,6 +43,8 @@ import { clamp, damp } from './util';
 import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
 import { Seasons } from './systems/season';
+import { Seasonal, seasonalEvening } from './systems/seasonal';
+import { fairDrawables } from './art/fair';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
 import { Trials, closeResult, trialNip } from './systems/trials';
@@ -158,6 +160,7 @@ export class Game {
   feel = new Feel();
   weather = new Weather();
   season = new Seasons();
+  seasonal = new Seasonal(); // lambs, the shearer, the fair, winter hay
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
@@ -366,7 +369,7 @@ export class Game {
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     for (const a of this.animals) a.stress *= 0.3;
-    if (spawn) this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => this.isUnlocked(r)));
+    if (spawn) this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => this.isUnlocked(r), this.season.on(this.day.day), (a) => this.discovery.tracked.has(a)));
     this.animals = this.animals.filter((a) => !a.gone);
     for (const p of this.ranch.pens) if (!p.full) p.open = true;
     for (const [i, h] of this.helpers.entries()) {
@@ -390,6 +393,7 @@ export class Game {
       for (const p of this.predators) p.dropCarry();
     }
     this.predators = [];
+    seasonalEvening(this); // winter hay, the fair packs up
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
@@ -762,7 +766,7 @@ export class Game {
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
     gates.push(...jobGates(this));
-    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather, dogs: this.coop.length ? this.coop : undefined };
+    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather, snow: this.season.snow, dogs: this.coop.length ? this.coop : undefined };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
@@ -812,7 +816,7 @@ export class Game {
         return;
       }
       const { mult } = calmRating(a.peakStress);
-      const value = Math.max(1, Math.round(a.sp.value * mult));
+      const value = Math.max(1, Math.round(valueOf(a) * mult));
       a.deliveryValue = value;
       this.earn(value);
       this.stats.deliveredValue += value;
@@ -1031,7 +1035,7 @@ export class Game {
 
   // Trial course, buyers' yards and carts, hidden places, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.

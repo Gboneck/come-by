@@ -87,3 +87,15 @@ export const SPECIES: Record<SpeciesId, Species> = {
 };
 
 export const SPECIES_ORDER: SpeciesId[] = ['duck', 'sheep', 'goat', 'cow', 'pony'];
+
+// Rare breeds: a coat no wild flock has, bought at the autumn fair (the
+// black sheep can also be found). Worth more, make better goods, and judge
+// well at the fair.
+export interface Breed { species: SpeciesId; coat: number; name: string; price: number; tier: number }
+export const RARE_BREEDS: Breed[] = [
+  { species: 'duck', coat: 1, name: 'CALL DUCK', price: 30, tier: 2 },
+  { species: 'sheep', coat: 1, name: 'BLACK SHEEP', price: 70, tier: 2 },
+  { species: 'goat', coat: 2, name: 'PYGMY GOAT', price: 90, tier: 3 },
+  { species: 'cow', coat: 2, name: 'HIGHLAND COW', price: 180, tier: 4 },
+];
+export const breedOf = (id: SpeciesId, coat: number) => RARE_BREEDS.find((b) => b.species === id && b.coat === coat);
