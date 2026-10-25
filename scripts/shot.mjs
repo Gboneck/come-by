@@ -21,7 +21,7 @@ const steps = args
     return { kind: a.slice(2, i), val: a.slice(i + 1) };
   });
 
-const PORT = 5199;
+const PORT = Number(process.env.PORT || 5199); // set PORT when several checkouts run shots at once
 let server = null;
 async function ensureServer() {
   try {

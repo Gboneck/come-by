@@ -19,7 +19,8 @@ original and drawn in code. No external art files, ever.
 - URL switches: `?debug` exposes `window.game`, `window.sim` and
   `window.resetFlock` (see `src/debug.ts`) and skips the title (add
   `&title` to keep it); `?play` skips the title; `?sprites=N` shows the
-  sprite sheet from row N.
+  sprite sheet from row N; `?safe=top,right,bottom,left` fakes safe-area
+  insets (CSS px) to check notched phones.
 - Scripts (all Playwright, all start their own Vite server):
   `scripts/shot.mjs` screenshots + console errors (`--hold`, `--press`,
   `--eval` steps), `scripts/zoom.mjs` enlarges part of a PNG,
@@ -27,7 +28,9 @@ original and drawn in code. No external art files, ever.
   bot herding scenarios per species and prints stress/time/splits,
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
-  `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end.
+  `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end,
+  `scripts/uitour.mjs` screenshots every screen at phone, notched-phone,
+  landscape and desktop sizes onto contact sheets (`shots/ui/`).
 
 ## Rendering rules
 

@@ -189,15 +189,26 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
 
   // ---- Hint line (tutorial and region tips) ----
   const hint = coachHint(game) ?? game.hint();
-  const bottomY = TL ? TL.top - 2 : H - 4 - S.bottom;
+  let bottomY = TL ? TL.top - 2 : H - 4 - S.bottom;
+  let hcx = (L + R) / 2, hmax = Math.min(W - 16 - S.left - S.right, 200);
+  if (TL && W > H) {
+    // Landscape: the thumbs sit in the corners, so the hint can use the
+    // bottom edge between them instead of the middle of the field.
+    const x0 = TL.stickHome.x + 28, x1 = TL.lie.x - TL.lie.r - 6;
+    if (x1 - x0 >= 120) {
+      hcx = (x0 + x1) / 2;
+      hmax = Math.min(200, x1 - x0 - 10);
+      bottomY = H - 4 - S.bottom;
+    }
+  }
   if (hint) {
-    const lines = wrap(hint, Math.min(W - 16 - S.left - S.right, 200));
+    const lines = wrap(hint, hmax);
     const hw = Math.max(...lines.map((l) => textWidth(l))) + 10;
     const hh = lines.length * 7 + 5;
     const hy = Math.round(bottomY - hh);
-    const hx = Math.round((L + R) / 2 - hw / 2);
+    const hx = Math.round(hcx - hw / 2);
     panel(g, hx, hy, hw, hh);
-    lines.forEach((l, i) => text(g, l, (L + R) / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
   }
 
   // ---- Place name and banners ----

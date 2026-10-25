@@ -4,6 +4,7 @@
 //
 //   node scripts/uitour.mjs                  -> shots/ui/<size>-<state>.png + shots/ui/sheet-<size>.png
 //   node scripts/uitour.mjs --sizes=phone,desk --states=summary,ledger
+// Sizes: desk desk4 phone se android land tablet notch landnotch.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -22,6 +23,9 @@ const SIZES = {
   android: { width: 412, height: 915, dpr: 2.625, touch: true },
   land: { width: 844, height: 390, dpr: 3, touch: true },
   tablet: { width: 820, height: 1180, dpr: 2, touch: true },
+  // Home-screen web app on a notched phone: fake safe-area insets (CSS px).
+  notch: { width: 390, height: 844, dpr: 3, touch: true, q: 'safe=59,0,34,0' },
+  landnotch: { width: 844, height: 390, dpr: 3, touch: true, q: 'safe=0,59,21,59' },
 };
 
 // Each state runs in a fresh page; `fn` runs in the page with the game.
@@ -147,7 +151,7 @@ for (const sn of sizeNames) {
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(`${sn}/${st}: ${e.message}`));
     page.on('console', (m) => m.type() === 'error' && errors.push(`${sn}/${st}: ${m.text()}`));
-    await page.goto(`http://localhost:${PORT}/?${STATES[st].query ?? 'debug'}`);
+    await page.goto(`http://localhost:${PORT}/?${STATES[st].query ?? 'debug'}${s.q ? `&${s.q}` : ''}`);
     await page.waitForFunction(() => window.game);
     await page.evaluate(async () => {
       const m = await import('/src/ui/build.ts');

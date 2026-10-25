@@ -96,9 +96,10 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   const pulse = ready && Math.floor(game.t * 2) % 2 === 0;
   const wantBuild = build.length > 0;
   const ty = by + Math.floor((bh - 5) / 2);
-  panel(g, bx1, by, bw, bh, ui.isActive('sbuild') || (wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.butter : C.sage);
+  const hot1 = ui.isActive('sbuild') || (ready && ui.hovering(bx1, by, bw, bh)), hot2 = ui.isActive('next') || (ready && ui.hovering(bx2, by, bw, bh));
+  panel(g, bx1, by, bw, bh, hot1 || (wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.butter : C.sage);
   text(g, touch ? 'BUILD' : 'B: BUILD', bx1 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
-  panel(g, bx2, by, bw, bh, ui.isActive('next') || (!wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.sage : C.butter);
+  panel(g, bx2, by, bw, bh, hot2 || (!wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.sage : C.butter);
   text(g, touch ? 'NEXT DAY' : 'SPACE: NEXT DAY', bx2 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
   const p = touch ? 3 : 0;
   if (ui.click('sbuild', bx1 - p, by - p, bw + p, bh + p * 2) && ready) return 'build';

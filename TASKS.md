@@ -65,6 +65,22 @@
 - [x] Title screen
 - [x] Screenshot + console check, commit
 
+## Feel and UI refinement
+- [x] Play tiers 1-5 on desktop and phone sizes (`scripts/uitour.mjs`) and list the friction
+- [x] Touch stick: a real walk plateau before the run zone, run ring shows stamina
+- [x] Thumb-sized touch targets; a near-miss tap goes to the nearest button
+- [x] Safe-area insets (notch, status bar, home indicator) for HUD, controls and menus
+- [x] Haptics on bark, nip, gate and tier-up (phones that support it)
+- [x] Whole-pixel camera kick on bark and nip, hit-pause on a nip that lands
+- [x] Stronger "that'll do": stamp, ring, bump, buzz; coins fly to a purse that ticks up
+- [x] Tier-up card with what the tier brings, confetti; it waits for "that'll do" to finish
+- [x] Dithered plum fades between day, summary, build, title; summary dims the field
+- [x] Summary: rows arrive one by one, earnings count up, next goal shown, input waits 0.6s
+- [x] Pause menu as a list of rows; screen shake, flight zones, vibration settings
+- [x] Onboarding: "HERE" marker for the drive spot, pen-gate arrow, key caps and
+      pulsing buttons, one-time tips for standing in front, rattled and split flocks
+- [x] Typecheck, build, shot (desktop + phone), commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -208,4 +224,45 @@
 - The title screen runs the game in attract mode (the heeler driving a
   flock round the ranch). `?debug` skips the title unless `&title` is
   added; `?play` skips it too.
-
+- Feel and UI pass, from playing every screen at seven window sizes. The
+  biggest friction on phones: the touch stick hit full walking pace and
+  sprint almost together (92% vs 94% of the rim), so pushing to walk often
+  sprinted and spooked the flock. Now full walk comes at 80% of the inner
+  ring (20px) and running needs the thumb past 26px, with 3px of hysteresis;
+  the base only follows the thumb beyond 30px. The outer ring is the run
+  gauge (stamina), so it sits right under the thumb.
+- Touch buttons: BARK r16, NIP and DOWN r13, and any fresh touch within 9px
+  of a button's rim goes to the nearest one. HUD buttons on touch are 13px
+  tall with a 3px invisible margin. BARK shows its cooldown (dim label).
+- Safe areas: `src/ui/safe.ts` reads `env(safe-area-inset-*)` through a
+  probe element and converts to internal pixels. `?safe=t,r,b,l` (CSS px)
+  fakes them; `uitour.mjs` has `notch` and `landnotch` sizes that use it.
+- Camera kicks are whole pixels and decay to zero: bark 1px in the facing
+  direction, nip 2px (longer if it lands), the gate shutting 2px down. Tier
+  up shakes 1px for 0.35s. All off with SCREEN SHAKE in the pause menu.
+- Hit-pause is 60ms and only for a nip that lands; presses during it are
+  kept. It never runs under `input.override`, so bots and tuning are
+  unaffected. A bark or nip pressed up to 0.2s before the dog is ready is
+  buffered rather than dropped.
+- Coins: each penned animal's value flies from the animal to the purse and
+  the purse ticks up as coins land; spending rolls it down quickly.
+- Day transitions are a dither fade (0.22s out, 0.32s in) with the game
+  frozen while covering. The summary, ledger and pause dim the field with a
+  50% plum dither, never alpha. The summary ignores input for 0.6s so a
+  bark held through dusk cannot skip the day's choice.
+- The flock card shows the pay the flock is on (CALM X1.5 ... FRANTIC
+  X0.35, from its peak stress) next to live stress pips, so "calm pays" is
+  on screen while you herd.
+- Onboarding stays in the moment: step 1 marks where to stand ("HERE",
+  behind the flock opposite the pen) and its hint switches to "now walk in
+  slowly" once the dog is there; step 3 arrows into the open gate. One-time
+  tips fire when you stand in front of a flock you are driving, rattle one
+  past 0.55 stress, or split one. Key caps by the dog on desktop and pulsing
+  buttons on touch show the move a hint asks for.
+- The place name moved to the top centre so it never covers the banners;
+  in landscape on touch the hint sits on the bottom edge between the thumbs.
+- Build mode no longer chases the cursor: the view pans only when the
+  cursor nears an edge, so a tap or a mouse pointer stays where it is.
+- Pause menu rows are data (`PAUSE_ITEMS` in `src/ui/title.ts`); a level
+  row (volume) is one entry with `level()`. Settings are saved under
+  `comeby-settings`.
