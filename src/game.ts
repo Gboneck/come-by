@@ -43,7 +43,7 @@ import { clamp, damp } from './util';
 import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
 import { Trials, closeResult, trialNip } from './systems/trials';
-import { jobGates, jobsAction, jobsHint, jobsMorning, jobsUpdate } from './systems/jobs';
+import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
 import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
 import { courseDrawables } from './art/course';
 import type { Drawable } from './art/buildings';
@@ -61,6 +61,7 @@ export interface DayStats {
   goodsValue: number;
   built: number;
   sold: number;
+  lostOwn?: number; // of the losses, your own stock (penned, or let out of a pen)
 }
 
 export interface Banner {
@@ -360,8 +361,8 @@ export class Game {
 
   endDay() {
     if (this.day.phase === 'night') {
-      const lost = Object.values(this.stats.lost).reduce((n, v) => n + (v ?? 0), 0);
-      if (lost === 0) this.totals.nightsNoLoss++;
+      // Wild flocks out in the far pastures are not yours to lose.
+      if (!this.stats.lostOwn) this.totals.nightsNoLoss++;
       // Anyone still being carried off at dawn is dropped where they are.
       for (const p of this.predators) p.dropCarry();
     }
@@ -573,7 +574,13 @@ export class Game {
   canRest(): boolean {
     const d = this.dog;
     if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || !this.inRanch()) return false;
-    return !this.animals.some((a) => !a.pen && !a.gone && !a.trial && Math.hypot(a.x - d.x, a.y - d.y) < 110);
+    // Anything loose right by the dog stops it; further off, only stock that
+    // is moving or upset does (calm strays grazing by the yard do not).
+    return !this.animals.some((a) => {
+      if (a.pen || a.gone || a.trial) return false;
+      const dd = Math.hypot(a.x - d.x, a.y - d.y);
+      return dd < 40 || (dd < 110 && (a.stress > 0.25 || a.pressure > 0.05 || a.fleeT > 0));
+    });
   }
 
   private updateRest(dt: number) {
@@ -620,7 +627,8 @@ export class Game {
       t += 5 + Math.random() * 6;
     }
     this.quietT = 0;
-    this.showBanner('NIGHT FALLS', wolves ? 'WOLVES AND COYOTES ARE ABOUT. GUARD THE STOCK' : 'COYOTES ARE ABOUT. GUARD THE STOCK', 3);
+    jobsNight(this);
+    if (this.weather.sky !== 'storm') this.showBanner('NIGHT FALLS', wolves ? 'WOLVES AND COYOTES ARE ABOUT. GUARD THE STOCK' : 'COYOTES ARE ABOUT. GUARD THE STOCK', 3);
     if (!this.tipsSeen.has('night')) {
       this.tipsSeen.add('night');
       this.tip = { text: this.input.touchMode ? 'BARK AT A COYOTE TO SEND IT RUNNING. PENS IN A BARN\'S RING ARE SAFE.' : 'SPACE TO BARK A COYOTE AWAY (WOLVES NEED TWO). PENS IN A BARN\'S RING ARE SAFE.', t: 9 };
@@ -652,6 +660,7 @@ export class Game {
       },
       onLoss: (a, p) => {
         this.stats.lost[a.sp.id] = (this.stats.lost[a.sp.id] ?? 0) + 1;
+        if (a.home) this.stats.lostOwn = (this.stats.lostOwn ?? 0) + 1;
         this.totals.lost++;
         this.showBanner(`A ${p.kind.toUpperCase()} TOOK A ${a.sp.name.toUpperCase()}`, undefined, 2.2);
         this.audio?.play('howl');
@@ -691,14 +700,14 @@ export class Game {
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
     gates.push(...jobGates(this));
-    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates };
+    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
     const d = this.dog;
     const [kx, ky] = { r: [1, 0], l: [-1, 0], u: [0, -1], d: [0, 1] }[d.face];
     if (ev === 'bark') {
-      barkAt(this.animals, d.x, d.y, d.stats.barkRange);
+      barkAt(this.animals, d.x, d.y, d.stats.barkRange, this.weather);
       this.audio?.play('bark', { x: d.x, y: d.y });
       this.feel.kick(kx, ky, 0.09);
       buzz(this.input.touchMode, 12);

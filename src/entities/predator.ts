@@ -48,6 +48,7 @@ export class Predator {
   private retargetT = 0;
   private path = new PathFollower();
   yelp = 0;
+  bold = 1; // a storm makes them braver: harder to scare, quicker to dig
 
   constructor(public kind: PredKind, public waitT: number) {
     this.returns = kind === 'wolf' ? 1 : 0;
@@ -63,7 +64,7 @@ export class Predator {
 
   scare(amount: number) {
     if (!this.active || this.state === 'flee') return;
-    this.fear += amount;
+    this.fear += amount / this.bold;
     this.yelp = 0.4;
   }
 
@@ -174,7 +175,7 @@ export class Predator {
     }
     // The dog close by is frightening; a lying dog much less so.
     const dDog = Math.hypot(this.x - ctx.dogX, this.y - ctx.dogY);
-    if (dDog < 34 && this.state !== 'flee') this.fear += dt * (ctx.dogLying ? 0.3 : 1) * (this.kind === 'wolf' ? 0.7 : 1.4) * (1.3 - dDog / 34);
+    if (dDog < 34 && this.state !== 'flee') this.fear += (dt * (ctx.dogLying ? 0.3 : 1) * (this.kind === 'wolf' ? 0.7 : 1.4) * (1.3 - dDog / 34)) / this.bold;
     this.fear = Math.max(0, this.fear - dt * 0.1);
     if (this.fear >= 1 && this.state !== 'flee') {
       if (this.carry) this.dropCarry();
@@ -221,11 +222,12 @@ export class Predator {
         this.digT += dt;
         this.face = p.cx > this.x ? 'r' : 'l';
         if (Math.random() < dt * 8) ctx.fx.add({ kind: 'spark', x: this.x + (this.face === 'r' ? 4 : -4), y: this.y + 1, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 20, max: 0.35, color: C.moss });
-        const need = this.digTime * (p.level >= 2 ? 2 : 1);
+        const need = (this.digTime * (p.level >= 2 ? 2 : 1)) / this.bold;
         if (this.digT >= need) {
           const a = p.animals[Math.floor(Math.random() * p.animals.length)];
           p.animals = p.animals.filter((x) => x !== a);
           a.pen = null;
+          a.home = true; // taken from your pen: your loss
           a.carried = true;
           a.x = this.x;
           a.y = this.y;

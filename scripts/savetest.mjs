@@ -48,6 +48,10 @@ await page.evaluate(async () => {
   const loose = new (g.animals[0].constructor)('sheep', 700, 860);
   loose.home = true;
   g.animals.push(loose);
+  // A wet day, fog promised for tomorrow.
+  g.weather.set('rain');
+  g.weather.forecast = 'fog';
+  g.weather.dirX = 0; g.weather.dirY = 1;
 });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(100);
@@ -65,6 +69,7 @@ await page.waitForTimeout(400);
 await step('continued', () => {
   const g = window.game;
   return { look: `${g.look.name}/${g.look.ranch}/${g.look.roof}/${g.look.trim}/${g.look.dog.saddle}/${g.look.dog.neck}`, decor: g.decor.length, mode: g.mode, demo: g.demo, coins: g.coins, tier: g.tier, speed: g.upgrades.speed, walk: g.dog.stats.walk, kennel: g.ranch.buildings.some((b) => b.kind === 'kennel'), penned: g.ranch.pens[0].animals.length, helpers: g.helpers.map((h) => h.name), gatesOpen: g.ranch.regionGates.filter((x) => x.unlocked).length, farmLevel: g.ranch.farmhouse.level,
+    sky: g.weather.sky, forecast: g.weather.forecast, rain: +g.weather.rain.toFixed(2), windDir: [g.weather.dirX, g.weather.dirY],
     won: g.trials.won, lastPrize: g.trials.lastPrizeDay, orders: g.orders.list.map((o) => `${o.id}:${o.yard}:${o.species}:${o.got}/${o.n}`), nextOrder: g.orders.nextId, filled: g.totals.orders, ribbons: g.totals.ribbons, home: g.animals.filter((a) => a.home).length };
 });
 
@@ -73,7 +78,7 @@ await page.evaluate(() => {
   window.game.loading = true; // no save on the way out
   const k = 'comeby-save-v1';
   const d = JSON.parse(localStorage.getItem(k));
-  delete d.orders; delete d.nextOrder; delete d.trials;
+  delete d.orders; delete d.nextOrder; delete d.trials; delete d.weather;
   for (const f of ['orders', 'calmOrders', 'ribbons', 'bestTrial', 'trialRuns', 'legacy']) delete d.totals[f];
   for (const a of d.wild) delete a.home;
   localStorage.setItem(k, JSON.stringify(d));
@@ -84,7 +89,7 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
 await step('old save', () => {
   const g = window.game;
-  return { mode: g.mode, tier: g.tier, coins: g.coins, won: g.trials.won, orders: g.orders.list.length, ribbons: g.totals.ribbons, filled: g.totals.orders, legacy: g.totals.legacy, showGate: g.ranch.regionGates.find((x) => x.region === 'show').unlocked };
+  return { mode: g.mode, tier: g.tier, coins: g.coins, sky: g.weather.sky, forecast: g.weather.forecast, won: g.trials.won, orders: g.orders.list.length, ribbons: g.totals.ribbons, filled: g.totals.orders, legacy: g.totals.legacy, showGate: g.ranch.regionGates.find((x) => x.region === 'show').unlocked };
 });
 if (errors.length) console.log('ERRORS', errors);
 await browser.close();

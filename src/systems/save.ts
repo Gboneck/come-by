@@ -12,6 +12,7 @@ import { morningOrders, type Order } from './orders';
 import type { ClassId } from './trials';
 import { applyLook, readLook, type Look } from '../ui/look';
 import { PIECES, type PlacedDecor } from '../ui/decorbuild';
+import { SKIES, type Sky } from './weather';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
@@ -40,6 +41,7 @@ interface SaveData {
   // Added with customization; older saves get the defaults.
   look?: Partial<Look>;
   decor?: PlacedDecor[];
+  weather?: { sky: Sky; forecast: Sky; dir: [number, number] };
 }
 
 function store(): Storage | null {
@@ -83,6 +85,7 @@ export function saveGame(game: Game) {
     trials: { won: game.trials.won, cups: game.trials.cups, last: game.trials.lastPrizeDay },
     look: game.look,
     decor: game.decor,
+    weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
   };
   try {
     store()?.setItem(KEY, JSON.stringify(data));
@@ -168,6 +171,14 @@ export function loadInto(game: Game): boolean {
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));
+  // Today's sky as it was saved (older saves: a clear day).
+  const w = d.weather;
+  if (w && SKIES.includes(w.sky) && !game.weather.forced) {
+    game.weather.set(w.sky);
+    game.weather.forecast = SKIES.includes(w.forecast) ? w.forecast : 'clear';
+    [game.weather.dirX, game.weather.dirY] = w.dir;
+    game.weather.snap();
+  }
   game.startDay(true, false);
   // The morning's orders as they were; an older save gets fresh ones.
   if (d.orders) {

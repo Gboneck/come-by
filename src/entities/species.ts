@@ -46,7 +46,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     flight: 30, nbr: 26, sep: 6, wCoh: 1.6, wSep: 1.2, wAli: 0.9,
     stressGain: 0.22, stressDecay: 0.12, barkMul: 0.9, barkStress: 0.5, nipMul: 0.6, nipStress: 0.35,
     stubborn: 0, social: 0.03, wander: 0.08, climbs: false, balksWater: false,
-    space: 1, value: 2, good: 'Eggs', goodEvery: 55, goodValue: 1, spawnGroup: [5, 7], coats: 1,
+    space: 1, value: 2, good: 'Eggs', goodEvery: 80, goodValue: 1, spawnGroup: [5, 7], coats: 1,
   },
   // The classic flock.
   sheep: {
@@ -55,7 +55,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     flight: 44, nbr: 32, sep: 9, wCoh: 1.2, wSep: 1.4, wAli: 0.8,
     stressGain: 0.38, stressDecay: 0.09, barkMul: 1, barkStress: 0.7, nipMul: 0.8, nipStress: 0.3,
     stubborn: 0, social: 0.04, wander: 0.12, climbs: false, balksWater: false,
-    space: 2, value: 5, good: 'Wool', goodEvery: 90, goodValue: 4, spawnGroup: [6, 9], coats: 1,
+    space: 2, value: 5, good: 'Wool', goodEvery: 230, goodValue: 4, spawnGroup: [6, 9], coats: 1,
   },
   // Independent; they split up and climb rocks the dog cannot.
   goat: {
@@ -64,7 +64,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     flight: 38, nbr: 34, sep: 10, wCoh: 0.85, wSep: 1.3, wAli: 0.5,
     stressGain: 0.36, stressDecay: 0.1, barkMul: 1, barkStress: 0.7, nipMul: 0.9, nipStress: 0.25,
     stubborn: 0.1, social: 0, wander: 0.15, climbs: true, balksWater: false,
-    space: 2, value: 8, good: 'Cheese', goodEvery: 85, goodValue: 6, spawnGroup: [5, 7], coats: 2, splitter: true,
+    space: 2, value: 8, good: 'Cheese', goodEvery: 220, goodValue: 6, spawnGroup: [5, 7], coats: 2, splitter: true,
   },
   // Heavy and stubborn: only close pressure or a nip really moves them.
   cow: {
@@ -73,7 +73,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     flight: 34, nbr: 40, sep: 14, wCoh: 0.9, wSep: 1.5, wAli: 0.9,
     stressGain: 0.2, stressDecay: 0.08, barkMul: 0.35, barkStress: 0.35, nipMul: 1.6, nipStress: 0.06,
     stubborn: 0.45, social: 0.02, wander: 0.1, climbs: false, balksWater: true,
-    space: 4, value: 14, good: 'Milk', goodEvery: 75, goodValue: 9, spawnGroup: [4, 6], coats: 2, momentum: 1.6,
+    space: 4, value: 14, good: 'Milk', goodEvery: 190, goodValue: 9, spawnGroup: [4, 6], coats: 2, momentum: 1.6,
   },
   // Fast and skittish with huge flight zones: the endgame.
   pony: {

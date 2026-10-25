@@ -13,7 +13,7 @@ import type { PressureSource } from './animal';
 // Helper dogs wear a buttercup bandana so the player's red one stays unique.
 export type HelperMode = 'flank' | 'stay' | 'home';
 export const HELPER_NAMES = ['PIP', 'SKIP'];
-export const HELPER_COSTS = [50, 90];
+export const HELPER_COSTS = [70, 130];
 
 let SPR: DogSprites | null = null;
 const tmp = { x: 0, y: 0 };
