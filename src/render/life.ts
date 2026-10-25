@@ -155,6 +155,13 @@ export class Life {
     return x > v.ox - m && x < v.ox + v.W + m && y > v.oy - m && y < v.oy + v.H + m;
   }
 
+  // Droplets flung from a dog shaking itself off.
+  spray(x: number, y: number) {
+    if (Math.random() < 0.5) return;
+    const a = Math.random() * Math.PI * 2;
+    this.add({ kind: 'drop', x: x + Math.cos(a) * 3, y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 8, z: 4, vz: 20 + Math.random() * 25, max: 1 });
+  }
+
   private add(p: Partial<Bit> & { kind: FxKind; x: number; y: number }) {
     const max = p.max ?? 0.5;
     this.bits.push({ vx: 0, vy: 0, z: 0, vz: 0, size: 1, col: C.wool, life: max, max, ...p });
