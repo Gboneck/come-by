@@ -47,7 +47,7 @@ const SHEEP: Grids = {
     ['..w.ww....', '.wwwwww...', 'wwwwwwww..', 'wwwwwwwwp.', '.swwwwwpp.', '.p.p..p.p.'],
     ['..w.ww....', '.wwwwww...', 'wwwwwwww..', 'wwwwwwww..', '.swwwwwwp.', '.p.p..ppp.'],
   ],
-  stand: [[...SH_BODY, '.p.p..p.p.'], [...SH_LOOK, '.p.p..p.p.']],
+  stand: [[...SH_BODY, '.p.p..p.p.'], [...SH_LOOK, '.p.p..p.p.'], [...SH_ALERT.slice(1), '.p.p..pp..']],
   alert: [...SH_ALERT, '.p.p..p.p.'],
   lie: ['...w.ww....', '..wwwwwwp..', '.wwwwwwwppp', '.wwwwwwwpp.', 'sswwwwwss..'],
   down: [
@@ -78,6 +78,8 @@ const DUCK: Grids = {
   stand: [
     ['...ww.', '...wpy', 'w..ww.', 'wwwww.', '.sww..', '..y...'],
     ['..ww..', '.ypw..', 'w..ww.', 'wwwww.', '.sww..', '..y...'],
+    // A wing stretch.
+    ['.w.ww.', 'ww.wpy', 'w..ww.', 'wwwww.', '.sww..', '..y...'],
   ],
   alert: ['...ww.', '...wpy', '...ww.', 'w..w..', 'wwwww.', '.sww..', '..y...'],
   lie: ['...ww.', '...wpy', 'w..ww.', 'wwwww.', 'ssss..'],
@@ -114,6 +116,8 @@ const GOAT: Grids = {
   stand: [
     [...GT_TOP, '.p.p..p.p.', '.p.p..p.p.'],
     [...GT_LOOK, '.p.p..p.p.', '.p.p..p.p.'],
+    // Head down, horns forward: spoiling for a butt.
+    ['..........', '..........', 'w.........', 'w.....ppp.', 'wwwwwwwwpp', 'wwwwwwwwwp', '.swwwwwwp.', '.p.p..p.p.', 'p..p...p.p'],
   ],
   alert: ['....pp....', '.....p....', '.....wwww.', 'w....wwpww', 'w....ww..p', 'wwwwwwww..', 'wwwwwwww..', '.swwwwws..', '.p.p..p.p.', '.p.p..p.p.'],
   lie: ['....pp....', '.....p....', 'w....wwww.', 'w....wwpww', 'wwwwwwww.p', 'swwwwwwws.'],
@@ -151,6 +155,8 @@ const COW: Grids = {
   stand: [
     [...CW_TOP, '..pp.pp..pp.pp.', '..s..s....s.s..'],
     [...CW_LOOK, '..pp.pp..pp.pp.', '..s..s....s.s..'],
+    // The tail flicked up at a fly.
+    ['...........w.w.', 'p..........ppp.', '.ptttttttttpwpp', '.ppppppppppppwp', '..ppspppppppps.', '..pppppppspp...', '..pspppppppp...', '..ppppppppppp..', '..pp.pp..pp.pp.', '..s..s....s.s..'],
   ],
   alert: [...CW_ALERT, '..pp.pp..pp.pp.', '..s..s....s.s..'],
   lie: ['...........w.w.', '...........ppp.', '..tttttttttpwpp', '.ppppppppppppwp', 'pppppspppppppps', 'p.ppppppppsppp.', '.sppppppppppps.'],
@@ -189,6 +195,8 @@ const PONY: Grids = {
   stand: [
     [...PN_TOP, ...PN_LEGS],
     [...PN_SWISH, ...PN_LEGS],
+    // A forefoot lifted to stamp.
+    [...PN_TOP, '..w.w...w.w...', '.w...w.w..ww..', '.p...p.p......'],
   ],
   alert: [...PN_ALERT, ...PN_LEGS],
   lie: ['..........pp..', '.........pwwp.', '........ppwwwp', '........pww..w', 'pp.wwwwwpw....', 'pwwwwwwwwww...', '.psswwwwwws...'],

@@ -12,8 +12,22 @@ import { skyDarkness, skySlope } from './sky';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
+import { setSeasonLook } from '../art/seasonlook';
+import { idlePose } from './dogidle';
+import { playerDogSprites } from '../art/dogstyle';
+import { drawSpr } from '../gfx/sprite';
 import { yardFire } from '../art/course';
 import { drawSleepingDog, drawSnores } from '../art/dog';
+
+// The player's dog: asleep while resting, its idles (sniff, scratch, the
+// shake-off) when left standing, otherwise its own pose.
+function drawPlayerDog(game: Game, g: CanvasRenderingContext2D) {
+  const d = game.dog;
+  if (sleeping(game)) return drawSleepingDog(g, d.x, d.y, d.face === 'l', game.t);
+  const ip = idlePose(d, d.skin ?? playerDogSprites(), game.t, game.weather.rain > 0.3 && game.season.snow < 0.4, (x, y) => game.life.spray(x, y));
+  if (ip) drawSpr(g, ip.s, d.x + ip.dx, d.y + 2, ip.flip);
+  else d.draw(g);
+}
 
 // Sideways shift of moving things' shadows with the time of day.
 function sunShift(game: Game): number {
@@ -35,7 +49,11 @@ export interface View {
 export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   const { ox, oy, W, H } = v;
   const night = skyDarkness(game.day) > 0.3;
-  g.drawImage(game.baked.ground, ox, oy, W, H, 0, 0, W, H);
+  // The season: recoloured layers (rebuilt only when a step changes) and
+  // the look that roofs, fences and decor read as they draw.
+  setSeasonLook(game.season);
+  game.life.seasons.sync(game.baked, game.season);
+  g.drawImage(game.life.seasons.ground ?? game.baked.ground, ox, oy, W, H, 0, 0, W, H);
   game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
   drawWater(g, game.baked.water, ox, oy, W, H, game.life.vt);
 
@@ -84,7 +102,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     ents.push(decorDrawable(g, d, game.t, tierName, night));
   }
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t, night) });
-  ents.push({ y: game.dog.y, draw: () => (sleeping(game) ? drawSleepingDog(g, game.dog.x, game.dog.y, game.dog.face === 'l', game.t) : game.dog.draw(g)) });
+  ents.push({ y: game.dog.y, draw: () => drawPlayerDog(game, g) });
   for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
   for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => h.draw(g) });
   // Co-op friends' dogs, curled up too while everyone rests.
@@ -95,7 +113,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   if (game.mode === 'build') game.build.drawWorld(game, g);
   g.restore();
 
-  g.drawImage(game.baked.canopy, ox, oy, W, H, 0, 0, W, H);
+  g.drawImage(game.life.seasons.canopy ?? game.baked.canopy, ox, oy, W, H, 0, 0, W, H);
 
   g.save();
   g.translate(-ox, -oy);

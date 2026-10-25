@@ -4,6 +4,7 @@ import { text, textWidth } from '../gfx/font';
 import { hash2 } from '../rng';
 import { penDrawables, type Drawable } from './buildings';
 import { gust } from '../render/wind';
+import { seasonLook, snowCap } from './seasonlook';
 import { skyDarkness } from '../render/sky';
 import type { Game } from '../game';
 import type { CourseGate, Yard } from '../ranch/fixtures';
@@ -179,6 +180,7 @@ function judgeTent(g: CanvasRenderingContext2D, x: number, y: number, t: number,
     px(g, x - hw - 1, y - 20 + r, C.plum);
     px(g, x + hw + 1, y - 20 + r, C.plum);
   }
+  if (seasonLook.snow > 0.3) for (let r = 0; r < 5; r++) for (let dx = -2 - r; dx <= 2 + r; dx++) px(g, x + dx, y - 20 + r, C.wool);
   for (let dx = -13; dx <= 13; dx++) if ((dx + 13) % 3 !== 2) px(g, x + dx, y - 11, Math.floor((dx + 30) / 3) % 2 === 0 ? C.wool : C.teal);
   // Corner poles and guy ropes.
   for (const sx of [-12, 12]) {
@@ -225,6 +227,7 @@ function cart(g: CanvasRenderingContext2D, x: number, y: number, flag: boolean, 
   rect(g, x + 4, b - 16, 8, 1, C.wool);
   rect(g, x + 3, b - 15, 10, 1, C.wool);
   rect(g, x + 2, b - 14, 12, 6, C.wool);
+  snowCap(g, x + 1, b - 9, 15, b - 4);
   rect(g, x + 2, b - 14, 1, 6, C.sage);
   for (const hx of [x + 5, x + 8, x + 11]) rect(g, hx, b - 14, 1, 6, C.sage);
   rect(g, x + 12, b - 13, 2, 4, C.plum);

@@ -7,8 +7,10 @@ import { yardFire } from '../art/course';
 import { hash2 } from '../rng';
 import { drift, stepWind } from './wind';
 import { WeatherFx } from './weather';
+import { SeasonLayers } from './seasons';
 import { skyDarkness } from './sky';
 import { SHALLOW, TS, Ter, WORLD_H, WORLD_W, type SpeciesId } from '../world/map';
+import { seasonLook } from '../art/seasonlook';
 import type { Game } from '../game';
 
 // A living valley, purely for the eye: butterflies and birds (with their
@@ -20,7 +22,7 @@ interface Fly { x: number; y: number; z: number; a: number; t: number; white: bo
 interface Bird { x: number; y: number; vx: number; vy: number; ph: number }
 interface Glow { x: number; y: number; vx: number; vy: number; ph: number; rate: number }
 interface Print { x: number; y: number; shape: number[][]; col: string; life: number; max: number }
-type FxKind = 'anim' | 'ring' | 'drop' | 'smoke' | 'feather' | 'pebble';
+type FxKind = 'anim' | 'ring' | 'drop' | 'smoke' | 'feather' | 'pebble' | 'leaf' | 'breath';
 interface Bit {
   kind: FxKind;
   x: number;
@@ -36,9 +38,9 @@ interface Bit {
   size: number;
   col: string;
 }
-interface Track { x: number; y: number; d: number; side: number; dustT: number; ringT: number }
+interface Track { x: number; y: number; d: number; side: number; dustT: number; ringT: number; breathT: number }
 
-interface Walker { x: number; y: number; vx: number; vy: number }
+interface Walker { x: number; y: number; vx: number; vy: number; face?: string }
 
 // Footprint shapes (pixel offsets from the foot) and stride per walker.
 const PRINT: Record<SpeciesId | 'dog', { shape: number[][]; stride: number; spread: number }> = {
@@ -63,6 +65,7 @@ export class Life {
   private track = new WeakMap<object, Track>();
   private t = 0;
   wx = new WeatherFx();
+  seasons = new SeasonLayers();
   vt = 0; // the valley's own clock: runs up to x12 while the dog rests
 
   update(game: Game, dt: number) {
@@ -104,6 +107,19 @@ export class Life {
       if (!this.near(v, a.x, a.y, 30)) continue;
       this.walk(game, a, a.sp.id, dt, a.sp.run, a.inWater, a.onRock);
     }
+    // Falling leaves in autumn, blossom petals in spring, from the trees in
+    // view, blown on the wind.
+    const se = game.season;
+    const fall = se.leaves * 7 + se.bloom * 2.5;
+    if (fall > 0.2 && Math.random() < fall * dt) {
+      const x = v.ox + Math.random() * v.W, y = v.oy + Math.random() * v.H;
+      const k = game.baked.canopyKind[Math.floor(y) * WORLD_W + Math.floor(x)];
+      if (k === 1 || k === 2) {
+        const autumn = Math.random() * (se.leaves + se.bloom) < se.leaves;
+        const col = autumn ? (Math.random() < 0.6 ? C.butter : Math.random() < 0.6 ? C.plum : C.sage) : Math.random() < 0.8 ? C.wool : C.butter;
+        this.add({ kind: 'leaf', x, y: y + 8, z: 8 + Math.random() * 6, vz: -6 - Math.random() * 4, max: 6 + Math.random() * 3, col });
+      }
+    }
     for (const a of game.animals) if (a.pen && !a.gone && Math.hypot(a.vx, a.vy) > a.sp.run * 0.6 && this.near(v, a.x, a.y, 20)) this.walk(game, a, a.sp.id, dt, a.sp.run, false, false);
     const d = game.dog;
     if (!d.lying) this.walk(game, d, 'dog', dt, d.stats.sprint, false, false);
@@ -123,6 +139,11 @@ export class Life {
           if (b.z < 0) { b.z = 0; b.vz = b.kind === 'pebble' ? -b.vz * 0.3 : 0; if (b.kind === 'drop') b.life = 0; }
           break;
         case 'feather': b.vz = -5; b.vx = Math.sin(b.life * 6) * 10 + drift(b.x, b.y, this.t) * 0.5; if (b.z <= 0) b.vz = 0; break;
+        case 'leaf':
+          if (b.z > 0) b.vx = Math.sin(b.life * 3 + b.x) * 6 + drift(b.x, b.y, this.t) * 0.9;
+          else { b.z = 0; b.vz = 0; b.vx = 0; }
+          break;
+        case 'breath': b.vx *= 0.96; break;
       }
     }
     this.bits = this.bits.filter((b) => b.life > 0);
@@ -134,6 +155,13 @@ export class Life {
     return x > v.ox - m && x < v.ox + v.W + m && y > v.oy - m && y < v.oy + v.H + m;
   }
 
+  // Droplets flung from a dog shaking itself off.
+  spray(x: number, y: number) {
+    if (Math.random() < 0.5) return;
+    const a = Math.random() * Math.PI * 2;
+    this.add({ kind: 'drop', x: x + Math.cos(a) * 3, y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 8, z: 4, vz: 20 + Math.random() * 25, max: 1 });
+  }
+
   private add(p: Partial<Bit> & { kind: FxKind; x: number; y: number }) {
     const max = p.max ?? 0.5;
     this.bits.push({ vx: 0, vy: 0, z: 0, vz: 0, size: 1, col: C.wool, life: max, max, ...p });
@@ -142,7 +170,7 @@ export class Life {
   private walk(game: Game, w: Walker, id: SpeciesId | 'dog', dt: number, run: number, inWater: boolean, onRock: boolean) {
     let tr = this.track.get(w);
     if (!tr) {
-      tr = { x: w.x, y: w.y, d: 0, side: 1, dustT: Math.random() * 0.3, ringT: 0 };
+      tr = { x: w.x, y: w.y, d: 0, side: 1, dustT: Math.random() * 0.3, ringT: 0, breathT: Math.random() * 2 };
       this.track.set(w, tr);
     }
     const step = Math.hypot(w.x - tr.x, w.y - tr.y);
@@ -150,6 +178,14 @@ export class Life {
     tr.y = w.y;
     if (step > 20) return; // teleported (new day, rescue)
     const speed = Math.hypot(w.vx, w.vy);
+    // Winter: breath puffs from the muzzle, quicker when hurrying.
+    if (seasonLook.snow > 0.5 && w.face !== 'u' && (tr.breathT -= dt) <= 0) {
+      tr.breathT = (speed > run * 0.5 ? 0.9 : 1.8) + Math.random() * 0.6;
+      const big = id === 'cow' || id === 'pony' ? 1.6 : id === 'duck' ? 0.6 : 1;
+      const sx = w.face === 'r' ? 1 : w.face === 'l' ? -1 : 0;
+      const fx = w.x + sx * (id === 'dog' ? 6 : 5 * big), fy = w.y - (w.face === 'd' ? 2 : 5 * big);
+      this.add({ kind: 'breath', x: fx, y: fy, vx: sx * 6 + drift(fx, fy, this.t) * 0.3, vy: -4, max: 0.9, size: big });
+    }
     if (speed < 3) return;
     const soil = this.soilAt(game, w.x, w.y);
     const wet = inWater || soil === 3 || (game.map.flagsAtPx(w.x, w.y) & SHALLOW) !== 0;
@@ -174,10 +210,12 @@ export class Life {
     if (tr.d >= P.stride) {
       tr.d = 0;
       tr.side = -tr.side;
-      if (soil === 1 || soil === 2 || (soil === 0 && running && id !== 'duck')) {
+      const snowy = seasonLook.snow > 0.4 && soil !== 4;
+      if (snowy || soil === 1 || soil === 2 || (soil === 0 && running && id !== 'duck')) {
         const px = Math.round(w.x - uy * P.spread * tr.side), py = Math.round(w.y + 1 + ux * P.spread * tr.side);
-        const col = soil === 0 ? C.moss : soil === 1 ? C.sage : C.plum;
-        const max = soil === 0 ? 2.5 : 6;
+        // In snow every step leaves a print, and it lasts.
+        const col = snowy ? C.sage : soil === 0 ? C.moss : soil === 1 ? C.sage : C.plum;
+        const max = snowy ? 9 : soil === 0 ? 2.5 : 6;
         this.prints.push({ x: px, y: py, shape: P.shape, col, life: max, max });
         if (this.prints.length > MAX_PRINTS) this.prints.shift();
       }
@@ -322,6 +360,14 @@ export class Life {
         drawSpr(g, fr[Math.min(fr.length - 1, Math.floor(t * fr.length))], b.x, b.y, b.flip);
       } else if (b.kind === 'drop' || b.kind === 'pebble' || b.kind === 'feather') {
         if (b.z > 1) { g.fillStyle = C.sage; g.fillRect(Math.round(b.x), Math.round(b.y), 1, 1); }
+      } else if (b.kind === 'leaf' && b.z <= 0) {
+        // A fallen leaf lies a while, then is gone.
+        if (b.life < 1 && Math.floor(b.life * 8) % 2) continue;
+        g.fillStyle = b.col;
+        g.fillRect(Math.round(b.x), Math.round(b.y), 1, 1);
+      } else if (b.kind === 'leaf') {
+        g.fillStyle = C.sage;
+        g.fillRect(Math.round(b.x - b.z * 0.4), Math.round(b.y + b.z * 0.2), 1, 1);
       }
     }
     const S = critterSprites();
@@ -341,6 +387,28 @@ export class Life {
     for (const b of this.bits) {
       const k = b.life / b.max;
       switch (b.kind) {
+        case 'leaf': {
+          if (b.z <= 0) break;
+          // Tumbling: a pixel, then a pair, as it turns over.
+          const x = Math.round(b.x), y = Math.round(b.y - b.z);
+          g.fillStyle = b.col;
+          g.fillRect(x, y, Math.floor(b.life * 7) % 2 ? 2 : 1, 1);
+          break;
+        }
+        case 'breath': {
+          // A small cloud of breath that swells and thins away.
+          const t = 1 - k;
+          const r = b.size * (0.4 + t * 1.6);
+          const cx = Math.round(b.x), cy = Math.round(b.y);
+          const R = Math.ceil(r);
+          g.fillStyle = C.wool;
+          for (let dy = -R; dy <= R; dy++)
+            for (let dx = -R; dx <= R; dx++) {
+              if (dx * dx + dy * dy > r * r || hash2(cx + dx, cy + dy, 11) > k * 1.2) continue;
+              g.fillRect(cx + dx, cy + dy, 1, 1);
+            }
+          break;
+        }
         case 'smoke': {
           // A puff that swells and thins out to nothing.
           const t = 1 - k;

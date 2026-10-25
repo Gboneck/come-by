@@ -51,6 +51,7 @@ function buildSheet() {
   return [
     { label: 'DOG SIDE', sprites: [d.sideStand, ...d.side, d.sideBark, d.sideLie] },
     { label: 'DOG GALLOP', sprites: d.gallop },
+    { label: 'DOG IDLE', sprites: [...(d.poses.side.sniff ?? []), ...(d.poses.side.scratch ?? []), ...(d.poses.side.shake ?? [])] },
     { label: 'DOG DOWN', sprites: [d.downStand, ...d.down, d.downBark, d.downLie] },
     { label: 'DOG UP', sprites: [d.upStand, ...d.up, d.upLie] },
     { label: 'HELPER', sprites: [h.sideStand, h.downStand, h.upStand] },
