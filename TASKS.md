@@ -409,6 +409,23 @@ novice trial with a calm handler scores 99-100 with or without the change.
       150ms each way; tune.mjs before/after; the existing loop tests
 - [ ] BRACE class at the Show Ground for two dogs (optional, not started)
 
+## M22 Graphics round three: seasons, character, the title
+- [x] Spring: blossom on the broadleaf trees (some in full flower), fresh
+      flowers in the grass, petals drifting
+- [x] Autumn: crowns turn buttercup, plum and sage (pines stay green),
+      leaf litter, dry grass, leaves falling and blowing on the wind
+- [x] Winter: snow on the ground with sage shade under the trees, trodden
+      paths, ice along the banks, snow on treetops and pine tiers, roofs,
+      chimneys, fences and decor, icicles, snowfall instead of rain, breath
+      puffs, prints everywhere, grass buried, sage outlines on pale animals
+- [x] The dog: sniffs, sits for a scratch, shakes off after the ford or rain
+- [x] Animals: cattle flick their tails, ducks stretch a wing, goats lower
+      their horns, ponies stamp
+- [x] Townsfolk shaded and rim-lit
+- [x] Title screen: the heeler sitting up on a knoll over the valley,
+      following the season
+- [x] Screenshot + console check per season, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1051,3 +1068,22 @@ novice trial with a calm handler scores 99-100 with or without the change.
   same player after its storage read, not before, and says nothing about a
   drop that was already mended. A host who is back before the relay notices
   never shows guests the waiting card; guests just get a fresh world.
+- Seasons are drawn by recolouring the baked ground and canopy into
+  seasonal copies (`src/render/seasons.ts`). The levels are stepped in
+  quarters and a copy is rebuilt only when a step changes (~45ms on a
+  desktop, a few times while a season turns), so a frame costs no more than
+  in summer. Summer draws the original bake. Everything drawn each frame
+  (roofs, fences, decor, sway) reads `seasonLook` (`src/art/seasonlook.ts`),
+  set once a frame from `game.season`.
+- Winter snow lets old grass poke through in small 2x2 tufts (~7%), so the
+  snow has texture and pale things standing on it still read; pale coats
+  get a sage outline on snow. Shade under trees stays sage: the snow has
+  shadows. Paths keep only a thin dusting: they look trodden.
+- Rain falls as snow when there is snow on the ground; puddles, splashes,
+  the wet ground and cloud shadows are off in the snow.
+- The dog's idles (`src/render/dogidle.ts`) are render-only: standing still
+  a few seconds it sniffs or scratches, leaving the ford (or after a while
+  in the rain) it shakes off with spray. Any move ends them at once.
+- The title illustration (`src/art/title.ts`) is painted once per size and
+  season into a canvas; only the tail, the falling things, butterflies and
+  breath draw each frame. It replaces the small trotting dog by the logo.
