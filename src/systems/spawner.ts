@@ -7,6 +7,9 @@ import { ri } from '../rng';
 // How many groups a region holds in the morning, by day and tier.
 export function groupsFor(reg: RegionDef, day: number, tier: number): number {
   const age = tier - reg.tier; // tiers since this region opened
+  // A region that has just opened always has two flocks out, so its pen goal
+  // can be met on the day it opens.
+  if (age === 0 && reg.tier > 1) return 2;
   return Math.min(3, 1 + Math.floor(age / 2) + (day > 2 ? 1 : 0));
 }
 

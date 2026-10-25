@@ -2,7 +2,7 @@ import { C } from './palette';
 import type { Screen } from './gfx/screen';
 import type { Input } from './input';
 import { UI } from './ui/ui';
-import { drawTouchControls } from './ui/touch';
+import { drawTouchControls, touchLayout } from './ui/touch';
 import { Particles } from './systems/particles';
 import { Dog } from './entities/dog';
 import { Animal, barkAt, findGroups, nipFrom, updateHerd, type Group, type HerdCtx, type PressureSource } from './entities/animal';
@@ -13,6 +13,9 @@ import type { Pen } from './ranch/buildings';
 import { DayCycle } from './systems/day';
 import { spawnMorning } from './systems/spawner';
 import { NightOverlay } from './render/night';
+import { Life } from './render/life';
+import { Folk } from './entities/folk';
+import { drawSpeech } from './ui/speech';
 import { drawWorld } from './render/world';
 import { drawHud } from './ui/hud';
 import { drawSummary, type Summary } from './ui/summary';
@@ -26,12 +29,28 @@ import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
 import { Helper, HELPER_COSTS, HELPER_NAMES, type HelperMode } from './entities/helper';
 import { CALLS, type Sound } from './systems/audio';
-import { saveGame } from './systems/save';
-import { drawPause, drawTitle, titleKeys, type MenuState } from './ui/title';
+import { saveGame, saveInfo } from './systems/save';
+import { applyLook, defaultLook, readLook, type Look } from './ui/look';
+import { drawLook, lookKeys, type LookFrom } from './ui/lookui';
+import { decorDrawables, type PlacedDecor } from './ui/decorbuild';
+import { stopTyping } from './ui/textfield';
+import { drawPause, drawTitle, pauseKeys, titleKeys, type MenuState } from './ui/title';
+import { Feel } from './ui/feel';
+import { buzz } from './ui/settings';
+import { updateCoach } from './ui/coach';
 import { botStep } from './bot';
 import { clamp, damp } from './util';
+import { Orders } from './systems/orders';
+import { Weather } from './systems/weather';
+import { Trials, closeResult, trialNip } from './systems/trials';
+import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
+import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
+import { courseDrawables } from './art/course';
+import type { Drawable } from './art/buildings';
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause';
+const REST_MAX = 12; // a rested hour of daylight takes about 2s
+
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look';
 export type Request = 'new' | 'continue' | 'title' | null;
 
 export interface DayStats {
@@ -42,6 +61,7 @@ export interface DayStats {
   goodsValue: number;
   built: number;
   sold: number;
+  lostOwn?: number; // of the losses, your own stock (penned, or let out of a pen)
 }
 
 export interface Banner {
@@ -56,6 +76,7 @@ const REGION_TIPS: Partial<Record<string, string>> = {
   rocky: 'GOATS SPLIT UP AND CLIMB ROCKS YOU CANNOT. LIE DOWN, LET THEM COME DOWN.',
   ford: 'CATTLE ONLY MOVE FOR CLOSE PRESSURE OR A NIP (E). THEY BALK AT WATER.',
   high: 'PONIES SPOOK FROM FAR OFF. WORK WIDE, SLOW AND QUIET.',
+  show: 'SHEEPDOG TRIALS EVERY 3RD DAY. STAND BY THE CROOK AND NIP (E) TO START A RUN.',
 };
 
 const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0, built: 0, sold: 0 });
@@ -81,6 +102,8 @@ export class Game {
   groups: Group[] = [];
   fx = new Particles();
   night = new NightOverlay();
+  life = new Life();
+  folk = new Folk(); // the rancher and the valley's townsfolk
   cam = { x: 0, y: 0 };
   t = 0;
   mode: Mode = 'play';
@@ -113,12 +136,30 @@ export class Game {
   won = false;
   predators: Predator[] = [];
   private quietT = 0;
+  // The player's choices (dog and ranch looks) and the decor they placed.
+  look: Look = defaultLook();
+  decor: PlacedDecor[] = [];
+  lookFrom: LookFrom = 'pause';
+  lookSel = 0;
+  private lookBack: Mode = 'play';
   tut = 0; // tutorial step
   tutT = 0;
   private tierCheckT = 0;
+  orders = new Orders();
+  trials = new Trials();
+  feel = new Feel();
+  weather = new Weather();
+  rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
+  private restT = 0;
+  private idleT = 0;
+  summaryT = 0; // time the end-of-day card has been up
+  private buffered: Partial<Record<'bark' | 'nip', number>> = {};
 
   constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null } = {}) {
     this.demo = !!opts.demo;
+    // Behind the title, the saved dog does the herding.
+    if (this.demo) this.look = readLook(saveInfo()?.look);
+    applyLook(this.look);
     this.audio = opts.audio ?? null;
     this.g = screen.g;
     this.ui = new UI(input);
@@ -214,7 +255,11 @@ export class Game {
     this.ranch.restamp();
     if (fresh) {
       const t = tierOf(n);
-      this.showBanner(`TIER ${n}: ${t.name}`, t.blurb, 4.5);
+      // The tier card is the banner; whatever banner was up waits behind it.
+      this.feel.tierCard = { n, name: t.name, blurb: t.blurb, brings: t.brings, t: 5.5, max: 5.5 };
+      this.feel.confetti(this.screen.W);
+      this.feel.shake(1, 0.35);
+      buzz(this.input.touchMode, [30, 60, 30, 60, 90]);
       this.audio?.play('tierup');
       // The new region's animals turn up straight away.
       this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => r.tier === n));
@@ -293,6 +338,9 @@ export class Game {
     this.dog.vx = this.dog.vy = 0;
     this.dog.face = 'd';
     this.dog.stamina = this.dog.stats.stamina;
+    this.rest = 1;
+    this.restT = 0;
+    this.idleT = 0;
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     for (const a of this.animals) a.stress *= 0.3;
@@ -307,13 +355,14 @@ export class Game {
     this.mode = 'play';
     this.summary = null;
     this.showBanner(`DAY ${this.day.day}`, 'BRING THEM HOME BEFORE DUSK', 2.6);
+    jobsMorning(this, spawn);
     saveGame(this);
   }
 
   endDay() {
     if (this.day.phase === 'night') {
-      const lost = Object.values(this.stats.lost).reduce((n, v) => n + (v ?? 0), 0);
-      if (lost === 0) this.totals.nightsNoLoss++;
+      // Wild flocks out in the far pastures are not yours to lose.
+      if (!this.stats.lostOwn) this.totals.nightsNoLoss++;
       // Anyone still being carried off at dawn is dropped where they are.
       for (const p of this.predators) p.dropCarry();
     }
@@ -334,7 +383,20 @@ export class Game {
       buildable: this.buildable(),
     };
     this.mode = 'summary';
+    this.summaryT = 0;
     this.input.clearQueue();
+  }
+
+  // Day transitions go through a dithered plum fade.
+  fadeTo(act: () => void) {
+    if (this.feel.fadeTo(act)) this.input.clearQueue();
+  }
+
+  quitToTitle() {
+    this.fadeTo(() => {
+      saveGame(this);
+      this.request = 'title';
+    });
   }
 
   showBanner(big: string, small?: string, max = 2.2) {
@@ -344,30 +406,41 @@ export class Game {
   // ---- Update ----
 
   update(dt: number) {
-    this.t += dt;
-    if (this.audio) {
-      this.audio.lx = this.cam.x;
-      this.audio.ly = this.cam.y;
-      if (this.mode === 'play' || this.mode === 'title') this.audio.ambient(dt, this.day.phase === 'night');
+    this.audio?.tick(this, dt); // keeps the music scheduled through fades and hit-pause
+    this.feel.update(dt, this.coins, this.screen.H);
+    if (this.feel.fading) return;
+    // A beat of hit-pause when a nip lands (never under the tuning bot).
+    if (this.mode === 'play' && this.feel.hitstop > 0 && !this.input.override) {
+      this.feel.hitstop -= dt;
+      for (const a of ['bark', 'nip'] as const) if (this.input.pressed(a)) this.buffered[a] = 0.25;
+      return;
     }
+    this.t += dt;
     if (this.input.pressed('mute') && this.audio) this.audio.setMuted(!this.audio.muted);
     if (this.mode === 'title') {
       this.updateDemo(dt);
       const act = titleKeys(this, this.menu);
-      if (act) this.request = act;
+      if (act) this.startGame(act);
       return;
     }
     if (this.mode === 'pause') {
-      if (this.input.pressed('up')) this.pauseSel = (this.pauseSel + 2) % 3;
-      if (this.input.pressed('down')) this.pauseSel = (this.pauseSel + 1) % 3;
-      if (this.input.pressed('pause') || this.input.pressed('cancel')) this.mode = 'play';
-      else if (this.input.pressed('confirm')) this.pauseAction(['resume', 'sound', 'quit'][this.pauseSel] as 'resume' | 'sound' | 'quit');
+      pauseKeys(this);
+      return;
+    }
+    if (this.mode === 'look') {
+      lookKeys(this);
       return;
     }
     if (this.mode === 'summary') {
       this.fx.update(dt);
-      if (this.input.pressed('build')) this.enterBuild(true);
-      else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.startDay();
+      // A beat before the card takes input, so a bark held through dusk
+      // does not skip the day's choice.
+      if ((this.summaryT += dt) < 0.6) {
+        this.input.clearQueue();
+        return;
+      }
+      if (this.input.pressed('build')) this.fadeTo(() => this.enterBuild(true));
+      else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.fadeTo(() => this.startDay());
       return;
     }
     if (this.mode === 'ledger') {
@@ -376,14 +449,31 @@ export class Game {
     }
     if (this.mode === 'build') {
       this.fx.update(dt);
+      this.life.update(this, dt);
       this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
-      if (this.build.update(this, dt) === 'exit') this.exitBuild();
+      if (this.build.update(this, dt) === 'exit') {
+        if (this.buildFromSummary) this.fadeTo(() => this.exitBuild());
+        else this.exitBuild();
+      }
+      // Keep the cursor in view without chasing it, so a tap or a mouse
+      // pointer stays put; the view pans when the cursor nears an edge.
       const k = damp(6, dt);
-      this.cam.x += ((this.build.cx + 0.5) * 8 - this.cam.x) * k;
-      this.cam.y += ((this.build.cy + 0.5) * 8 - this.cam.y) * k;
       const { W, H } = this.screen;
+      const bx = (this.build.cx + 0.5) * 8, by = (this.build.cy + 0.5) * 8;
+      const mx = Math.min(W / 2 - 4, 28), mt = Math.min(H / 2 - 4, 40), mb = Math.min(H / 2 - 4, 76);
+      this.cam.x += (clamp(this.cam.x, bx - W / 2 + mx, bx + W / 2 - mx) - this.cam.x) * k;
+      this.cam.y += (clamp(this.cam.y, by - H / 2 + mb, by + H / 2 - mt) - this.cam.y) * k;
       this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
       this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+      return;
+    }
+    if (this.trials.result) {
+      // Trial result card: everything waits until it is closed.
+      this.fx.update(dt);
+      // A beat before it takes input, so a press at the end of the run
+      // does not skip the judge's card.
+      if (resultAge(this, dt) < RESULT_READY) this.input.clearQueue();
+      else if (this.input.pressed('confirm') || this.input.pressed('bark') || this.input.pressed('cancel')) closeResult(this);
       return;
     }
     if (this.input.pressed('ledger')) {
@@ -398,11 +488,13 @@ export class Game {
       this.input.clearQueue();
       return;
     }
-    if ((this.tierCheckT -= dt) <= 0) {
+    // The tier-up waits for a "that'll do" moment to finish playing.
+    if ((this.tierCheckT -= dt) <= 0 && this.feel.moment <= 0 && !this.ranch.pens.some((p) => p.batch.length)) {
       this.tierCheckT = 0.5;
       this.checkTier();
     }
     this.updateTutorial(dt);
+    updateCoach(this, dt);
     if (this.input.pressed('build')) {
       if (this.inRanch()) {
         this.enterBuild();
@@ -410,7 +502,9 @@ export class Game {
       }
       this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
-    const dayEv = this.day.update(dt);
+    this.updateRest(dt);
+    this.weather.update(dt);
+    const dayEv = this.trials.run ? null : this.day.update(dt * this.rest); // the clock waits for a trial run
     if (dayEv === 'dusk') {
       this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);
       this.audio?.play('dusk');
@@ -418,12 +512,12 @@ export class Game {
     if (dayEv === 'nightfall') {
       if (this.tier >= 2) this.startNight();
       else {
-        this.endDay();
+        this.fadeTo(() => this.endDay());
         return;
       }
     }
     if (dayEv === 'dawn') {
-      this.endDay();
+      this.fadeTo(() => this.endDay());
       return;
     }
     if (this.day.phase === 'night') {
@@ -431,13 +525,16 @@ export class Game {
       if (this.mode !== 'play') return;
     }
 
+    this.bufferPress('bark', this.dog.barkCd, dt);
+    this.bufferPress('nip', this.dog.nipCd, dt);
     this.dog.update(dt, this.input, this.map, this.fx);
     for (const ev of this.dog.events) this.onDogEvent(ev);
     this.dog.events.length = 0;
     updateHerd(this.animals, this.herdCtx(), dt);
     const night = this.day.phase === 'night';
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
-    if (!night) updateProduce(this, dt);
+    jobsUpdate(this, dt);
+    if (!night && !this.trials.run) updateProduce(this, dt * this.rest);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
       this.groupT = 0.25;
@@ -449,6 +546,8 @@ export class Game {
     this.helpers.forEach((h, i) => h.update(this, dt, i));
     this.animalCalls(dt);
     this.fx.update(dt);
+    this.life.update(this, dt);
+    this.folk.update(this, dt);
     this.updateCamera(dt);
 
     const reg = this.map.regionAt(this.dog.x, this.dog.y);
@@ -458,12 +557,52 @@ export class Game {
       const tip = REGION_TIPS[reg.id];
       if (tip && !this.tipsSeen.has(reg.id) && reg.tier <= this.tier) {
         this.tipsSeen.add(reg.id);
-        this.tip = { text: this.input.touchMode ? tip.replace('(E)', '') : tip, t: 8 };
+        this.tip = { text: this.input.touchMode ? tip.replace(' (E)', '') : tip, t: 8 };
       }
     }
     if (this.tip && (this.tip.t -= dt) <= 0) this.tip = null;
     if (this.place && (this.place.t -= dt) <= 0) this.place = null;
-    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    if (this.banner && !this.feel.tierCard && (this.banner.t -= dt) <= 0) this.banner = null;
+  }
+
+  // ---- Resting ----
+  //
+  // Lying down on the ranch with no loose stock about rests the dog: the
+  // clock (and the goods in the pens) speed up, so waiting for dusk or for
+  // the eggs is never dead time. Getting up, or anything wandering close,
+  // ends it at once. Never at night or under the bot.
+  canRest(): boolean {
+    const d = this.dog;
+    if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || !this.inRanch()) return false;
+    // Anything loose right by the dog stops it; further off, only stock that
+    // is moving or upset does (calm strays grazing by the yard do not).
+    return !this.animals.some((a) => {
+      if (a.pen || a.gone || a.trial) return false;
+      const dd = Math.hypot(a.x - d.x, a.y - d.y);
+      return dd < 40 || (dd < 110 && (a.stress > 0.25 || a.pressure > 0.05 || a.fleeT > 0));
+    });
+  }
+
+  private updateRest(dt: number) {
+    if (!this.canRest()) {
+      this.restT = 0;
+      this.rest = 1;
+      // Standing about on a quiet ranch: say once that resting is a thing.
+      // (Only once nothing is left out to herd: a morning with stock waiting
+      // is no time to tell anyone to rest.)
+      const idle = this.inRanch() && this.day.phase !== 'night' && this.dog.speed < 4 && !this.groups.some((gr) => !gr.members[0].trial);
+      this.idleT = idle ? this.idleT + dt : 0;
+      if (this.idleT > 4 && this.tut >= 7 && !this.tipsSeen.has('rest') && !this.input.override) {
+        this.tipsSeen.add('rest');
+        this.tip = { text: this.restHint(), t: 7 };
+      }
+      return;
+    }
+    this.restT += dt;
+    // A second of lying still, then the clock eases up to full speed.
+    const k = clamp((this.restT - 1) / 1.5, 0, 1);
+    this.rest = 1 + (REST_MAX - 1) * k * k * (3 - 2 * k);
+    // The dog curls up asleep and the valley runs fast (render/world.ts).
   }
 
   // ---- Night ----
@@ -488,7 +627,8 @@ export class Game {
       t += 5 + Math.random() * 6;
     }
     this.quietT = 0;
-    this.showBanner('NIGHT FALLS', wolves ? 'WOLVES AND COYOTES ARE ABOUT. GUARD THE STOCK' : 'COYOTES ARE ABOUT. GUARD THE STOCK', 3);
+    jobsNight(this);
+    if (this.weather.sky !== 'storm') this.showBanner('NIGHT FALLS', wolves ? 'WOLVES AND COYOTES ARE ABOUT. GUARD THE STOCK' : 'COYOTES ARE ABOUT. GUARD THE STOCK', 3);
     if (!this.tipsSeen.has('night')) {
       this.tipsSeen.add('night');
       this.tip = { text: this.input.touchMode ? 'BARK AT A COYOTE TO SEND IT RUNNING. PENS IN A BARN\'S RING ARE SAFE.' : 'SPACE TO BARK A COYOTE AWAY (WOLVES NEED TWO). PENS IN A BARN\'S RING ARE SAFE.', t: 9 };
@@ -520,6 +660,7 @@ export class Game {
       },
       onLoss: (a, p) => {
         this.stats.lost[a.sp.id] = (this.stats.lost[a.sp.id] ?? 0) + 1;
+        if (a.home) this.stats.lostOwn = (this.stats.lostOwn ?? 0) + 1;
         this.totals.lost++;
         this.showBanner(`A ${p.kind.toUpperCase()} TOOK A ${a.sp.name.toUpperCase()}`, undefined, 2.2);
         this.audio?.play('howl');
@@ -542,7 +683,7 @@ export class Game {
     const left = this.predators.some((p) => p.state !== 'gone');
     if (!left) {
       this.quietT += dt;
-      if (this.quietT > 2.5) this.endDay();
+      if (this.quietT > 2.5) this.fadeTo(() => this.endDay());
     }
   }
 
@@ -553,18 +694,23 @@ export class Game {
     for (const p of this.predators)
       if (p.active && p.state !== 'flee') this.sources.push({ x: p.x, y: p.y, vx: p.vx, vy: p.vy, strength: 1.3, range: 1.5, kind: 'predator', lying: false });
     for (const h of this.helpers) this.sources.push(h.source());
+    this.sources.push(...this.folk.sources());
     const gates = this.ranch.pens.map((p: Pen) => {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
-    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates };
+    gates.push(...jobGates(this));
+    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
     const d = this.dog;
+    const [kx, ky] = { r: [1, 0], l: [-1, 0], u: [0, -1], d: [0, 1] }[d.face];
     if (ev === 'bark') {
-      barkAt(this.animals, d.x, d.y, d.stats.barkRange);
+      barkAt(this.animals, d.x, d.y, d.stats.barkRange, this.weather);
       this.audio?.play('bark', { x: d.x, y: d.y });
+      this.feel.kick(kx, ky, 0.09);
+      buzz(this.input.touchMode, 12);
       // Something in range answers back.
       const near = this.animals.filter((a) => !a.gone && !a.carried && Math.hypot(a.x - d.x, a.y - d.y) < d.stats.barkRange);
       if (near.length) {
@@ -576,6 +722,7 @@ export class Game {
         if (dd < d.stats.barkRange * 1.15) p.scare((p.kind === 'wolf' ? 0.55 : 1.05) * (1 - (dd / (d.stats.barkRange * 1.15)) * 0.4));
       }
     } else {
+      if (jobsAction(this)) return; // E at the trial post or a pen gate
       for (const p of this.predators) {
         const dx = p.x - d.x, dy = p.y - d.y, dd = Math.hypot(dx, dy);
         if (p.active && dd < 12 && (dx * d.hx + dy * d.hy) / (dd || 1) > 0) p.scare(1.5 * d.stats.nipPower);
@@ -583,6 +730,10 @@ export class Game {
       const hit = nipFrom(this.animals, d.x + d.hx * 4, d.y + d.hy * 4, d.hx, d.hy, d.stats.nipPower);
       this.audio?.play('nip', { x: d.x, y: d.y });
       if (hit) setTimeout(() => this.audio?.play(CALLS[hit.sp.id], { x: hit.x, y: hit.y }), 60);
+      if (hit) trialNip(this, hit);
+      this.feel.kick(Math.round(d.hx * 2), Math.round(d.hy * 2), hit ? 0.14 : 0.08);
+      if (hit) this.feel.hitstop = 0.06;
+      buzz(this.input.touchMode, hit ? 24 : 10);
       const nx = d.x + d.hx * 7, ny = d.y + d.hy * 7 - 2;
       for (let i = 0; i < 4; i++)
         this.fx.add({ kind: 'spark', x: nx, y: ny, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, max: 0.18, color: hit ? C.butter : C.wool });
@@ -592,6 +743,12 @@ export class Game {
   private onRanchEvent(ev: RanchEvent) {
     if (ev.kind === 'penned') {
       const a = ev.animal;
+      if (a.home) {
+        // Your own stock coming back: no delivery pay.
+        a.deliveryValue = 0;
+        this.fx.float(a.x, a.y - 10, 'HOME', C.wool, 0.9);
+        return;
+      }
       const { mult } = calmRating(a.peakStress);
       const value = Math.max(1, Math.round(a.sp.value * mult));
       a.deliveryValue = value;
@@ -599,32 +756,68 @@ export class Game {
       this.stats.deliveredValue += value;
       this.stats.delivered[a.sp.id] = (this.stats.delivered[a.sp.id] ?? 0) + 1;
       this.totals.delivered[a.sp.id] = (this.totals.delivered[a.sp.id] ?? 0) + 1;
-      if (this.tut === 3) this.tut = 4;
+      if (this.tut === 3) { this.tut = 4; this.tutT = 0; }
       if (mult > 1) this.stats.calm++;
       this.fx.float(a.x, a.y - 10, `+${value}$`, C.butter, 1.1);
       this.audio?.play('coin', { x: a.x, y: a.y, vol: 0.7 });
+      const v = this.view();
+      this.feel.flyCoins(a.x - v.ox, a.y - v.oy - 10, value, 2);
     } else if (ev.kind === 'shut') {
       this.audio?.play('gate', { x: ev.pen.cx, y: ev.pen.cy });
-      setTimeout(() => this.audio?.play('thatlldo'), 180);
       const n = ev.batch.length;
       const avg = ev.batch.reduce((s, a) => s + a.peakStress, 0) / Math.max(1, n);
       const { label } = calmRating(avg);
+      this.audio?.thatllDo(label);
       if (label === 'CALM') this.totals.calmBatches++;
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
-      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}  +${value}$`, 2.8);
+      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}`, 2.8);
+      this.feel.moment = 1.8;
+      this.feel.kick(0, 2, 0.16);
+      buzz(this.input.touchMode, [18, 50, 36]);
       const gp = ev.pen.gatePoint(0);
+      this.fx.ring(gp.x, gp.y - 2, 26, C.butter, 0.4, 4);
       for (let i = 0; i < 10; i++)
         this.fx.add({ kind: 'spark', x: gp.x, y: gp.y - 4, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, max: 0.5, color: C.butter });
     }
   }
 
-  pauseAction(a: 'resume' | 'sound' | 'quit') {
-    if (a === 'resume') this.mode = 'play';
-    else if (a === 'sound') this.audio?.setMuted(!this.audio.muted);
-    else {
-      saveGame(this);
-      this.request = 'title';
+  // The dog's look screen: at a new game, from the kennel, from the pause menu.
+  openLook(from: LookFrom) {
+    this.lookFrom = from;
+    if (this.mode !== 'look') this.lookBack = this.mode;
+    this.mode = 'look';
+    this.lookSel = 0;
+    this.input.clearQueue();
+  }
+
+  closeLook() {
+    stopTyping();
+    if (!this.look.name.trim()) this.look.name = defaultLook().name;
+    applyLook(this.look);
+    this.mode = this.lookFrom === 'new' ? 'play' : this.lookBack;
+    this.input.clearQueue();
+    saveGame(this);
+  }
+
+  // Title menu choice: fade out, then main.ts swaps in the new game.
+  startGame(act: 'new' | 'continue') {
+    this.fadeTo(() => (this.request = act));
+  }
+
+  // A bark or nip pressed just before the dog is ready still happens.
+  private bufferPress(a: 'bark' | 'nip', cd: number, dt: number) {
+    const b = this.buffered[a] ?? 0;
+    if (this.input.peek(a)) {
+      if (cd > 0) {
+        this.input.pressed(a);
+        if (cd < 0.2) this.buffered[a] = 0.25;
+      }
+    } else if (b > 0) {
+      if (cd <= 0) {
+        this.input.push(a);
+        this.buffered[a] = 0;
+      } else this.buffered[a] = b - dt;
     }
   }
 
@@ -649,6 +842,8 @@ export class Game {
       this.groupT = 0.25;
     }
     this.fx.update(dt);
+    this.life.update(this, dt);
+    this.folk.update(this, dt);
     const k = damp(1.5, dt);
     this.cam.x += ((cx + this.dog.x) / 2 - this.cam.x) * k;
     this.cam.y += ((cy + this.dog.y) / 2 + 20 - this.cam.y) * k;
@@ -678,7 +873,9 @@ export class Game {
     const step = (n: number) => { this.tut = n; this.tutT = 0; };
     switch (this.tut) {
       case 0: if (near) step(1); break;
-      case 1: if (this.animals.some((a) => !a.pen && a.pressure > 0.15)) { if (this.tutT > 4) step(2); } else this.tutT = Math.min(this.tutT, 3.5); break;
+      // Four seconds of actually pushing them, so the "walk in slowly" hint
+      // has time to be read and tried.
+      case 1: if (this.animals.some((a) => !a.pen && a.pressure > 0.15)) { if (this.tutT > 4) step(2); } else this.tutT = Math.max(0, this.tutT - 2 * dt); break;
       case 2: if ((this.dog.lying && this.tutT > 1) || this.tutT > 14) step(3); break;
       case 3: break; // advanced by the first penned animal
       case 4: if (this.tutT > 5) step(5); break;
@@ -690,8 +887,15 @@ export class Game {
   tip: { text: string; t: number } | null = null;
   tipsSeen = new Set<string>();
 
+  restHint() {
+    return this.input.touchMode ? 'HOLD DOWN ON THE RANCH TO REST: THE DAY PASSES QUICKLY.' : 'HOLD Q ON THE RANCH TO REST: THE DAY PASSES QUICKLY.';
+  }
+
   hint(): string | null {
+    if (this.rest > 1.5) return 'RESTING... THE PENS KEEP MAKING GOODS.';
     if (this.tip) return this.tip.text;
+    const jh = jobsHint(this);
+    if (jh) return jh;
     const touch = this.input.touchMode;
     switch (this.tut) {
       case 0: return 'YOUR DUCKS ARE OUT IN THE HOME MEADOW. HEAD EAST!';
@@ -700,7 +904,10 @@ export class Game {
       case 3: return 'EASE THEM IN THROUGH THE OPEN PEN GATE.';
       case 4: return 'CALM DRIVES PAY X1.5. A BARK MOVES THEM FAST BUT SCARES THEM.';
       case 5: return touch ? 'TAP YOUR GOAL (TOP LEFT) FOR THE RANCH LEDGER.' : 'TAB OPENS THE RANCH LEDGER: GOALS AND WHAT COMES NEXT.';
-      case 6: return this.coins >= 20 ? (touch ? 'YOU CAN AFFORD A KENNEL: TAP BUILD AT THE RANCH.' : 'YOU CAN AFFORD A KENNEL: PRESS B AT THE RANCH.') : null;
+      case 6:
+        if (this.coins >= 20) return touch ? 'YOU CAN AFFORD A KENNEL: TAP BUILD AT THE RANCH.' : 'YOU CAN AFFORD A KENNEL: PRESS B AT THE RANCH.';
+        // Not enough yet: the eggs sell at the end of the day.
+        return this.day.phase === 'night' ? null : `GOODS SELL AT DAY'S END. ${this.restHint()}`;
     }
     return null;
   }
@@ -720,23 +927,44 @@ export class Game {
     const d = this.dog;
     let tx = d.x + d.vx * 0.35;
     let ty = d.y + d.vy * 0.35;
-    // Lean towards the flock you are working so you can see both.
-    const gr = this.nearestGroup(110);
+    // Lean towards the flock you are working so you can see both (on a
+    // trial outrun, from the post).
+    const gr = this.nearestGroup(this.trials.run ? 200 : 110);
     if (gr) {
       tx += (gr.x - d.x) * 0.3;
       ty += (gr.y - d.y) * 0.3;
     }
+    // On a phone held upright, frame the dog in the field above the thumbs.
+    const { W, H } = this.screen;
+    const band = this.thumbBand();
+    if (H > W) ty += band / 2;
     const k = damp(4, dt);
     this.cam.x += (tx - this.cam.x) * k;
     this.cam.y += (ty - this.cam.y) * k;
-    const { W, H } = this.screen;
     this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
-    this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+    this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2 + band);
+  }
+
+  // Height of the strip the touch controls cover at the bottom. The view may
+  // run that far past the world's bottom edge, so nothing down there (the
+  // Show Ground's crook and pen) is ever stuck under a thumb.
+  thumbBand(): number {
+    if (!this.input.touchMode || this.mode === 'title') return 0;
+    const { W, H } = this.screen;
+    return Math.max(0, H - touchLayout(this, W, H).top);
   }
 
   view() {
     const { W, H } = this.screen;
-    return { ox: Math.round(this.cam.x - W / 2), oy: Math.round(this.cam.y - H / 2), W, H };
+    const k = this.feel.offset();
+    const ox = clamp(Math.round(this.cam.x - W / 2) + k.x, 0, WORLD_W - W);
+    const oy = clamp(Math.round(this.cam.y - H / 2) + k.y, 0, WORLD_H - H + this.thumbBand());
+    return { ox, oy, W, H };
+  }
+
+  // Trial course, buyers' yards and carts, for the y-sorted world layer.
+  extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
+    return [...courseDrawables(this, g), ...decorDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.
@@ -755,30 +983,35 @@ export class Game {
   render() {
     const g = this.g;
     const v = this.view();
+    // Past the world's bottom edge (phones, see thumbBand) is more forest.
+    if (v.oy + v.H > WORLD_H) {
+      g.fillStyle = C.teal;
+      g.fillRect(0, WORLD_H - v.oy, v.W, v.oy + v.H - WORLD_H);
+    }
     drawWorld(this, g, v);
+    drawSpeech(this, g, v);
     this.input.uiHeld.clear();
     if (this.mode === 'title') {
       const act = drawTitle(this, g, v.W, v.H, this.menu);
-      if (act) this.request = act;
-      return;
-    }
-    if (this.mode === 'pause') {
+      if (act) this.startGame(act);
+    } else if (this.mode === 'pause') {
       drawHud(this, g, v.W, v.H);
-      const a = drawPause(this, g, v.W, v.H, this.pauseSel);
-      if (a) this.pauseAction(a);
-      return;
-    }
-    if (this.mode === 'play') {
+      drawPause(this, g, v.W, v.H);
+    } else if (this.mode === 'play') {
       drawHud(this, g, v.W, v.H);
-      drawTouchControls(g, this.ui, this.input, v.W, v.H);
+      if (drawJobs(this, g, v.W, v.H)) this.input.push('confirm');
+      if (!this.trials.result) drawTouchControls(this, g, v.W, v.H);
     } else if (this.mode === 'summary' && this.summary) {
-      const r = drawSummary(g, this.ui, this.summary, v.W, v.H, this.t);
+      const r = drawSummary(this, g, v.W, v.H);
       if (r === 'next') this.input.push('confirm');
       if (r === 'build') this.input.push('build');
     } else if (this.mode === 'build') {
       if (this.build.drawUI(this, g, v.W, v.H) === 'exit') this.input.push('cancel');
     } else if (this.mode === 'ledger') {
       if (drawLedger(this, g, v.W, v.H)) this.input.push('ledger');
+    } else if (this.mode === 'look') {
+      drawLook(this, g, v.W, v.H);
     }
+    this.feel.drawCover(g, v.W, v.H);
   }
 }

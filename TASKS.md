@@ -65,6 +65,249 @@
 - [x] Title screen
 - [x] Screenshot + console check, commit
 
+## M8 Graphics detail
+- [x] Regions with their own look: rolling mounds in the Hills, faceted
+      outcrops with a front face and scree in Rocky Rise, banks, reeds and
+      stepping stones at the Ford, pines and alpine flowers in the High
+      Range, lily pads on the Home Meadow pond, ferns under the trees
+- [x] Tree crowns along forest edges and as the small groves
+- [x] Animated water (river flow, foam, ripples round the stones, glints)
+- [x] Grass, flowers and reeds sway as wind gusts cross the valley
+- [x] Butterflies and birds with shadows by day, fireflies at night,
+      chimney smoke, bees at the hives
+- [x] Animals: run, graze, idle look, alert and lying poses per species;
+      stress shows on the sprite; wading legs go under water
+- [x] Buildings: hipped roofs, clapboard, shutters; the farmhouse grows a
+      door hood, a storey with dormers, a porch, lamps and a weathervane;
+      barn hayloft, lean-to and weathervane when upgraded; worn and sturdy
+      fences; trodden pen floors
+- [x] Ranch decor grows with the tiers (woodpile, garden, cart, barrels,
+      washing line, beehives, stepping stones)
+- [x] Night: flickering elliptical lantern pools, lamp glow, a dawn from the
+      east, dusk gathering in the east
+- [x] Effects: footprints in soft ground (and on grass at a run), ripples
+      and splashes at the ford, dust that suits each species
+- [x] Screenshot + console check, commit
+
+## M9 Trials, orders and the legacy (gameplay expansion)
+- [x] Show Ground: a new clearing south of the Home Meadow (tier 2, behind a
+      region gate), with bunting over the way in
+- [x] Trial course: fetch gate, handler's post (a planted crook), drive gate,
+      cross-drive gate and a small trial pen; the next gate's flags flap
+- [x] Trial runs: E at the post; outrun + lift, fetch, round the post, drive,
+      cross-drive, pen; scored on gates and calm, bolts and grips are faults
+- [x] Classes: NOVICE (5 ducks), OPEN (5 sheep), CATTLE (4 cows), VALLEY CUP
+      (7 sheep); win one to open the next. Every 3rd day is a trial day
+      against three rival handlers for prizes and ribbons; other runs are
+      practice
+- [x] Buyers' yards with carts and name boards: the mill (Home Meadow), the
+      drover (a nook off the crossroads road), the sale yard (Show Ground)
+- [x] Orders each morning from tier 2 (two from tier 4): a species, a head
+      count and a time; paid per head, scaled by how calm each one arrives
+- [x] Letting stock out: E at a pen gate holds it open so you can drive the
+      stock out; your own stock coming home pays nothing
+- [x] Job card at the top centre, arrows to the yard / next gate / trial,
+      the judge's result card, Ledger lines, contextual hints and tips
+- [x] Goals: tier 3 "fill an order", tier 4 "place in a trial"; past tier 5 a
+      legacy ladder of eight goals (40$ each) in the tracker and Ledger
+- [x] Helper dogs wait by the post during a run
+- [x] Saves keep orders, the trial record and let-out stock; old saves load
+- [x] Bot drives the course (`trialGoal`, `runTrial`); `scripts/trialtest.mjs`
+      and `scripts/ordertest.mjs`; savetest covers the new state and an old
+      save; tune.mjs before/after for every species
+- [x] Screenshot + console check, commit
+
+## M10 Feel and UI refinement
+- [x] Play tiers 1-5 on desktop and phone sizes (`scripts/uitour.mjs`) and list the friction
+- [x] Touch stick: a real walk plateau before the run zone, run ring shows stamina
+- [x] Thumb-sized touch targets; a near-miss tap goes to the nearest button
+- [x] Safe-area insets (notch, status bar, home indicator) for HUD, controls and menus
+- [x] Haptics on bark, nip, gate and tier-up (phones that support it)
+- [x] Whole-pixel camera kick on bark and nip, hit-pause on a nip that lands
+- [x] Stronger "that'll do": stamp, ring, bump, buzz; coins fly to a purse that ticks up
+- [x] Tier-up card with what the tier brings, confetti; it waits for "that'll do" to finish
+- [x] Dithered plum fades between day, summary, build, title; summary dims the field
+- [x] Summary: rows arrive one by one, earnings count up, next goal shown, input waits 0.6s
+- [x] Pause menu as a list of rows; screen shake, flight zones, vibration settings
+- [x] Onboarding: "HERE" marker for the drive spot, pen-gate arrow, key caps and
+      pulsing buttons, one-time tips for standing in front, rattled and split flocks
+- [x] Typecheck, build, shot (desktop + phone), commit
+
+## M11 Sound and music
+- [x] Mixer: music, sound and stinger buses, ducking under stingers, a limiter at the end
+- [x] Music and sound volumes in the pause menu (rows in the feel/UI menu), remembered; M still mutes everything
+- [x] Audio starts on the first tap or key (iOS unlock), sleeps in a background tab
+- [x] Sample bank computed in code (plucked strings, bells, bodhran, hooves, river, murmur, reverb), built a few per frame
+- [x] Music engine: whistle and fiddle on persistent voices, harp, bass, string pad, reed drone, scheduled ahead on the audio clock
+- [x] Title theme ("Come By", G major 6/8), a day theme per region, dusk, night
+- [x] Music reacts: a calm drive fills the band out; a panic thins the tune and brings tremolo and a heartbeat; predators close by at night do the same
+- [x] Stingers: that'll do (by calm rating), tier-up, end of day
+- [x] Soundscape: wind, river and ford, flock murmur, grazing, hooves per species, the dog's paws, gate creaks, menu sounds, birds, crickets, frogs, an owl
+- [x] Rain hook for weather
+- [x] `scripts/audiotest.mjs`: offline renders with levels, peaks, tuning, music-theory checks, layer balance and CPU
+- [x] Typecheck, build, shot, commit
+
+Round two:
+- [x] Show Ground: a pipe-band march for trial runs, the judge's whistle at the start and finish, a cue for each gate cleared, a sour note for a bolt or a grip, applause scaled by score and placing
+- [x] Orders: a "sold" stinger and the buyer's cart rolling off; a sigh for an order missed
+- [x] Resting: a music-box lullaby while the day flies by, birdsong quicker; all back on the next note when the dog gets up
+- [x] Weather: rain and wind from `game.weather`, thunder in storms (published as `game.audio.lightning` for a flash), fog muffles far sounds and adds a damp reverb, the music shades with the sky
+- [x] audiotest: trial, lullaby, orders, weather, sfx levels, sky, live round-two checks
+
+## M12 Day one pacing (from playtesting the merged branch)
+- [x] Resting: lie down on the ranch with no loose stock near and the day
+      (and the pens' goods) runs up to x12; getting up ends it at once
+- [x] Day one: when the kennel is out of reach, the hint says goods sell at
+      day's end and how to rest; the DOWN button / key cap pulses for it
+- [x] One-time tip about resting for players past the tutorial
+- [x] `scripts/resttest.mjs`
+
+## M13 Graphics round two: Show Ground, weather, resting
+- [x] Show Ground: judge's marquee, benches of onlookers (they cheer each
+      cleared part), flags on poles in the wind, bunting that lifts, worn
+      ground at the post, the release and the pen gate; the next gate has
+      big buttercup flags, chevrons through it and a bobbing marker
+- [x] Buyers' yards: shaded carts with spoked wheels, name boards under a
+      little roof, the miller's sacks, the drover's camp fire (smoke, and a
+      light at night), the sale yard's auction stand and bell
+- [x] Rain: slanting streaks, splashes, puddles that grow on paths and dry
+      out after, the ground darker when wet
+- [x] Fog: a dithered veil, thin round the dog and lamps, thick at the
+      edges, drifting; never buries the ground at night
+- [x] Wind strength drives the gusts: grass flutters, reeds stay bent,
+      smoke, flags and washing stream out
+- [x] Storm: heavy rain, a darker sky, lightning (a dither flash and a bolt)
+- [x] Cloud shadows drift over the ground on fair days
+- [x] Resting: the dog curls up asleep with drifting z's; clouds, smoke,
+      grass and water run as a time-lapse and moving shadows swing with
+      the sun; it all stops the moment the dog gets up
+- [x] More detail everywhere (playtest): wheel ruts and grass down the
+      tracks, worn shoulders, tonal speckle, clover, stones, molehill runs
+      and bare patches on open ground; boulders, roots and fallen logs at
+      the forest edge; stones on the banks and ripple rings by the reeds;
+      a sunlit rim on the dog and every coat; moss on the eaves, damp
+      footings, board knots and mud, gate hinges and latches, hay wisps
+- [x] Screenshot + console check, commit
+
+## M14 Townsfolk
+- [x] People sprites (`src/art/people.ts`): plum-outlined 3/4 figures, recoloured per person; stand, walk, carry, hammer, crouch, sit and wave
+- [x] The rancher (`src/entities/folk.ts`): out of the farmhouse each morning with a word, chores between jobs (eggs and wool, hay to the troughs, the garden, the woodpile, the well), the bench at dusk and while the dog rests, a lantern round the yard at night
+- [x] Herding: when you drive a flock to an open pen, the rancher stands beside the gate on the far side from the dog, a mild pressure the flock turns from into the gateway
+- [x] Building: whatever you buy goes up with a scaffold and hammering (the rancher, or a carpenter for the big jobs from tier 3); it works at once and anything left is finished by morning
+- [x] The valley fills: the miller, the drover and the auctioneer at their yards (paying for orders, shrugging at missed ones), the judge at the Show Ground, a shepherd in the High Range
+- [x] Speech bubbles in the pixel font (`src/ui/speech.ts`) reacting to calm and rattled pens, tier-ups, losses, orders, trial results; morning requests
+- [x] Voices as pitched blips per person, footsteps, hammering and chopping
+- [x] `scripts/folktest.mjs`; tune.mjs before and after for every species
+
+## M15 Feel and UI, round two (trials, orders, weather, replay pass)
+- [x] Orders and trials card in the HUD's left column, under the goal; a run
+      shows class, clock, the six parts as pips and the score
+- [x] Coach markers: HERE at the crook, "E HOLDS THE GATE OPEN" at a pen a
+      buyer wants (until you have done it once), the next gate / post / pen
+      during a run, the yard gate while driving a buyer's stock
+- [x] Judge's card: rows arrive, the total counts up, the placing stamps in,
+      prize coins fly to the purse, input waits 0.7s, touch-sized button
+- [x] Ledger: two columns when wide; trials, orders, today's and tomorrow's
+      sky; buyers' yards and the crook marked on the map
+- [x] Sky icon by the clock; tomorrow's forecast on the summary and in the Ledger
+- [x] Replay pass from a new save (`scripts/playthrough.mjs`) on phone and
+      desktop; UI friction fixed, pacing reported to the gameplay side
+- [x] Typecheck, build, shot, uitour, commit
+
+## M16 Customization
+- [x] The dog: a name (typed with the device's own keyboard, or a dice of
+      cozy names), coat flecks, face mask, saddle patch, tail tip, and a
+      bandana, neckerchief or collar, always in Bandana red
+- [x] The ranch: a name for the sign ("COME BY WILLOW CREEK"), the
+      farmhouse roof (slate, teal, moss, thatch) and trim
+- [x] Decor in a DECOR tab: flower bed, hay bale, dog bed, bench, signpost,
+      birdbath, scarecrow, ribbon board, trophy; opened by tier, the kennel
+      and trial ribbons and wins
+- [x] Offered at a new game (MEET YOUR HEELER), at the kennel (DOG tab),
+      in the pause menu, and in build mode (DECOR and RANCH tabs)
+- [x] The name in "THAT'LL DO, BLUE!", the kennel and the trial table; the
+      title screen shows your own dog
+- [x] Saved additively; old saves load with the defaults (`savetest.mjs`)
+- [x] Typecheck, build, shot, uitour, commit
+
+## M17 Pacing pass (gameplay, round two)
+- [x] `scripts/pacetest.mjs` + `src/pacebot.ts`: a decent-player bot plays
+      from day one until the valley thrives (drives each tier's flocks home
+      along A* routes, builds what the goals ask for, fills orders, runs
+      trials, rests on the ranch, defends the night) and logs every tier
+- [x] Found and smoothed the waits and the money flood (table below)
+- [x] Before/after table, 5 seeds each
+
+Same bot, 5 seeds, before = the merged round-one branch, after = this
+pass. Days are bot days (a person takes longer); "play min" is time at the
+controls, resting included.
+
+| tier | days | play min | earned $/day | spent $ | purse at tier end $ | where it stalled before |
+|---|---|---|---|---|---|---|
+| 1 | 2.0 → 2.0 | 3.0 → 3.7 | 137 → 109 | 190 → 158 | 84 → 61 | kennel waits on day one's eggs (resting covers it); "pen 6 ducks" with 5 out |
+| 2 | 1.0 → 1.0 | 6.3 → 6.6 | 578 → 391 | 528 → 348 | 133 → 104 | none |
+| 3 | 1.0 → 1.0 | 5.3 → 5.3 | 787 → 522 | 101 → 502 | 819 → 124 | money outruns the shop; calm strays block resting |
+| 4 | 1.4 → 1.0 | 9.3 → 6.2 | 1129 → 791 | 191 → 450 | 2281 → 465 | waits for a trial day; land runs short |
+| 5 | 15.4 → 1.0 | 99.5 → 6.9 | 2763 → 1201 | 90 → 41 | 54797 → 1625 | six ponies need 24 pen space with no land left |
+| done | 2 of 5 by day 8, 3 still at tier 5 on day 31 → all 5 on day 7 | | | | | |
+
+Income after the pass, per day: tier 1 stock 120 / goods 99; tier 2
+stock 153 / goods 196 / orders 22 / trials 20; tier 3 stock 124 / goods
+340 / orders 58; tier 4 stock 234 / goods 444 / orders 91; tier 5 stock
+260 / goods 618 / orders 223 / trials 47. Through tier 4 the purse runs
+low most evenings, so the day-end choice is a real one. Past tier 5 money
+piles up again: see Decisions.
+
+## M18 Weather (gameplay, round two)
+- [x] Skies by tier (tier 1 clear; from tier 2 about half clear, the rest
+      wind, rain, fog; storms from tier 4, never two days running)
+- [x] `forecast` is always tomorrow's sky, rolled as today's arrives; saved
+- [x] Wind: grazing flocks drift downwind, a lightly driven flock leans
+      with it, a bark carries further downwind
+- [x] Rain: flocks huddle and head for tree cover; stock left out frets
+- [x] Fog: flocks huddle, a slightly shorter but jumpier flight zone;
+      `weather.sight` for the UI to hide far groups
+- [x] Storm: wind and rain, and an extra, bolder coyote at night
+- [x] First-time tip per sky; the morning banner names the sky
+- [x] `scripts/weathertest.mjs`; tune.mjs `--weather` and `--seed`
+- [x] tune.mjs for every species in clear (before = after, exact) and in
+      each sky (table below)
+
+Seeded (`--seed=1`), 3 runs each: runs home / mean seconds / peak stress.
+Clear is identical to the old code. The steady style for each species
+(calm walk; nip heels for goats and cattle, which need it in any sky) gets
+home calmly in every sky; barking every 2s gets worse in wind, rain and storm.
+Cattle are slowest in rain: between nips they huddle and drift for the
+trees, so a nip drive runs past the scenario's 120s cap.
+
+| species | sky | calm walk | nip heels | bark every 2s | chase (sprint) |
+|---|---|---|---|---|---|
+| duck | clear | 3/3 16s 0.00 | 3/3 12s 0.14 | 3/3 12s 0.66 | 0/3 20s 1.00 |
+| duck | wind | 3/3 20s 0.00 | 3/3 12s 0.16 | 3/3 10s 0.88 | 0/3 20s 1.00 |
+| duck | rain | 3/3 14s 0.07 | 3/3 16s 0.71 | 3/3 9s 0.97 | 0/3 20s 1.00 |
+| duck | fog | 3/3 20s 0.00 | 3/3 12s 0.46 | 3/3 13s 0.72 | 0/3 20s 1.00 |
+| duck | storm | 3/3 16s 0.10 | 3/3 11s 0.50 | 2/3 47s 1.00 | 0/3 20s 1.00 |
+| sheep | clear | 3/3 12s 0.00 | 3/3 9s 0.06 | 3/3 8s 0.71 | 0/3 20s 1.00 |
+| sheep | wind | 2/3 52s 0.01 | 3/3 9s 0.01 | 2/3 44s 0.92 | 0/3 20s 1.00 |
+| sheep | rain | 3/3 11s 0.07 | 3/3 8s 0.16 | 2/3 43s 1.00 | 1/3 17s 1.00 |
+| sheep | fog | 3/3 15s 0.01 | 3/3 9s 0.07 | 3/3 8s 0.70 | 0/3 20s 1.00 |
+| sheep | storm | 3/3 19s 0.09 | 3/3 8s 0.23 | 3/3 5s 1.00 | 0/3 20s 1.00 |
+| goat | clear | 0/3 120s 0.00 | 3/3 13s 0.00 | 1/3 95s 0.55 | 0/3 20s 1.00 |
+| goat | wind | 0/3 120s 0.01 | 3/3 14s 0.01 | 2/3 69s 0.75 | 0/3 20s 1.00 |
+| goat | rain | 1/3 94s 0.07 | 3/3 11s 0.07 | 2/3 48s 0.86 | 0/3 20s 1.00 |
+| goat | fog | 1/3 116s 0.02 | 3/3 19s 0.02 | 3/3 20s 0.56 | 0/3 20s 1.00 |
+| goat | storm | 0/3 120s 0.13 | 3/3 10s 0.08 | 1/3 100s 1.00 | 0/3 20s 1.00 |
+| cow | clear | 0/3 120s 0.00 | 2/3 114s 0.20 | 0/3 120s 0.17 | 0/3 20s 1.00 |
+| cow | wind | 0/3 120s 0.00 | 3/3 102s 0.22 | 1/3 117s 0.28 | 0/3 20s 1.00 |
+| cow | rain | 0/3 120s 0.07 | 0/3 120s 0.29 | 0/3 120s 0.16 | 0/3 20s 1.00 |
+| cow | fog | 0/3 120s 0.00 | 3/3 92s 0.22 | 1/3 119s 0.10 | 0/3 20s 1.00 |
+| cow | storm | 0/3 120s 0.12 | 1/3 99s 0.54 | 1/3 89s 0.51 | 0/3 20s 1.00 |
+| pony | clear | 3/3 7s 0.01 | 3/3 6s 0.09 | 3/3 7s 0.30 | 1/3 16s 1.00 |
+| pony | wind | 3/3 8s 0.01 | 3/3 6s 0.08 | 3/3 5s 0.59 | 1/3 16s 1.00 |
+| pony | rain | 3/3 7s 0.05 | 3/3 6s 0.22 | 3/3 6s 0.47 | 1/3 14s 1.00 |
+| pony | fog | 3/3 7s 0.02 | 3/3 6s 0.10 | 3/3 7s 0.43 | 0/3 20s 1.00 |
+| pony | storm | 3/3 7s 0.06 | 3/3 6s 0.30 | 3/3 4s 0.71 | 1/3 16s 1.00 |
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -208,4 +451,378 @@
 - The title screen runs the game in attract mode (the heeler driving a
   flock round the ranch). `?debug` skips the title unless `&title` is
   added; `?play` skips it too.
-
+- Graphics detail comes from shape, dither, animation and variety only: the
+  palette is unchanged. Everything added is decoration; collision, the map
+  layout and the herding sim are untouched (tune.mjs sheep matches main).
+- The world bake is cached per map (the map is seeded), so going from the
+  title screen into a game no longer bakes twice. A full bake is ~0.3s on a
+  desktop.
+- Pines stand up a little (three tiers, 3/4 view) like the buildings,
+  instead of being drawn flat from above: flat star shapes read as noise at
+  this size. They fill the forest north of a line ~37 tiles down, with a
+  ragged edge, so going north the woods turn to conifers. Broadleaf crowns
+  are round, drawn like the reference's bushes.
+- Rolling Hills are overlapping mounds whose shaded rims are moss crescents
+  (back to front, each hides the ones behind). A shaded height field read
+  as camouflage blotches.
+- Grass, flowers and reeds are no longer baked: they sit in a grid and are
+  drawn each frame so a gust (`src/render/wind.ts`) can lean their tips one
+  pixel downwind. Smoke, flags, washing and butterflies use the same wind.
+- Water is a baked base plus a 16-frame loop of wool highlights per body of
+  water (`src/art/water.ts`), cropped to its bounding box.
+- Animal drawing moved to `src/render/animals.ts`; the old draw functions in
+  `src/entities/animal.ts` are left in place for now (unused). Poses are
+  read from public sim state only. "Lying down" is a pose: calm, still
+  animals settle after a while (penned ones quickly at night) and get up the
+  moment anything moves them. A goat on a rock is drawn 2px up, on its top.
+- `src/render/life.ts` is the living-world layer (butterflies, birds,
+  fireflies, smoke, footprints, ripples, species dust). It has its own
+  particle list and never touches the sim; hooked into `game.ts` with one
+  update call per mode.
+- Building ground shadows are their own drawables sorted before everything,
+  so a shadow never lands on an animal standing in front of the building.
+- Dawn is render-only (`src/render/sky.ts`): the first 14s of every morning
+  after a night, darkest in the west. Day 1 starts in full light so a new
+  game (and `npm run shot`) never opens in the dark.
+- `scripts/shot.mjs` reuses any server already on its port, which with
+  several worktrees running can screenshot another checkout: `SHOT_PORT`
+  picks a different port. `scripts/regions.mjs` screenshots every region
+  (and a built-up ranch) at real scale.
+- Trials and orders (M9) were built in a parallel session; graphics, sound
+  and UI sessions own the other files. New UI is in `src/ui/jobs.ts`, new
+  art in `src/art/course.ts`; the hooks into `render/world.ts` and
+  `ui/ledger.ts` are one line each.
+- The Show Ground is reached through the Home Meadow, not from the ranch,
+  so no player layout can block the way in. `RegionId` gained `show`.
+- A trial run pauses the day clock (as build mode does), so a run never
+  costs the day, and no goods are made while it is paused. The dog must
+  stay on the field: walking off for 2.5s retires the run.
+- Trial scoring out of 100: outrun + lift 10 (a quiet lift heading for the
+  fetch gate), each gate 15 (share of the flock through it, judged once the
+  flock is past its line; skipping a gate scores 0), round the post 10,
+  pen 20 (half credit for a pen unfinished at time), calm 15 (mean stress
+  over the run). Bolts -2 each (up to -10); a nip on a sheep or duck is a
+  grip, -3. Cattle may be heeled.
+- Gates are 28px wide. The bot scores: novice calm ~95, bark-every-2s ~39;
+  open calm ~99, bark ~23, crowding ~27; cup calm ~100, bark 0 (retired),
+  crowding ~62; cattle need close work or nips (crowding ~69, nips ~41,
+  a hands-off calm bot ~20), as in the pastures. Rival ranges are set
+  below a clean run: novice 44-66, open 54-74, cattle 50-70, cup 64-82,
+  the cup's rising 3 a win (to +12).
+- One prize run per trial day; it is used up when it starts. Prizes:
+  novice 30/18/10, open 50/30/15, cattle 80/45/20, cup 140/70/35.
+- Orders pay species value x 2.5 per head x the calm multiplier on arrival
+  (x1.5 calm, down to x0.35 frantic), against x3 for selling at the market
+  stall. A buyer leaves at the stated hour, paying for what has come.
+  Wild animals count too: driving a hill flock straight to the drover is
+  allowed and quick.
+- Let-out stock feels the full flight zone (penned stock feel half) and is
+  drawn towards the gateway when pushed; once out of the pen's footprint it
+  is loose and marked as home stock. The gate shuts again once the dog has
+  gone and the gateway is clear. Measured: six sheep out of the starter pen
+  in ~20s; four of them to the drover in ~30s, all calm (76$). Barking every
+  2s on the same drive panics them and misses the order.
+- The trial flock only flocks with itself, so stray stock on the Show
+  Ground cannot join it. Trial animals cannot be penned on the ranch and
+  are never saved.
+- tune.mjs before and after: the same within run-to-run noise for every
+  species (the wild herding code path is unchanged; the before/after logs
+  are in the PR).
+- Feel and UI pass, from playing every screen at seven window sizes. The
+  biggest friction on phones: the touch stick hit full walking pace and
+  sprint almost together (92% vs 94% of the rim), so pushing to walk often
+  sprinted and spooked the flock. Now full walk comes at 80% of the inner
+  ring (20px) and running needs the thumb past 26px, with 3px of hysteresis;
+  the base only follows the thumb beyond 30px. The outer ring is the run
+  gauge (stamina), so it sits right under the thumb.
+- Touch buttons: BARK r16, NIP and DOWN r13, and any fresh touch within 9px
+  of a button's rim goes to the nearest one. HUD buttons on touch are 13px
+  tall with a 3px invisible margin. BARK shows its cooldown (dim label).
+- Safe areas: `src/ui/safe.ts` reads `env(safe-area-inset-*)` through a
+  probe element and converts to internal pixels. `?safe=t,r,b,l` (CSS px)
+  fakes them; `uitour.mjs` has `notch` and `landnotch` sizes that use it.
+- Camera kicks are whole pixels and decay to zero: bark 1px in the facing
+  direction, nip 2px (longer if it lands), the gate shutting 2px down. Tier
+  up shakes 1px for 0.35s. All off with SCREEN SHAKE in the pause menu.
+- Hit-pause is 60ms and only for a nip that lands; presses during it are
+  kept. It never runs under `input.override`, so bots and tuning are
+  unaffected. A bark or nip pressed up to 0.2s before the dog is ready is
+  buffered rather than dropped.
+- Coins: each penned animal's value flies from the animal to the purse and
+  the purse ticks up as coins land; spending rolls it down quickly.
+- Day transitions are a dither fade (0.22s out, 0.32s in) with the game
+  frozen while covering. The summary, ledger and pause dim the field with a
+  50% plum dither, never alpha. The summary ignores input for 0.6s so a
+  bark held through dusk cannot skip the day's choice.
+- The flock card shows the pay the flock is on (CALM X1.5 ... FRANTIC
+  X0.35, from its peak stress) next to live stress pips, so "calm pays" is
+  on screen while you herd.
+- Onboarding stays in the moment: step 1 marks where to stand ("HERE",
+  behind the flock opposite the pen) and its hint switches to "now walk in
+  slowly" once the dog is there; step 3 arrows into the open gate. One-time
+  tips fire when you stand in front of a flock you are driving, rattle one
+  past 0.55 stress, or split one. Key caps by the dog on desktop and pulsing
+  buttons on touch show the move a hint asks for.
+- The place name moved to the top centre so it never covers the banners;
+  in landscape on touch the hint sits on the bottom edge between the thumbs.
+- Build mode no longer chases the cursor: the view pans only when the
+  cursor nears an edge, so a tap or a mouse pointer stays where it is.
+- Pause menu rows are data (`PAUSE_ITEMS` in `src/ui/title.ts`); a level
+  row (volume) is one entry with `level()`. Settings are saved under
+  `comeby-settings`.
+- Music (`src/systems/music.ts`) is generative, never a loop. Each piece is
+  a key, mode, meter and tempo: title and ranch G major 6/8 (54/58 bpm),
+  Home Meadow D major 6/8, Rolling Hills E dorian 3/4, Rocky Rise A dorian
+  4/4 over a strong drone, River Ford C major 4/4 with flowing harp, High
+  Range D mixolydian 3/4 with two-bar chords, dusk A minor 3/4 (fiddle
+  lead), night D minor 3/4 with a music box. Day is in sharp keys and the
+  evening moves flatwards, so the light going sounds like it.
+- A section is eight chords: an "open" four-chord phrase and a "close" one,
+  from folk-idiomatic templates per mode. The tune is built like a folk air:
+  a one-bar motif, an answer, the motif sequenced to the third chord, a
+  half cadence; then the opening returns and it closes on the tonic (often
+  2 to 1). Chord tones on strong beats (graded: downbeat, mid-bar beat,
+  other beats), mostly stepwise, leaps filled in, no ping-pong; whistle
+  cuts, rolls, slides and slurs. The lead rotates (whistle, fiddle, harp),
+  some sections have no tune at all (room to breathe), a fiddle sometimes
+  holds guide tones underneath, the ranch quotes the main theme and other
+  regions borrow its opening gesture (5-1-2).
+- The music reads the game every frame (`Sound.tick`): energy is working a
+  flock (dog moving near the nearest group); tension is that group's stress
+  and panics, and at night predators by state and distance from the camera.
+  Tension above 0.6 turns to tense progressions at the next bar and only
+  turns back below 0.35; the tune fades from 0.45 and stops at 0.7;
+  tremolo strings from 0.3, a heartbeat from 0.42; tempo creeps up a few
+  percent. Calm play always gets the full, consonant band.
+- Walking into another region changes the piece on the bar line; scene
+  changes (dusk, night, title, summary) on the next beat. Forest corridors
+  keep the last region's tune. Paused music is muffled, not stopped.
+- Stingers play in the key the bed is heading for and always end on a major
+  chord (a Picardy third in the minor regions); the bed ducks to 30% under
+  them. With music at zero they still play, at the sound volume. A shut
+  pen plays the shepherd's whistle, then a stinger by the batch's rating:
+  CALM a full cadence with the whistle, STEADY a harp roll and bells,
+  RATTLED or worse two quiet notes. `play('tierup')` is now the tier-up
+  stinger (the build screen also uses it for hiring a helper).
+- Levels, measured offline at the default volumes (music 7, sound 8): the
+  music bed sits at -25 to -28 dBFS RMS with peaks around -10 to -15,
+  barks peak around -5; nothing clips and the limiter only catches bursts.
+  Within the band the tune leads, harp and bass about 6 dB under, then pad
+  and drum, the drone faintest. Sliders use a (level/10)^2 curve.
+- CPU: the persistent voices (two mono leads, a four-voice pad, drone,
+  tremolo) are automated, never rebuilt; a pluck or footfall is one buffer
+  source and one gain. The reverb is one mono convolver (1.5 s), widened by
+  delaying its right side 13 ms: half the cost of a stereo one. The whole
+  band renders at about 30-45x real time on a laptop. The sample bank is
+  about 60 ms of work in all, at most 7 ms per buffer, spread over the first
+  second.
+- Audio starts only on input that counts as a gesture (Escape does not),
+  checked with `navigator.userActivation`; it suspends in a background tab
+  and resumes on return or on the next tap (iOS can interrupt it).
+- Weather hook: `game.audio?.setRain(0..1)` (cheap every frame) fades in a
+  rain hiss and drips and quiets the birds.
+- Footsteps: the dog's paws follow its run cycle (every other trot frame,
+  every gallop landing, splashes in the ford). Other animals' hooves are a
+  random patter whose rate follows their speed over stride near the camera
+  (capped at 16 a second per species), so a running herd drums and a
+  grazing flock is near silent except for its munching.
+- Day one was slow: after penning the ducks (about 18$) the kennel (20$)
+  waited on the eggs, which sell at the end of the day, with nothing to do
+  meanwhile. Resting fixes the waiting: lying down on the ranch with no
+  loose animal within 110px eases the clock up to x12 after a second (an
+  hour of daylight in under 2s). Only the clock and goods production speed
+  up, not the sim, so it costs nothing on phones and orders still expire
+  on time. No resting at night, during a trial run or under the bot.
+  Measured: from 08:00 a rest reaches the end of day one in ~20s, with
+  47$ in hand.
+- Sound, round two. The trial theme is a pipe-band march: A mixolydian
+  (the chanter's scale) in 4/4 at 96, the whistle as chanter over a full
+  drone, harp on the beats, bass drum and side drum always on. It plays
+  from the judge's whistle to the closed result card. The trial code
+  already whistles when a run starts, so the audio steps in there: the
+  judge's pea whistle first, then the handler's. Each gate or post judged
+  with points gets a rising cue (fuller when the whole flock went
+  through); the trial's own coin and deny sounds stay underneath (coin
+  pitches sit in A mixolydian). Bolts and grips get a sour, sagging
+  semitone, at most one a second. All in the pen: the judge's double
+  whistle. The crowd claps by score: a few polite claps, warm applause, or
+  applause and whistles for a win or 85 points and up.
+- Orders: filled gets the "sold" stinger after the gate and the whistle,
+  and the buyer's cart (wheels, axle, hooves, fading) when the stock is led
+  away; missed gets a sigh down to the tonic; partly filled a harp roll.
+- Resting (game.rest above 1.3) plays a music-box lullaby in G 6/8 at 40,
+  sometimes the main theme, harp rocking on every beat. Birdsong and
+  crickets run up to three times faster. Getting up switches back on the
+  next eighth note.
+- Weather: wind strength scales each region's windiness (clear skies are
+  a little calmer than before); rain comes from the sky or the old hook,
+  whichever is wetter. Storm: a strike every 7-21 s, mostly far off; the
+  thunder follows the (unseen) flash by up to 5 s, near ones crack first
+  and are brighter. `game.audio.lightning = { at, near }` is there for a
+  flash. Fog closes a filter on the ambience, muffles positional sounds by
+  distance and sends them to a small three-line reverb built only when fog
+  first comes. The music: rain and fog darken the pad, slow the tempo a
+  few percent and favour phrases that open on a minor chord (twice as often
+  in rain); fog hushes the tune and wets the reverb; wind lifts the drone; a
+  storm adds a little tension.
+- Weather is drawn render-side only (`src/render/weather.ts`, reading
+  `game.weather`). The one dither pass in `render/night.ts` now carries the
+  night, a storm's darker sky, fog and lightning. Rain does not dim the
+  whole screen (a plum grid read as a screen door): a wet day darkens only
+  the ground, meadow to moss and paths to sage by dither, so the flock
+  stays bright. Cloud shadows work the same way.
+- Fog under ~25% is not drawn, so rain and storms do not carry a veil.
+  Night plus fog is capped at about two thirds of the pixels so the ground
+  still reads in the dark.
+- Wind gusts move with their own phase (`stepWind`, advanced by
+  `render/life.ts`) instead of the game clock, so a change of wind strength
+  never makes the fronts jump, and resting can speed them up.
+- Resting is a time-lapse of the valley's own clock (`life.vt`, up to x12
+  with `game.rest`); butterflies and birds cap at x3. The "Z" float is
+  gone: the dog curls up asleep (`drawSleepingDog` in `src/art/dog.ts`)
+  with pixel z's, drawn by `render/world.ts` while `game.rest` > 1.3.
+- Moving things' shadows (animals, dog, helpers) shift from 2px west in the
+  morning to 2px east at dusk. Tree and building shadows are baked and stay.
+- The Show Ground is not striped: mower stripes read as rain. It is mown
+  short (few tufts) with worn patches baked at the post, the release and
+  the pen gate. Onlookers and the tent are decoration: nothing collides.
+- Ground detail is placed by kind of ground (open meadow, path, forest
+  edge, bank), never by coordinates, so new areas get it too. Wheel ruts
+  are the path pixels exactly 2px in from its edge (a distance field), so
+  they follow any track. Molehills keep off the ranch and the Show Ground.
+- Palette colours (`U32` in `src/palette.ts`) are now packed unsigned. They
+  were negative int32s, so comparing them with pixels read back from a
+  Uint32Array never matched: the wet ground, cloud shadows, soil types and
+  a few bake checks had silently done nothing.
+- Rim light is a pass over the sprite grids (`rimLight` in
+  `src/art/animals.ts`): coat pixels on the top edge, on the sunny right
+  two thirds and above the legs, become buttercup (sparse, white coats),
+  teal (plum coats), moss (sage coats) or sage (the dog's teal).
+- Townsfolk. The people only read game state and change nothing in the sim
+  except one thing: when the dog drives a flock to an open pen, the rancher
+  walks to the gate and stands beside it, on the far side from the dog, as
+  a mild pressure source (helper kind, strength 0.4, 0.55 of the flock's
+  flight zone). How far along the fence they stand scales with the flock's
+  flight zone, so their pressure ends at the edge of the gateway: it guards
+  the side the flock would slip past without blocking the way in. Ponies,
+  who spook from far off, get a wide berth.
+- Building is cosmetic: a bought building works at once. A scaffold (big
+  buildings) or a timber pile (pens, fences, gates, troughs) stands while
+  the builder hammers for 1-14 s of work; anything bought from the summary,
+  or left at nightfall, is done by morning. From tier 3 a carpenter walks
+  in from the east road for the big jobs and walks off again after.
+- The cast grows with the ranch: the rancher from day one; at tier 2 the
+  buyers at their yards (miller, drover, auctioneer, once their region is
+  open) and the judge at the Show Ground; at tier 5 a shepherd in the High
+  Range. Buyers walk to their yard gate to pay for a filled order and shrug
+  at a missed one; the judge speaks at the start and the end of a run; the
+  rancher stands at the handler's post during trials (no pressure there).
+- Speech bubbles only appear for someone on screen, at most one every 2.5 s
+  and one per person every 9 s; important lines (the morning word, a
+  tier-up) wait until the speaker comes into view. Voices are a babble of
+  blips in each person's register.
+- Measured with a seeded A/B (same build, the live loop stubbed, 5 seeds,
+  rancher pressure on and off): ducks and sheep identical (sheep penned in
+  14.1 s against 14.2 s); goats helped (driven and penned in 1 of 5 runs
+  against 0, 2.6 penned against 0.2); cattle unchanged; ponies neutral
+  (8.0 penned against 8.2, mean stress 0.001 both, no panics) once the
+  rancher stands back and eases off for wide flight zones (strength
+  0.4 x 44 / flight, at most 0.4). The first version stood 18 px from every
+  gate: it covered the gateway for ponies and penned fewer of them.
+  With the bot barking every 2 s the rancher helps more: sheep driven and
+  penned in 4 of 5 runs against 1 of 5 (26 s against 79 s, a third of the
+  panics); goats reach the tune goal in 25 s against 49 s. Plain tune.mjs
+  before and after (unseeded, 3 runs) moves within its usual noise.
+- Round two of feel and UI. The jobs card moved from the top centre into
+  the HUD's left column (goal, then jobs, then the flock card): what you are
+  doing on the left, money and buttons on the right, passing messages in
+  the middle. At the top centre it collided with the clock and a long goal
+  on phones, and with the place name.
+- The replay pass (`scripts/playthrough.mjs`: the bot plays from a new save
+  and every hint, tip, banner and card is logged against the clock) found:
+  tutorial hints that flashed past (the "walk in slowly" line was up for a
+  second, the calm-pay and Ledger lines for none, because the first penned
+  animal did not restart the step clock); the rest tip firing at 6:00 with
+  stock waiting; a frame of RESTING at dawn; the tier-up card hiding "that'll
+  do" (the 6th duck tiers up before the gate shuts) and hiding the TRIAL
+  DAY banner on the same morning; the stress tip blaming the player for
+  stock rattled overnight; no word on why a new kind could not be penned;
+  markers and arrows under the hint line and the thumbs; and the Show
+  Ground's crook and trial pen sitting under the thumbs on a phone, because
+  the region is at the world's bottom edge.
+- Fixes: a hint stays up for 1.2-3.5s (by length) before another replaces
+  it, though a fresh tip or resting cuts in. Tutorial step 1 needs four
+  seconds of actually pushing the flock. The tier-up waits for any pen gate
+  about to shut; a banner waits behind the tier card, which replaces the
+  tier banner. The stress tip needs the dog close by. A one-time tip says a
+  pen holds one kind and what another costs. Markers only draw in the field
+  left clear above the hint line and thumbs; a target below that gets an
+  edge arrow. On a phone held upright the camera frames the dog above the
+  thumbs and may run past the world's bottom edge by their height (teal,
+  more forest), so nothing is ever stuck under a thumb.
+- Menu dims are anchored to the world's 4x4 grid like the night dither, so
+  a night summary stays at the night's 50% instead of filling in solid.
+- Sky icons are 7x7 UI glyphs in `src/ui/icons.ts`, alongside the font,
+  rather than sprites in `src/art/`.
+- Build mode opens with the building a "BUILD A ..." goal asks for already
+  picked, and its slot blinks in the bar.
+- Customization. The dog's markings are rewrites of the pose grids (in
+  `src/art/dogstyle.ts`; `makeDogSprites` takes the look), so every frame
+  of the trot, gallop, bark and lie picks them up: few or heavy flecks,
+  one eye patch or a pale face, a plum saddle, a wool tail tip. The neck
+  piece is always red: a collar is the one-pixel band, a neckerchief adds
+  a point at the chest (a knot at the nape from behind).
+- The farmhouse paint is read by the farmhouse drawing from
+  `src/art/ranchstyle.ts`; the ranch name replaces the tier name on the
+  sign by the road, so it reads "COME BY <NAME>". Left empty, the sign
+  names the tier as before.
+- Names are typed with the device's own keyboard through a hidden input
+  (`src/ui/textfield.ts`), focused from inside the tap so phones show it;
+  game keys are ignored while it has focus. Upper case, the font's letters
+  only, 10 for the dog and 12 for the ranch.
+- Decor is for looks only: it never blocks the stock or the dog, so it
+  cannot spoil a drive or trap a flock. It cannot overlap buildings, other
+  decor or the ranch's own touches; building over it clears it and gives
+  the money back, and picking it up refunds it in full.
+- A new game opens the dog's look screen before day one; Esc or LET'S GO
+  takes it as it is.
+- Pacing (M13) is measured with a bot that is quicker and surer than a
+  person: it knows where every flock is, never misreads a flock, and walks
+  goat and cattle drives it cannot do through at a walking drive's pace
+  ("assisted", flagged in its log). So read its days as a floor; a person
+  takes longer. What it shows well is where the curve stalls and where the
+  money stops meaning anything.
+- What the bot found on the merged branch: (1) day one waited on the
+  kennel (fixed by resting); (2) "pen 6 ducks" when only 5 spawned;
+  (3) a newly opened region could have only one flock out, short of its
+  pen goal; (4) tier 4 waited for a trial day; (5) tier 5's six ponies
+  need 24 pen space when land had run out (3 of 5 seeds never finished);
+  (6) money flooded from tier 2: by tier 4 the bot earned ~1100$ a day,
+  three quarters of it goods from pens, against items that cost 2-180$;
+  (7) calm strays grazing near the house stopped you resting.
+- Fixes: tier 1 pens 5 ducks; a region that has just opened always has two
+  flocks out; tier 4 wants a trial score of 60 (practice counts); tier 5
+  pens 4 ponies (one plain pen); wool, cheese and milk come about 2.5
+  times less often and eggs a little less (eggs 80s, wool 230s, cheese
+  220s, milk 190s, from 55/90/85/75), so a
+  penned animal earns about its own delivery value a day and driving
+  stock matters as much as owning pens; pens get dearer as the ranch fills
+  (25, 25, then +15 each); helpers 70/130, top dog training 100-120, pen
+  upgrade 40, barn upgrade 70, mill 260; buyers do not ask for the kind
+  a tier's pen goal still needs; resting is stopped by anything loose
+  within 40px, but further off only by stock that is moving or upset.
+- Still true after the pass: past tier 5 money piles up (nothing left to
+  buy). Grazing rotation (penned stock eats its pen down and needs driving
+  out to pasture, or hay) would be the natural sink and more herding
+  work; left for the next round because it needs the pen floor drawn and
+  shown in the UI to read at a glance.
+- Weather (M14) only touches stock out of pens. The wind that moves things
+  (`pushX/Y`) is zero for a breeze, so clear days herd exactly as before
+  (seeded tune: 55 of 55 lines identical). Wind leans on a lightly driven
+  flock but a firm, steady push beats it; first tries at full strength
+  stopped calm drives dead, and fog's smaller flight zone plus a twice-as-
+  jumpy startle together tripled calm drives and split flocks, so wind was
+  softened twice and fog now also huddles the flock (as rain does) with
+  only an 8% shorter flight zone and a modestly jumpier startle.
+- `forecast` is rolled each morning for tomorrow (not at day's end) so it
+  means the same thing all day for the HUD, the summary and audio.

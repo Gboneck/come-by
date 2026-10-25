@@ -1,11 +1,17 @@
 import { C } from '../palette';
 import { panel, rect, px } from '../gfx/draw';
 import { text, textWidth } from '../gfx/font';
-import type { Game } from '../game';
+import { calmRating, type Game } from '../game';
 import { DUSK_AT, NIGHT_LEN } from '../systems/day';
-import { nextGoal } from '../systems/progression';
+import { TIERS, nextGoal } from '../systems/progression';
 import { wrap } from '../gfx/font';
 import { touchLayout } from './touch';
+import { safeArea } from './safe';
+import { coachHint, drawCoach } from './coach';
+import { jobArrows, jobCard } from './jobs';
+import { skyIcon } from './icons';
+import { CALM_MAX } from '../systems/trials';
+import { clamp } from '../util';
 
 // Rasterised triangle arrow pointing along `ang`.
 export function arrow(g: CanvasRenderingContext2D, cx: number, cy: number, ang: number, size: number, color: string) {
@@ -24,16 +30,19 @@ export function arrow(g: CanvasRenderingContext2D, cx: number, cy: number, ang: 
     }
 }
 
+export interface Margins { top: number; bottom: number; left: number; right: number }
+
 // Arrow at the screen edge towards an off-screen world point.
-export function edgeArrow(g: CanvasRenderingContext2D, game: Game, wx: number, wy: number, color: string, label: string, top = 26, bottom = 8) {
+export function edgeArrow(g: CanvasRenderingContext2D, game: Game, wx: number, wy: number, color: string, label: string, M: Margins) {
   const { ox, oy, W, H } = game.view();
   const sx = wx - ox, sy = wy - oy;
-  if (sx > 4 && sx < W - 4 && sy > top && sy < H - bottom) return;
-  const cx = W / 2, cy = (top + H - bottom) / 2;
+  const x0 = M.left, x1 = W - M.right, y0 = M.top, y1 = H - M.bottom;
+  if (sx > x0 + 4 && sx < x1 - 4 && sy > y0 && sy < y1) return;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   const ang = Math.atan2(sy - cy, sx - cx);
   const m = 9;
-  const kx = Math.abs(Math.cos(ang)) > 1e-3 ? (W / 2 - m) / Math.abs(Math.cos(ang)) : 1e9;
-  const ky = Math.abs(Math.sin(ang)) > 1e-3 ? ((H - top - bottom) / 2 - m) / Math.abs(Math.sin(ang)) : 1e9;
+  const kx = Math.abs(Math.cos(ang)) > 1e-3 ? ((x1 - x0) / 2 - m) / Math.abs(Math.cos(ang)) : 1e9;
+  const ky = Math.abs(Math.sin(ang)) > 1e-3 ? ((y1 - y0) / 2 - m) / Math.abs(Math.sin(ang)) : 1e9;
   const k = Math.min(kx, ky);
   const ax = Math.round(cx + Math.cos(ang) * k), ay = Math.round(cy + Math.sin(ang) * k);
   arrow(g, ax + 1, ay + 1, ang, 5, C.plum);
@@ -44,127 +53,201 @@ export function edgeArrow(g: CanvasRenderingContext2D, game: Game, wx: number, w
   }
 }
 
+// A hint stays up long enough to be read before the next one replaces it
+// (a fresh tip, which is about what just happened, still cuts in at once).
+let held: string | null = null;
+let heldAt = 0;
+function steadyHint(game: Game, want: string | null): string | null {
+  if (want === held) return held;
+  const read = held ? Math.min(3.5, 1.2 + held.length * 0.045) : 0;
+  const urgent = !!want && (want === game.tip?.text || want.startsWith('RESTING') || !!held?.startsWith('RESTING'));
+  if (held && game.t - heldAt < read && !urgent) return held;
+  held = want;
+  heldAt = game.t;
+  return held;
+}
+
+// A HUD button. Touch gets a generous invisible hit area round it.
+function button(game: Game, g: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, h: number, rim: string, pulse = false): boolean {
+  const hot = game.ui.isActive(id);
+  const blink = pulse && Math.floor(game.t * 3) % 2 === 0;
+  panel(g, x, y, w, h, hot || blink ? C.teal : C.plum, pulse ? C.butter : rim);
+  const p = game.input.touchMode ? 3 : 0;
+  return game.ui.click(id, x - p, y - p, w + p * 2, h + p * 2);
+}
+
 export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
+  const S = safeArea(game.screen);
+  const touch = game.input.touchMode;
+  const TL = touch ? touchLayout(game, W, H) : null;
+  const L = 2 + S.left, T = 2 + S.top, R = W - 2 - S.right;
+  const bh = touch ? 13 : 11; // button height
+  const ty = (touch ? 4 : 3); // text inset in a button
+
+  // ---- Hint line layout (drawn later): it bounds the view from below ----
+  const hint = steadyHint(game, coachHint(game) ?? game.hint());
+  let bottomY = TL ? TL.top - 2 : H - 4 - S.bottom;
+  let hcx = (L + R) / 2, hmax = Math.min(W - 16 - S.left - S.right, 200);
+  if (TL && W > H) {
+    // Landscape: the thumbs sit in the corners, so the hint can use the
+    // bottom edge between them instead of the middle of the field.
+    const x0 = TL.stickHome.x + 28, x1 = TL.lie.x - TL.lie.r - 6;
+    if (x1 - x0 >= 120) {
+      hcx = (x0 + x1) / 2;
+      hmax = Math.min(200, x1 - x0 - 10);
+      bottomY = H - 4 - S.bottom;
+    }
+  }
+  const hl = hint ? wrap(hint, hmax) : [];
+  const hh = hl.length * 7 + 5;
+  const hy = Math.round(bottomY - hh);
+  // What is left of the field to point at: below this, a marker would hide
+  // under the hint or the thumbs, so it gets an edge arrow instead.
+  const viewBottom = Math.min(hint ? hy - 2 : H, TL ? TL.top : H - S.bottom - 4);
+
+  drawCoach(game, g, T + 12, viewBottom);
+
   // ---- Edge arrows: groups out in the pastures, and home when driving ----
-  const top = 14;
+  const M: Margins = { top: T + 12, bottom: H - viewBottom + 2, left: S.left, right: S.right };
   const gr = game.nearestGroup();
   const driving = gr && Math.hypot(gr.x - game.dog.x, gr.y - game.dog.y) < 90;
   if (driving) {
     const pen = game.ranch.pens.find((p) => p.hasRoomFor(gr!.members[0]));
     if (pen) {
       const gp = pen.gatePoint(10);
-      edgeArrow(g, game, gp.x, gp.y, C.wool, 'PEN', top);
+      edgeArrow(g, game, gp.x, gp.y, C.wool, 'PEN', M);
     }
   }
   if (game.day.phase === 'night') {
-    for (const p of game.predators) if (p.active) edgeArrow(g, game, p.x, p.y, C.wool, p.carry ? '!!' : '!', top);
+    for (const p of game.predators) if (p.active) edgeArrow(g, game, p.x, p.y, C.wool, p.carry ? '!!' : '!', M);
   } else if (!driving) {
     const groups = [...game.groups]
       .sort((a, b) => Math.hypot(a.x - game.dog.x, a.y - game.dog.y) - Math.hypot(b.x - game.dog.x, b.y - game.dog.y))
       .slice(0, 2);
-    for (const grp of groups) edgeArrow(g, game, grp.x, grp.y, C.butter, `${grp.members.length}`, top);
+    for (const grp of groups) edgeArrow(g, game, grp.x, grp.y, C.butter, `${grp.members.length}`, M);
   }
+  jobArrows(game, g, M);
 
   // ---- Clock (top-left) ----
   const d = game.day;
-  panel(g, 2, 2, 52, 18);
-  text(g, `DAY ${d.day}`, 6, 5, C.wool);
-  text(g, d.clock(), 51, 5, d.phase === 'dusk' ? C.butter : C.wool, { align: 'right' });
-  // Sun track: day in sage, dusk in plum-ish; a sun dot travels along it.
-  const tx = 6, ty = 14, tw = 44;
-  rect(g, tx, ty, tw, 2, C.sage);
-  rect(g, tx + Math.round(tw * DUSK_AT), ty, tw - Math.round(tw * DUSK_AT), 2, C.teal);
+  panel(g, L, T, 62, 18);
+  text(g, `DAY ${d.day}`, L + 4, T + 3, C.wool);
+  const resting = game.rest > 1.5;
+  text(g, d.clock(), L + 49, T + 3, d.phase === 'dusk' || resting ? C.butter : C.wool, { align: 'right' });
+  // Today's sky, at the end of the clock.
+  skyIcon(g, game.weather.sky, L + 52, T + 2, d.phase === 'night');
+  // Resting: the clock runs fast.
+  if (resting && Math.floor(game.t * 4) % 2 === 0) text(g, '>>', L + 65, T + 3, C.butter, { shadow: C.plum });
+  // Sun track: day in sage, dusk in teal; a sun dot travels along it.
+  const tx = L + 4, tky = T + 12, tw = 44;
+  rect(g, tx, tky, tw, 2, C.sage);
+  rect(g, tx + Math.round(tw * DUSK_AT), tky, tw - Math.round(tw * DUSK_AT), 2, C.teal);
   if (d.phase === 'night') {
     // Moon crossing a dark track.
-    rect(g, tx, ty, tw, 2, C.plum);
+    rect(g, tx, tky, tw, 2, C.plum);
     const mx = tx + Math.round((d.nightT / NIGHT_LEN) * (tw - 1));
-    rect(g, mx - 1, ty - 1, 3, 4, C.wool);
-    px(g, mx + 1, ty - 1, C.plum);
+    rect(g, mx - 1, tky - 1, 3, 4, C.wool);
+    px(g, mx + 1, tky - 1, C.plum);
   } else {
     const sx = tx + Math.round(d.frac * (tw - 1));
-    rect(g, sx - 1, ty - 1, 3, 4, C.butter);
-    px(g, sx, ty - 2, C.butter);
+    rect(g, sx - 1, tky - 1, 3, 4, C.butter);
+    px(g, sx, tky - 2, C.butter);
   }
 
-  // ---- Coins (top-right) ----
-  const coinStr = `${game.coins}$`;
-  const cw = textWidth(coinStr) + 8;
-  panel(g, W - cw - 2, 2, cw, 11);
-  text(g, coinStr, W - 6, 5, C.wool, { align: 'right', iconColor: C.butter });
+  // ---- Coins (top-right): ticks up as coins land in the purse ----
+  const f = game.feel;
+  const shown = f.coinsShown(game.coins);
+  const coinStr = `${shown}$`;
+  const cw = Math.max(textWidth(coinStr), textWidth(`${game.coins}$`)) + 8;
+  const ticking = shown !== game.coins || f.bump > 0;
+  panel(g, R - cw, T, cw, 11, C.plum, ticking ? C.butter : C.sage);
+  text(g, coinStr, R - 4, T + 3 - (f.bump > 0 ? 1 : 0), ticking ? C.butter : C.wool, { align: 'right', iconColor: C.butter });
+  f.purse.x = R - 6;
+  f.purse.y = T + 5;
 
   // ---- Pause (touch) ----
-  let rightY = 15;
-  if (game.input.touchMode) {
-    const pw = 13;
-    panel(g, W - pw - 2, rightY, pw, 11, game.ui.isActive('hud-pause') ? C.teal : C.plum, C.sage);
-    rect(g, W - pw + 2, rightY + 3, 1, 5, C.wool);
-    rect(g, W - pw + 5, rightY + 3, 1, 5, C.wool);
-    if (game.ui.click('hud-pause', W - pw - 2, rightY, pw, 11)) game.input.push('pause');
+  let rightY = T + 13;
+  let bx = R;
+  if (touch) {
+    const pw = 15;
+    bx -= pw;
+    if (button(game, g, 'hud-pause', bx, rightY, pw, bh, C.sage)) game.input.push('pause');
+    const hot = game.ui.isActive('hud-pause') ? 1 : 0;
+    rect(g, bx + 5, rightY + 4 + hot, 1, bh - 8, C.wool);
+    rect(g, bx + 9, rightY + 4 + hot, 1, bh - 8, C.wool);
+    bx -= 4;
   }
 
   // ---- Build button (on the ranch) ----
   if (game.inRanch()) {
-    const label = game.input.touchMode ? 'BUILD' : 'B: BUILD';
-    const bw = textWidth(label) + 8;
-    const hot = game.ui.isActive('hud-build');
-    const bx = W - bw - 2 - (game.input.touchMode ? 15 : 0);
-    panel(g, bx, rightY, bw, 11, hot ? C.teal : C.plum, C.butter);
-    text(g, label, bx + bw / 2, rightY + 3, C.wool, { align: 'center' });
-    if (game.ui.click('hud-build', bx, rightY, bw, 11)) game.input.push('build');
+    const label = touch ? 'BUILD' : 'B: BUILD';
+    const w = textWidth(label) + 8;
+    bx -= w;
+    const pulse = game.tut === 6 && game.coins >= 20;
+    if (button(game, g, 'hud-build', bx, rightY, w, bh, C.butter, pulse)) game.input.push('build');
+    text(g, label, bx + w / 2, rightY + ty, C.wool, { align: 'center' });
   }
-  rightY += 13;
+  rightY += bh + (touch ? 4 : 2);
 
   // ---- Helper dogs: what they are doing, and the command button ----
   if (game.helpers.length) {
     const mode = game.day.phase === 'night' ? 'GUARD' : game.helpers[0].mode === 'flank' ? 'FLANK' : game.helpers[0].mode === 'stay' ? 'STAY' : 'HOME';
-    const label = game.input.touchMode ? `HELP: ${mode}` : `H: ${game.helpers.map((h) => h.name).join('+')} ${mode}`;
+    const label = touch ? `HELP: ${mode}` : `H: ${game.helpers.map((h) => h.name).join('+')} ${mode}`;
     const hw = textWidth(label) + 8;
-    panel(g, W - hw - 2, rightY, hw, 11, game.ui.isActive('hud-help') ? C.teal : C.plum, C.butter);
-    text(g, label, W - hw / 2 - 2, rightY + 3, C.wool, { align: 'center' });
-    if (game.ui.click('hud-help', W - hw - 2, rightY, hw, 11)) game.input.push('helper');
+    if (button(game, g, 'hud-help', R - hw, rightY, hw, bh, C.butter)) game.input.push('helper');
+    text(g, label, R - hw / 2, rightY + ty, C.wool, { align: 'center' });
   }
 
   // ---- Next goal (always visible; tap or Tab for the ledger) ----
-  let cardY = 22;
+  let cardY = T + 20;
   {
     const ng = nextGoal(game);
-    const blink = game.ledgerNew && Math.floor(game.t * 3) % 2 === 0;
-    const label = game.ledgerNew ? 'NEW TIER! SEE LEDGER' : ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
-    const w = textWidth(label) + 13;
-    panel(g, 2, cardY, w, 11, blink ? C.teal : C.plum, C.butter);
+    const label = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
+    const tag = game.ledgerNew ? 'NEW' : '';
+    const w = textWidth(label) + 13 + (tag ? textWidth(tag) + 5 : 0);
+    if (button(game, g, 'hud-ledger', L, cardY, w, bh, C.butter, game.ledgerNew || game.tut === 5)) game.input.push('ledger');
     // Little ledger book icon.
-    rect(g, 5, cardY + 3, 4, 5, C.butter);
-    rect(g, 6, cardY + 4, 2, 1, C.plum);
-    text(g, label, 11, cardY + 3, C.wool, { iconColor: C.butter });
-    if (game.ui.click('hud-ledger', 2, cardY, w, 11)) game.input.push('ledger');
-    cardY += 13;
+    rect(g, L + 3, cardY + ty, 4, 5, C.butter);
+    rect(g, L + 4, cardY + ty + 1, 2, 1, C.plum);
+    text(g, label, L + 9, cardY + ty, C.wool, { iconColor: C.butter });
+    if (tag) text(g, tag, L + w - 4, cardY + ty, C.butter, { align: 'right' });
+    cardY += bh + 2;
   }
 
-  // ---- Flock card ----
+  // ---- Orders and trials: the day's jobs, under the goal ----
+  cardY += jobCard(game, g, L, cardY, W);
+
+  // ---- Flock card: how they feel now, and what they will pay ----
   if (gr) {
     const sp = gr.members[0].sp;
     const n = gr.members.length;
-    const mood = gr.stress < 0.3 ? 'CALM' : gr.stress < 0.6 ? 'UNEASY' : 'PANIC';
-    const col = gr.stress < 0.3 ? C.butter : C.wool;
+    const peak = gr.members.reduce((s, a) => s + a.peakStress, 0) / n;
+    const pay = calmRating(peak);
+    let col: string = pay.mult > 1 ? C.butter : C.wool;
     const label = `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}`;
+    let mood = `${pay.label} X${pay.mult}`;
+    const run = game.trials.run;
+    if (run && gr.members[0].trial) {
+      // On the course the flock earns calm points, not pay.
+      const calm = Math.round(CALM_MAX * clamp(1 - (run.t > 0 ? run.stressT / run.t : 0) / 0.45, 0, 1));
+      mood = `CALM ${calm}/${CALM_MAX}`;
+      col = calm >= CALM_MAX * 0.7 ? C.butter : C.wool;
+    }
     const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8;
-    panel(g, 2, cardY, w, 19);
-    text(g, label, 6, cardY + 3, C.wool);
+    panel(g, L, cardY, w, 19);
+    text(g, label, L + 4, cardY + 3, C.wool);
     const pips = 5, lit = Math.max(1, Math.round((1 - gr.stress) * pips));
-    for (let i = 0; i < pips; i++) rect(g, 6 + i * 4, cardY + 11, 3, 4, i < lit ? col : C.sage);
-    if (mood !== 'PANIC' || Math.floor(game.t * 6) % 2 === 0) text(g, mood, 27, cardY + 10, col);
+    const panic = gr.stress >= 0.6;
+    for (let i = 0; i < pips; i++) rect(g, L + 4 + i * 4, cardY + 11, 3, 4, i < lit ? (panic ? C.wool : C.butter) : C.sage);
+    if (!panic || Math.floor(game.t * 6) % 2 === 0) text(g, mood, L + 25, cardY + 10, col);
   }
 
   // ---- Hint line (tutorial and region tips) ----
-  const hint = game.hint();
-  const bottomY = game.input.touchMode ? touchLayout(W, H).lie.y - 20 : H - 4;
   if (hint) {
-    const lines = wrap(hint, Math.min(W - 16, 200));
-    const hw = Math.max(...lines.map((l) => textWidth(l))) + 10;
-    const hh = lines.length * 7 + 5;
-    const hy = Math.round(bottomY - hh);
-    panel(g, Math.round(W / 2 - hw / 2), hy, hw, hh);
-    lines.forEach((l, i) => text(g, l, W / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
+    const hw = Math.max(...hl.map((l) => textWidth(l))) + 10;
+    const hx = Math.round(hcx - hw / 2);
+    panel(g, hx, hy, hw, hh);
+    hl.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
   }
 
   // ---- Place name and banners ----
@@ -173,17 +256,50 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const show = p.t > 2.2 ? Math.floor(p.t * 20) % 2 === 0 : true;
     if (show) {
       const tw2 = textWidth(p.text);
-      const py = hint ? 40 : Math.round(bottomY - 12);
+      // Top centre, between the clock and the purse: clear of the banners.
+      const py = T;
       panel(g, Math.round(W / 2 - tw2 / 2 - 5), py, tw2 + 10, 11);
       text(g, p.text, W / 2, py + 3, C.wool, { align: 'center' });
     }
   }
-  if (game.banner) {
+  if (f.tierCard) drawTierCard(game, g, W, H);
+  else if (game.banner) {
     const b = game.banner;
     const age = b.max - b.t;
     const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
-    const sc = textWidth(b.big, 2) <= W - 8 ? 2 : 1;
-    text(g, b.big, W / 2, y, C.butter, { align: 'center', scale: sc, shadow: C.plum });
+    // The shepherd's call names the dog.
+    const big = b.big === "THAT'LL DO!" ? `THAT'LL DO, ${game.look.name}!` : b.big;
+    const sc = textWidth(big, 2) <= W - 8 ? 2 : 1;
+    // Big moments land with a stamp: one size up for a few frames.
+    const stamp = big.endsWith('!') && age < 0.09 && textWidth(big, sc + 1) <= W - 8 ? 1 : 0;
+    text(g, big, W / 2, y - stamp * 3, C.butter, { align: 'center', scale: sc + stamp, shadow: C.plum });
     if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, y + 7 * sc + 4 + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
   }
+}
+
+// Tier-up: what you reached and everything it brings, for a few seconds.
+function drawTierCard(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
+  const c = game.feel.tierCard!;
+  const age = c.max - c.t;
+  const pw = Math.min(W - 12, 190);
+  const lines = [...wrap(c.blurb, pw - 14).map((s) => ({ s, col: C.wool as string })), ...c.brings.flatMap((b) => wrap(`+ ${b}`, pw - 14).map((s) => ({ s, col: C.butter as string })))];
+  const big = textWidth(c.name, 2) <= pw - 10 ? 2 : 1;
+  const ph = 36 + big * 5 + lines.length * 7;
+  const x0 = Math.round(W / 2 - pw / 2);
+  const y0 = Math.round(H * 0.24 - ph / 2 + Math.max(0, 1 - age * 5) * -24);
+  panel(g, x0, y0, pw, ph, C.plum, C.butter);
+  if (age > 0.4 || Math.floor(age * 12) % 2 === 0) text(g, 'TIER UP!', W / 2, y0 + 5, C.butter, { align: 'center' });
+  // Tier pips, the new one flashing in.
+  const n = TIERS.length;
+  for (let i = 0; i < n; i++) {
+    const on = i < c.n - 1 || (i === c.n - 1 && (age > 0.9 || Math.floor(age * 8) % 2 === 0));
+    rect(g, W / 2 - (n * 6) / 2 + i * 6, y0 + 13, 5, 3, on ? C.butter : C.sage);
+  }
+  text(g, c.name, W / 2, y0 + 20, C.butter, { align: 'center', scale: big, shadow: C.teal });
+  let y = y0 + 26 + big * 5;
+  for (const l of lines) {
+    text(g, l.s, W / 2, y, l.col, { align: 'center', iconColor: C.butter });
+    y += 7;
+  }
+  if (game.ui.click('tiercard', x0, y0, pw, ph)) game.feel.tierCard = null;
 }

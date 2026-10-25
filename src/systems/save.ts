@@ -6,14 +6,19 @@ import { defOfKind } from '../ranch/catalog';
 import { makeBuilding } from '../ui/build';
 import { Helper, type HelperMode } from '../entities/helper';
 import type { SpeciesId } from '../world/map';
-import type { Totals } from './progression';
+import { newTotals, type Totals } from './progression';
 import type { UpKey } from './economy';
+import { morningOrders, type Order } from './orders';
+import type { ClassId } from './trials';
+import { applyLook, readLook, type Look } from '../ui/look';
+import { PIECES, type PlacedDecor } from '../ui/decorbuild';
+import { SKIES, type Sky } from './weather';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
 const KEY = 'comeby-save-v1';
 
-interface SavedAnimal { id: SpeciesId; coat: Coat; stress: number; x?: number; y?: number; wanderer?: boolean; produceT?: number }
+interface SavedAnimal { id: SpeciesId; coat: Coat; stress: number; x?: number; y?: number; wanderer?: boolean; produceT?: number; home?: boolean }
 
 interface SaveData {
   v: 1;
@@ -29,6 +34,14 @@ interface SaveData {
   buildings: { kind: BuildingKind; tx: number; ty: number; rot: Rot; level: number; trough?: boolean; goods?: number; animals?: SavedAnimal[] }[];
   wild: SavedAnimal[];
   helpers: { name: string; mode: HelperMode }[];
+  // Added with orders and trials; older saves lack them.
+  orders?: Order[];
+  nextOrder?: number;
+  trials?: { won: ClassId[]; cups: number; last: number };
+  // Added with customization; older saves get the defaults.
+  look?: Partial<Look>;
+  decor?: PlacedDecor[];
+  weather?: { sky: Sky; forecast: Sky; dir: [number, number] };
 }
 
 function store(): Storage | null {
@@ -64,9 +77,15 @@ export function saveGame(game: Game) {
         return out;
       }),
     wild: game.animals
-      .filter((a) => !a.pen && !a.gone)
-      .map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), x: Math.round(a.x), y: Math.round(a.y), wanderer: a.wanderer })),
+      .filter((a) => !a.pen && !a.gone && !a.trial)
+      .map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), x: Math.round(a.x), y: Math.round(a.y), wanderer: a.wanderer, ...(a.home ? { home: true } : {}) })),
     helpers: game.helpers.map((h) => ({ name: h.name, mode: h.mode })),
+    orders: game.orders.list,
+    nextOrder: game.orders.nextId,
+    trials: { won: game.trials.won, cups: game.trials.cups, last: game.trials.lastPrizeDay },
+    look: game.look,
+    decor: game.decor,
+    weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
   };
   try {
     store()?.setItem(KEY, JSON.stringify(data));
@@ -84,9 +103,9 @@ function read(): SaveData | null {
   }
 }
 
-export function saveInfo(): { day: number; tier: number } | null {
+export function saveInfo(): { day: number; tier: number; look?: Partial<Look> } | null {
   const d = read();
-  return d ? { day: d.day, tier: d.tier } : null;
+  return d ? { day: d.day, tier: d.tier, look: d.look } : null;
 }
 
 export function clearSave() {
@@ -103,7 +122,7 @@ export function loadInto(game: Game): boolean {
   game.won = d.won;
   game.tut = d.tut;
   game.tipsSeen = new Set(d.tips);
-  game.totals = { ...game.totals, ...d.totals };
+  game.totals = { ...newTotals(), ...d.totals };
   game.upgrades = { ...game.upgrades, ...d.upgrades };
   game.applyUpgrades();
   game.owned = new Set(d.owned);
@@ -137,12 +156,35 @@ export function loadInto(game: Game): boolean {
     const a = new Animal(sa.id, sa.x ?? 0, sa.y ?? 0, sa.coat);
     a.stress = sa.stress;
     if (sa.wanderer !== undefined) a.wanderer = sa.wanderer;
+    a.home = !!sa.home;
     game.animals.push(a);
   }
+  if (d.trials) {
+    game.trials.won = [...d.trials.won];
+    game.trials.cups = d.trials.cups;
+    game.trials.lastPrizeDay = d.trials.last;
+  }
+  game.look = readLook(d.look);
+  applyLook(game.look);
+  game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));
+  // Today's sky as it was saved (older saves: a clear day).
+  const w = d.weather;
+  if (w && SKIES.includes(w.sky) && !game.weather.forced) {
+    game.weather.set(w.sky);
+    game.weather.forecast = SKIES.includes(w.forecast) ? w.forecast : 'clear';
+    [game.weather.dirX, game.weather.dirY] = w.dir;
+    game.weather.snap();
+  }
   game.startDay(true, false);
+  // The morning's orders as they were; an older save gets fresh ones.
+  if (d.orders) {
+    game.orders.list = d.orders.map((o) => ({ ...o }));
+    game.orders.nextId = d.nextOrder ?? game.orders.list.length + 1;
+  } else morningOrders(game);
+  saveGame(game);
   return true;
 }

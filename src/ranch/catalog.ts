@@ -24,7 +24,7 @@ const icon = (id: string, rows: string[]) => () => (icons[id] ??= spr(rows, 0, 0
 export const CATALOG: BuildDef[] = [
   {
     id: 'pen', kind: 'pen', name: 'PEN', cost: 25, tier: 1, w: 8, h: 7, rotates: true,
-    upgrade: { cost: 30, tier: 3, desc: 'BIGGER, STURDIER' },
+    upgrade: { cost: 40, tier: 3, desc: 'BIGGER, STURDIER' },
     desc: 'HOLDS ONE KIND. THE GATE SHUTS BEHIND THEM.',
     icon: icon('pen', ['p.p.p.p.p', 'wwwwwwwww', 'p.......p', 'w.......w', 'p.......p', 'wwww..www', 'p.p...p.p']),
   },
@@ -50,7 +50,7 @@ export const CATALOG: BuildDef[] = [
   },
   {
     id: 'barn', kind: 'barn', name: 'BARN', cost: 80, tier: 2, w: 6, h: 5, rotates: false,
-    upgrade: { cost: 50, tier: 3, desc: 'SHELTERS A WIDER RING' },
+    upgrade: { cost: 70, tier: 3, desc: 'SHELTERS A WIDER RING' },
     desc: 'PENS INSIDE ITS RING ARE SAFE AT NIGHT.',
     icon: icon('barn', ['....p....', '..ppppp..', '.ppppppp.', 'ppppppppp', '.wwwwwww.', '.wpwwwpw.', '.wwpwpww.']),
   },
@@ -60,13 +60,19 @@ export const CATALOG: BuildDef[] = [
     icon: icon('gate', ['.........', 'p.......p', 'pwwwwwwwp', 'p.w.w.w.p', 'pwwwwwwwp', 'p.......p']),
   },
   {
-    id: 'windmill', kind: 'windmill', name: 'MILL', cost: 180, tier: 5, w: 3, h: 3, rotates: false, max: 1,
+    id: 'windmill', kind: 'windmill', name: 'MILL', cost: 260, tier: 5, w: 3, h: 3, rotates: false, max: 1,
     desc: 'THE VALLEY PROSPERS: +20% GOODS.',
     icon: icon('windmill', ['p.....p', '.p...p.', '..pwp..', '...w...', '..pwp..', '.p.w.p.', 'p.www.p']),
   },
 ];
 
 export const defOf = (id: ItemId) => CATALOG.find((d) => d.id === id)!;
+
+// Pens get dearer as the ranch fills: the first two you build cost 25$,
+// then each one 15$ more. `pens` counts the starter pen.
+export function setPenPrice(pens: number) {
+  defOf('pen').cost = 25 + 15 * Math.max(0, pens - 2);
+}
 export const defOfKind = (k: BuildingKind) => CATALOG.find((d) => d.kind === k);
 
 export function footprint(def: BuildDef, rot: Rot): { w: number; h: number } {

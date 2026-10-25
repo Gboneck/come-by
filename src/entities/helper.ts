@@ -13,7 +13,7 @@ import type { PressureSource } from './animal';
 // Helper dogs wear a buttercup bandana so the player's red one stays unique.
 export type HelperMode = 'flank' | 'stay' | 'home';
 export const HELPER_NAMES = ['PIP', 'SKIP'];
-export const HELPER_COSTS = [50, 90];
+export const HELPER_COSTS = [70, 130];
 
 let SPR: DogSprites | null = null;
 const tmp = { x: 0, y: 0 };
@@ -101,6 +101,16 @@ export class Helper {
         ty = home.y;
         lie = Math.hypot(tx - this.x, ty - this.y) < 4;
       }
+    } else if (game.trials.run) {
+      // A trial is one dog's work: wait by the handler's post.
+      const p = game.ranch.course.post;
+      tx = p.x + (index ? 14 : -14);
+      ty = p.y + 12;
+      if (Math.hypot(tx - this.x, ty - this.y) > 30) {
+        this.x = tx;
+        this.y = ty;
+      }
+      lie = Math.hypot(tx - this.x, ty - this.y) < 4;
     } else if (this.mode === 'stay') {
       lie = true;
     } else if (this.mode === 'home') {

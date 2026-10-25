@@ -18,6 +18,10 @@ await step('title', () => ({ mode: window.game.mode, demo: window.game.demo }));
 await page.keyboard.press('Enter');
 await page.waitForTimeout(300);
 await step('started', () => ({ mode: window.game.mode, demo: window.game.demo, saved: !!localStorage.getItem('comeby-save-v1') }));
+// A new game opens the dog's look screen first; Esc takes the defaults.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(100);
+await step('dressed', () => ({ mode: window.game.mode, name: window.game.look.name }));
 await page.evaluate(async () => {
   const g = window.game;
   const pen = g.ranch.pens[0];
@@ -31,11 +35,29 @@ await page.evaluate(async () => {
   const c = await import('/src/ranch/catalog.ts');
   g.ranch.add(m.makeBuilding(c.defOf('kennel'), 90, 108, 0));
   g.hireHelper();
+  // The player's looks and a piece of decor.
+  g.look = { ...g.look, name: 'ZIGGY', ranch: 'TWO OAKS', roof: 'moss', trim: 'butter', dog: { ...g.look.dog, saddle: true, neck: 'collar' } };
+  g.decor.push({ id: 'hay', tx: 95, ty: 112 });
+  // Orders, trials and a sheep let out of a pen.
+  g.trials.won = ['novice'];
+  g.trials.lastPrizeDay = 3;
+  g.totals.orders = 2;
+  g.totals.ribbons = [1, 0, 1];
+  g.orders.list = [{ id: 7, yard: 'drover', species: 'duck', n: 4, due: 150, got: 1, paid: 7, state: 'open' }];
+  g.orders.nextId = 8;
+  const loose = new (g.animals[0].constructor)('sheep', 700, 860);
+  loose.home = true;
+  g.animals.push(loose);
+  // A wet day, fog promised for tomorrow.
+  g.weather.set('rain');
+  g.weather.forecast = 'fog';
+  g.weather.dirX = 0; g.weather.dirY = 1;
 });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(100);
 await step('paused', () => ({ mode: window.game.mode }));
-for (const k of ['ArrowDown', 'ArrowDown', 'Enter']) {
+// Up from RESUME wraps to SAVE AND QUIT, the last row of the pause menu.
+for (const k of ['ArrowUp', 'Enter']) {
   await page.keyboard.press(k);
   await page.waitForTimeout(80);
 }
@@ -46,7 +68,28 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
 await step('continued', () => {
   const g = window.game;
-  return { mode: g.mode, demo: g.demo, coins: g.coins, tier: g.tier, speed: g.upgrades.speed, walk: g.dog.stats.walk, kennel: g.ranch.buildings.some((b) => b.kind === 'kennel'), penned: g.ranch.pens[0].animals.length, helpers: g.helpers.map((h) => h.name), gatesOpen: g.ranch.regionGates.filter((x) => x.unlocked).length, farmLevel: g.ranch.farmhouse.level };
+  return { look: `${g.look.name}/${g.look.ranch}/${g.look.roof}/${g.look.trim}/${g.look.dog.saddle}/${g.look.dog.neck}`, decor: g.decor.length, mode: g.mode, demo: g.demo, coins: g.coins, tier: g.tier, speed: g.upgrades.speed, walk: g.dog.stats.walk, kennel: g.ranch.buildings.some((b) => b.kind === 'kennel'), penned: g.ranch.pens[0].animals.length, helpers: g.helpers.map((h) => h.name), gatesOpen: g.ranch.regionGates.filter((x) => x.unlocked).length, farmLevel: g.ranch.farmhouse.level,
+    sky: g.weather.sky, forecast: g.weather.forecast, rain: +g.weather.rain.toFixed(2), windDir: [g.weather.dirX, g.weather.dirY],
+    won: g.trials.won, lastPrize: g.trials.lastPrizeDay, orders: g.orders.list.map((o) => `${o.id}:${o.yard}:${o.species}:${o.got}/${o.n}`), nextOrder: g.orders.nextId, filled: g.totals.orders, ribbons: g.totals.ribbons, home: g.animals.filter((a) => a.home).length };
+});
+
+// A save from before orders and trials: strip the new fields and continue.
+await page.evaluate(() => {
+  window.game.loading = true; // no save on the way out
+  const k = 'comeby-save-v1';
+  const d = JSON.parse(localStorage.getItem(k));
+  delete d.orders; delete d.nextOrder; delete d.trials; delete d.weather;
+  for (const f of ['orders', 'calmOrders', 'ribbons', 'bestTrial', 'trialRuns', 'legacy']) delete d.totals[f];
+  for (const a of d.wild) delete a.home;
+  localStorage.setItem(k, JSON.stringify(d));
+});
+await page.goto('http://localhost:5190/?debug&title');
+await page.waitForFunction(() => window.game);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(400);
+await step('old save', () => {
+  const g = window.game;
+  return { mode: g.mode, tier: g.tier, coins: g.coins, sky: g.weather.sky, forecast: g.weather.forecast, won: g.trials.won, orders: g.orders.list.length, ribbons: g.totals.ribbons, filled: g.totals.orders, legacy: g.totals.legacy, showGate: g.ranch.regionGates.find((x) => x.region === 'show').unlocked };
 });
 if (errors.length) console.log('ERRORS', errors);
 await browser.close();

@@ -1,4 +1,7 @@
-import { spr, type Sprite } from '../gfx/sprite';
+import { C } from '../palette';
+import { drawSpr, spr, type Sprite } from '../gfx/sprite';
+import { rimLight } from './animals';
+import { dressRows, type DogFacing, type DogLook } from './dogstyle';
 
 // Blue heeler: teal coat flecked with wool, plum mask and ear tips, and the
 // red bandana that marks the player. `y` (buttercup) swaps in for helpers.
@@ -310,8 +313,12 @@ function recolor(rows: string[], bandana: string): string[] {
   return bandana === 'r' ? rows : rows.map((r) => r.replace(/r/g, bandana));
 }
 
-export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
-  const S = (rows: string[], ax: number, ay: number) => spr(recolor(rows, bandana), ax, ay);
+// `look` dresses the player's dog (markings, neck piece; see dogstyle.ts).
+export function makeDogSprites(bandana: 'r' | 'y' = 'r', look?: DogLook): DogSprites {
+  let facing: DogFacing = 'side';
+  // Dressed first, then the sun catches the top of the coat on the far
+  // side: a sage rim.
+  const S = (rows: string[], ax: number, ay: number) => spr(rimLight(recolor(look ? dressRows(rows, facing, look) : rows, bandana), 't', 's', false), ax, ay);
   const side: DogPoses = {
     stand: S(SIDE_STAND, 6, 7),
     run: SIDE_RUN.map((f) => S(f, 6, 7)),
@@ -323,6 +330,7 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
     lieBreath: S(SIDE_LIE_BREATH, 6, 7),
     lieWag: S(SIDE_LIE_WAG, 6, 7),
   };
+  facing = 'down';
   const down: DogPoses = {
     stand: S(DOWN_STAND, 3, 8),
     run: DOWN_RUN.map((f) => S(f, 3, 8)),
@@ -334,6 +342,7 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
     lieBreath: S(DOWN_LIE_BREATH, 3, 8),
     lieWag: S(DOWN_LIE_WAG, 3, 8),
   };
+  facing = 'up';
   const up: DogPoses = {
     stand: S(UP_STAND, 3, 9),
     run: UP_RUN.map((f) => S(f, 3, 9)),
@@ -360,4 +369,39 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
     upStand: up.stand,
     upLie: up.lie,
   };
+}
+
+// ---- Asleep: curled nose to tail while the day runs on (resting). ----
+// Facing right, 13 x 8, anchor at the feet (6, 7) like the other poses.
+const curlRows = (back: string) => [
+  '.............',
+  '.............',
+  '........p.p..',
+  back,
+  '..ttwtttttpt.',
+  '.tttttttrttww',
+  '.ttwtttttttp.',
+  '..ttttttwww..',
+];
+const CURL = curlRows('...tttt.ttt..');
+const CURL_BREATH = curlRows('..ttttt.ttt..');
+
+let curl: Sprite[] | null = null;
+
+export function drawSleepingDog(g: CanvasRenderingContext2D, x: number, y: number, flip: boolean, t: number) {
+  curl ??= [spr(rimLight(CURL, 't', 's', false), 6, 7), spr(rimLight(CURL_BREATH, 't', 's', false), 6, 7)];
+  drawSpr(g, curl[t % 2.4 > 1.6 ? 1 : 0], x, y + 2, flip);
+}
+
+// Little z's drifting up from the sleeping dog, growing as they rise.
+const ZS = [['####', '..#.', '.#..', '####'], ['####', '..#.', '.#..', '####'], ['#####', '...#.', '..#..', '.#...', '#####']];
+export function drawSnores(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
+  g.fillStyle = C.wool;
+  for (let k = 0; k < 2; k++) {
+    const u = (t * 0.5 + k / 2) % 1;
+    const z = ZS[Math.min(2, Math.floor(u * 3))];
+    if (u > 0.85 && Math.floor(t * 10) % 2) continue;
+    const zx = Math.round(x + 4 + u * 8 + Math.sin((t + k) * 2) * 1.5), zy = Math.round(y - 8 - u * 14);
+    z.forEach((row, j) => [...row].forEach((ch, i) => ch === '#' && g.fillRect(zx + i, zy + j, 1, 1)));
+  }
 }

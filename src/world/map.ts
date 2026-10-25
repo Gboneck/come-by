@@ -33,7 +33,7 @@ export const BLOCK_ANIMAL = SOLID | DEEP | ROCK;
 export const BLOCK_CLIMBER = SOLID | DEEP;
 
 export type SpeciesId = 'duck' | 'sheep' | 'goat' | 'cow' | 'pony';
-export type RegionId = 'ranch' | 'meadow' | 'hills' | 'rocky' | 'ford' | 'high';
+export type RegionId = 'ranch' | 'meadow' | 'hills' | 'rocky' | 'ford' | 'high' | 'show';
 
 export interface RegionDef {
   id: RegionId;
@@ -56,7 +56,47 @@ export const REGIONS: RegionDef[] = [
   { id: 'rocky', index: 4, name: 'Rocky Rise', tier: 3, species: 'goat', cx: 46, cy: 52, rx: 32, ry: 19, gate: { x: 82, y: 66, vertical: true, span: 7 } },
   { id: 'ford', index: 5, name: 'River Ford', tier: 4, species: 'cow', cx: 38, cy: 124, rx: 31, ry: 29, gate: { x: 71, y: 104, vertical: true, span: 7 } },
   { id: 'high', index: 6, name: 'High Range', tier: 5, species: 'pony', cx: 96, cy: 15, rx: 72, ry: 11, gate: { x: 96, y: 37, vertical: false, span: 7 } },
+  // Trial course and sale yard, reached through the Home Meadow.
+  { id: 'show', index: 7, name: 'Show Ground', tier: 2, species: null, cx: 120, cy: 148, rx: 40, ry: 17, gate: { x: 140, y: 128, vertical: false, span: 7 } },
 ];
+
+// ---- Show Ground trial course (pixels) ----
+// Release point at the top, fetch gate, handler's post, drive gate (left),
+// cross-drive gate (right), then the trial pen beside the post. Each gate is
+// a mid point and the direction the flock should pass through it.
+export const COURSE = {
+  release: { x: 832, y: 1124 },
+  post: { x: 832, y: 1256 },
+  gates: [
+    { id: 'fetch', name: 'FETCH GATE', x: 832, y: 1184, dx: 0, dy: 1 },
+    { id: 'drive', name: 'DRIVE GATE', x: 712, y: 1146, dx: -0.77, dy: -0.64 },
+    { id: 'cross', name: 'CROSS GATE', x: 952, y: 1146, dx: 1, dy: 0 },
+  ],
+  // Trial pen, in tiles, gate to the north.
+  pen: { tx: 110, ty: 153, w: 6, h: 5 },
+} as const;
+// Where the corridor from the Home Meadow opens onto the Show Ground.
+export const SHOW_ENTRY = { x0: 1094, x1: 1146, y: 1090 };
+
+// ---- Buyers' yards (tiles): small pens where orders are delivered ----
+export type YardId = 'mill' | 'drover' | 'sale';
+export interface YardSite {
+  id: YardId;
+  name: string; // the buyer
+  place: string; // where to find them
+  region: RegionId | null; // must be open for orders to go there
+  tx: number;
+  ty: number;
+  rot: 0 | 1 | 2 | 3; // gate side, as for pens
+  cart: { tx: number; ty: number }; // the buyer's cart, 2x2 tiles
+}
+export const YARDS: YardSite[] = [
+  { id: 'mill', name: 'THE MILLER', place: 'HOME MEADOW', region: 'meadow', tx: 158, ty: 99, rot: 1, cart: { tx: 165, ty: 101 } },
+  { id: 'drover', name: 'THE DROVER', place: 'THE CROSSROADS', region: null, tx: 105, ty: 75, rot: 1, cart: { tx: 112, ty: 77 } },
+  { id: 'sale', name: 'THE SALE YARD', place: 'SHOW GROUND', region: 'show', tx: 148, ty: 141, rot: 1, cart: { tx: 155, ty: 143 } },
+];
+export const YARD_W = 6;
+export const YARD_H = 5;
 
 export const regionById = (id: RegionId) => REGIONS.find((r) => r.id === id)!;
 
@@ -170,6 +210,10 @@ export class WorldMap {
     this.carveCorridor([[96, 66], [96, 50], [96, 30], [96, 20]], 3.4);
     this.carveCorridor([[96, 104], [80, 104], [66, 104], [44, 106]], 3.6);
     this.carveCorridor([[96, 104], [120, 104], [140, 104]], 4.6);
+    // Home Meadow down to the Show Ground, and the drover's nook off the
+    // crossroads road.
+    this.carveCorridor([[140, 104], [140, 124], [140, 138]], 3.4);
+    this.carveEllipse(107, 77, 8, 5, 0, 0.12, 98);
 
     // Home Meadow: a pond and a few groves.
     this.pond(158, 112, 4.2, 2.8);
@@ -210,11 +254,26 @@ export class WorldMap {
     this.clearNear(96, 104, 14);
     for (const reg of REGIONS) if (reg.gate) this.clearNear(reg.gate.x, reg.gate.y, 5);
     this.clearNear(140, 104, 5);
+    this.clearNear(140, 120, 4);
+    // Yards and the trial course stay open ground.
+    for (const y of YARDS) {
+      this.clearRect(y.tx - 2, y.ty - 2, y.tx + YARD_W + 2, y.ty + YARD_H + 2);
+      this.clearRect(y.cart.tx - 1, y.cart.ty - 1, y.cart.tx + 3, y.cart.ty + 3);
+    }
 
     // A ring of guaranteed forest at the map edge.
     for (let y = 0; y < MH; y++)
       for (let x = 0; x < MW; x++)
         if (x < 2 || y < 2 || x >= MW - 2 || y >= MH - 2) this.setT(x, y, Ter.Forest);
+  }
+
+  // Turn any trees or rocks in a tile rectangle back into grass.
+  private clearRect(x0: number, y0: number, x1: number, y1: number) {
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        const t = this.t(x, y);
+        if (t === Ter.Forest || t === Ter.Rock) this.setT(x, y, Ter.Grass);
+      }
   }
 
   private pond(cx: number, cy: number, rx: number, ry: number) {
@@ -279,6 +338,7 @@ export class WorldMap {
         const tx = Math.round(reg.cx + Math.cos(a) * reg.rx * d);
         const ty = Math.round(reg.cy + Math.sin(a) * reg.ry * d);
         if (reg.id === 'ford' && tx > riverX(ty) - 6) continue; // cattle start across the river
+        if (YARDS.some((y) => tx > y.tx - 6 && tx < y.tx + YARD_W + 6 && ty > y.ty - 6 && ty < y.ty + YARD_H + 6)) continue;
         let ok = true;
         for (let yy = ty - 3; yy <= ty + 3 && ok; yy++)
           for (let xx = tx - 3; xx <= tx + 3 && ok; xx++)

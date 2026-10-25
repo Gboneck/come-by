@@ -11,8 +11,25 @@ import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey 
 import { SPECIES } from '../entities/species';
 import { HELPER_COSTS } from '../entities/helper';
 import { buildingDrawables } from '../render/world';
+import { safeArea } from './safe';
+import { nextGoal, tierOf } from '../systems/progression';
+import { PIECES, clearDecorUnder, decorAt, decorBlocked, pieceDrawable, pieceIcon, pieceOf, type Piece } from './decorbuild';
+import { RANCH_MAX, RANCH_NAMES, applyLook, pickName } from './look';
+import { cycle, optionRow } from './rows';
+import { focusField, isTyping, stopTyping, textField } from './textfield';
+import { ROOFS, TRIMS, type Roof, type Trim } from '../art/ranchstyle';
+import { drawGateMark, drawRoad } from '../art/road';
 
-export type Tab = 'build' | 'dog' | 'market';
+// The ranch tab's paint rows (the name field sits above them).
+const ROOF_IDS = Object.keys(ROOFS) as Roof[];
+const TRIM_IDS = Object.keys(TRIMS) as Trim[];
+const RANCH_ROWS: { label: string; value: (g: Game) => string; step: (g: Game, d: -1 | 1) => void }[] = [
+  { label: 'ROOF', value: (g) => ROOFS[g.look.roof].name, step: (g, d) => { g.look.roof = cycle(ROOF_IDS, g.look.roof, d); } },
+  { label: 'TRIM', value: (g) => TRIMS[g.look.trim].name, step: (g, d) => { g.look.trim = cycle(TRIM_IDS, g.look.trim, d); } },
+];
+
+export type Tab = 'build' | 'decor' | 'ranch' | 'dog' | 'market';
+const TABS: [Tab, string][] = [['build', 'BUILD'], ['decor', 'DECOR'], ['ranch', 'RANCH'], ['dog', 'DOG'], ['market', 'MARKET']];
 
 // How far out from the ranch centre you may build, by tier.
 const REACH = [0.72, 0.84, 0.94, 1, 1];
@@ -41,9 +58,19 @@ interface Ghost {
   pen?: Pen;
 }
 
+// The catalog item a "BUILD A ..." goal asks for, or -1.
+function goalBuilding(game: Game): number {
+  const ng = nextGoal(game);
+  const m = ng?.goal.label.match(/^BUILD (?:A|THE) (\w+)$/);
+  if (!m) return -1;
+  const kind = m[1].toLowerCase();
+  return CATALOG.findIndex((d) => d.kind === kind || d.id === kind);
+}
+
 export class BuildMode {
   tab: Tab = 'build';
   item = 0;
+  piece = 0; // selected decor piece
   cx = 0;
   cy = 0;
   rot: Rot = 0;
@@ -62,6 +89,9 @@ export class BuildMode {
       this.cy = r.cy + 2;
     }
     this.row = 0;
+    // When the goal is to build something, have it ready to place.
+    const want = goalBuilding(game);
+    if (want >= 0) this.item = want;
     game.input.stickEnabled = false;
   }
 
@@ -117,6 +147,8 @@ export class BuildMode {
     for (let y = ty; y < ty + h; y++)
       for (let x = tx; x < tx + w; x++) if (!this.buildable(game, x, y)) return { ...gh, reason: 'NOT ON RANCH LAND' };
     for (const b of game.ranch.buildings) if (b.kind !== 'regiongate' && b.overlapsTiles(tx, ty, w, h)) return { ...gh, reason: 'SOMETHING IS IN THE WAY' };
+    const why = game.ranch.placementProblem(def.kind, tx, ty, w, h, this.rot); // the drove road, a pen gate onto a wall
+    if (why) return { ...gh, reason: why };
     const X0 = tx * TS - 3, Y0 = ty * TS - 3, X1 = (tx + w) * TS + 3, Y1 = (ty + h) * TS + 3;
     const inside = (x: number, y: number) => x > X0 && x < X1 && y > Y0 && y < Y1;
     if (inside(game.dog.x, game.dog.y)) return { ...gh, reason: 'YOUR DOG IS IN THE WAY' };
@@ -137,6 +169,7 @@ export class BuildMode {
       gh.pen.hasTrough = true;
     } else {
       game.ranch.add(makeBuilding(gh.def, gh.tx, gh.ty, this.rot));
+      clearDecorUnder(game, gh.tx, gh.ty, gh.w, gh.h);
     }
     game.stats.built++;
     game.onBuilt(gh.def.id);
@@ -186,18 +219,29 @@ export class BuildMode {
     const inp = game.input;
     if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
     if (inp.pressed('cancel') || inp.pressed('build')) return 'exit';
-    if (inp.pressed('tab1')) this.tab = 'build';
-    if (inp.pressed('tab2')) { this.tab = 'dog'; this.row = 0; }
-    if (inp.pressed('tab3')) { this.tab = 'market'; this.row = 0; }
+    (['tab1', 'tab2', 'tab3', 'tab4', 'tab5'] as const).forEach((k, i) => { if (inp.pressed(k)) this.setTab(game, TABS[i][0]); });
 
-    if (this.tab === 'build') {
-      if (this.repeat(game, 'left', ['KeyA', 'ArrowLeft'], dt)) this.cx--;
-      if (this.repeat(game, 'right', ['KeyD', 'ArrowRight'], dt)) this.cx++;
-      if (this.repeat(game, 'up', ['KeyW', 'ArrowUp'], dt)) this.cy--;
-      if (this.repeat(game, 'down', ['KeyS', 'ArrowDown'], dt)) this.cy++;
-      const r = regionById('ranch');
-      this.cx = Math.max(r.cx - r.rx, Math.min(r.cx + r.rx, this.cx));
-      this.cy = Math.max(r.cy - r.ry, Math.min(r.cy + r.ry, this.cy));
+    if (this.tab === 'decor') {
+      this.moveCursor(game, dt);
+      if (inp.pressed('prev') || inp.wheel < 0) this.piece = (this.piece + PIECES.length - 1) % PIECES.length;
+      if (inp.pressed('next') || inp.wheel > 0) this.piece = (this.piece + 1) % PIECES.length;
+      if (inp.pressed('confirm')) this.placeDecor(game);
+      if (inp.pressed('remove')) this.removeDecor(game);
+    } else if (this.tab === 'ranch') {
+      if (!isTyping()) {
+        const rows = RANCH_ROWS.length + 1;
+        if (inp.pressed('up')) this.row = (this.row + rows - 1) % rows;
+        if (inp.pressed('down')) this.row = (this.row + 1) % rows;
+        const r = RANCH_ROWS[this.row - 1];
+        if (inp.pressed('left') && r) { r.step(game, -1); applyLook(game.look); }
+        if (inp.pressed('right') && r) { r.step(game, 1); applyLook(game.look); }
+        if (inp.pressed('confirm')) {
+          if (this.row === 0) focusField('ranchname');
+          else if (r) { r.step(game, 1); applyLook(game.look); }
+        }
+      }
+    } else if (this.tab === 'build') {
+      this.moveCursor(game, dt);
       if (inp.pressed('prev') || inp.wheel < 0) this.item = (this.item + CATALOG.length - 1) % CATALOG.length;
       if (inp.pressed('next') || inp.wheel > 0) this.item = (this.item + 1) % CATALOG.length;
       if (inp.pressed('rotate')) this.rot = ((this.rot + 1) % 4) as Rot;
@@ -216,12 +260,13 @@ export class BuildMode {
       if (inp.pressed('remove') && under) this.remove(game, under);
       if (inp.pressed('upgrade') && under) this.upgrade(game, under);
     } else if (this.tab === 'dog') {
-      const rows = UPGRADES.length + 1;
+      const rows = UPGRADES.length + 2; // the upgrades, a helper, the dog's look
       if (inp.pressed('up')) this.row = (this.row + rows - 1) % rows;
       if (inp.pressed('down')) this.row = (this.row + 1) % rows;
       if (inp.pressed('confirm')) {
         if (this.row < UPGRADES.length) this.buyUpgrade(game, UPGRADES[this.row].key);
-        else this.hire(game);
+        else if (this.row === UPGRADES.length) this.hire(game);
+        else game.openLook('kennel');
       }
     } else {
       const pens = game.ranch.pens.filter((p) => p.animals.length);
@@ -233,6 +278,63 @@ export class BuildMode {
       }
     }
     return null;
+  }
+
+  private moveCursor(game: Game, dt: number) {
+    if (this.repeat(game, 'left', ['KeyA', 'ArrowLeft'], dt)) this.cx--;
+    if (this.repeat(game, 'right', ['KeyD', 'ArrowRight'], dt)) this.cx++;
+    if (this.repeat(game, 'up', ['KeyW', 'ArrowUp'], dt)) this.cy--;
+    if (this.repeat(game, 'down', ['KeyS', 'ArrowDown'], dt)) this.cy++;
+    const r = regionById('ranch');
+    this.cx = Math.max(r.cx - r.rx, Math.min(r.cx + r.rx, this.cx));
+    this.cy = Math.max(r.cy - r.ry, Math.min(r.cy + r.ry, this.cy));
+  }
+
+  setTab(game: Game, tab: Tab) {
+    this.tab = tab;
+    this.row = 0;
+    if (tab === 'ranch') {
+      // Bring the farmhouse into view while it is being painted.
+      const f = game.ranch.farmhouse;
+      if (f) { this.cx = Math.floor(f.cx / TS); this.cy = Math.floor(f.cy / TS); }
+    }
+  }
+
+  // ---- Decor ----
+
+  get pieceDef(): Piece {
+    return PIECES[this.piece];
+  }
+
+  // Top-left tile of the selected piece at the cursor.
+  private pieceSpot() {
+    const p = this.pieceDef;
+    return { tx: this.cx - Math.floor(p.w / 2), ty: this.cy - Math.floor(p.h / 2) };
+  }
+
+  private placeDecor(game: Game) {
+    const p = this.pieceDef;
+    const { tx, ty } = this.pieceSpot();
+    const why = decorBlocked(game, p, tx, ty, (x, y) => this.buildable(game, x, y));
+    if (why) {
+      this.say(why);
+      game.audio?.play('deny');
+      return;
+    }
+    game.coins -= p.cost;
+    game.decor.push({ id: p.id, tx, ty });
+    this.say(`PLACED A ${p.name}`, true);
+    game.audio?.play('build');
+    game.fx.dust((tx + p.w / 2) * TS, (ty + p.h) * TS - 1, 0, 0);
+  }
+
+  private removeDecor(game: Game) {
+    const d = decorAt(game, this.cx, this.cy);
+    if (!d) return;
+    const p = pieceOf(d.id);
+    game.decor = game.decor.filter((x) => x !== d);
+    game.coins += p.cost; // decor comes back in full
+    this.say(`PICKED UP THE ${p.name} (+${p.cost}$)`);
   }
 
   buyUpgrade(game: Game, key: UpKey) {
@@ -276,7 +378,7 @@ export class BuildMode {
 
   // World-space parts: buildable outline, shelter rings, the ghost.
   drawWorld(game: Game, g: CanvasRenderingContext2D) {
-    if (this.tab !== 'build') return;
+    if (this.tab !== 'build' && this.tab !== 'decor') return;
     const { ox, oy, W, H } = game.view();
     const t0x = Math.floor(ox / TS) - 1, t1x = Math.ceil((ox + W) / TS) + 1;
     const t0y = Math.floor(oy / TS) - 1, t1y = Math.ceil((oy + H) / TS) + 1;
@@ -290,6 +392,8 @@ export class BuildMode {
         if (!this.buildable(game, tx - 1, ty)) for (let i = 0; i < TS; i += 2) g.fillRect(X, Y + i, 1, 1);
         if (!this.buildable(game, tx + 1, ty)) for (let i = 0; i < TS; i += 2) g.fillRect(X + TS - 1, Y + i, 1, 1);
       }
+    drawRoad(g, game.ranch, t0x, t0y, t1x, t1y, game.t);
+    if (this.tab === 'decor') return this.drawDecorGhost(game, g);
     for (const b of game.ranch.buildings) if (b instanceof Barn) ring(g, b.cx, b.cy, b.shelterRadius, C.butter, 6);
     if (this.def.id === 'barn') ring(g, (this.cx + 0.5) * TS, (this.cy + 0.5) * TS, 84, C.butter, 6);
 
@@ -309,7 +413,24 @@ export class BuildMode {
       } else ditherRect(g, X0, Y0, Wd, Hd, 8, C.plum);
       outline(g, X0, Y0, Wd, Hd, gh.ok ? C.butter : C.plum, game.t);
     }
+    if (gh.def.id === 'pen') drawGateMark(g, gh.tx, gh.ty, this.rot, gh.ok, game.t);
     // Cursor tile marker.
+    rect(g, this.cx * TS + 3, this.cy * TS + 3, 2, 2, C.butter);
+  }
+
+  private drawDecorGhost(game: Game, g: CanvasRenderingContext2D) {
+    const p = this.pieceDef;
+    const { tx, ty } = this.pieceSpot();
+    const under = decorAt(game, this.cx, this.cy);
+    const ok = !decorBlocked(game, p, tx, ty, (x, y) => this.buildable(game, x, y));
+    if (under && !ok) {
+      const up = pieceOf(under.id);
+      outline(g, under.tx * TS, under.ty * TS, up.w * TS, up.h * TS, C.wool, game.t);
+    } else {
+      if (ok) pieceDrawable(game, g, p, tx, ty).draw();
+      else ditherRect(g, tx * TS, ty * TS, p.w * TS, p.h * TS, 8, C.plum);
+      outline(g, tx * TS, ty * TS, p.w * TS, p.h * TS, ok ? C.butter : C.plum, game.t);
+    }
     rect(g, this.cx * TS + 3, this.cy * TS + 3, 2, 2, C.butter);
   }
 
@@ -318,43 +439,49 @@ export class BuildMode {
     const ui = game.ui;
     const inp = game.input;
     let result: 'exit' | null = null;
+    const S = safeArea(game.screen);
+    const top = 2 + S.top, R = W - 2 - S.right;
+    const touch = inp.touchMode;
+    const th = touch ? 13 : 11, tt = touch ? 4 : 3, p = touch ? 3 : 0;
 
     // Tabs and DONE.
-    const tabs: [Tab, string][] = [['build', 'BUILD'], ['dog', 'DOG'], ['market', 'MARKET']];
-    let x = 2;
-    for (const [id, label] of tabs) {
-      const w = textWidth(label) + 8;
+    let x = 2 + S.left;
+    for (const [id, label] of TABS) {
+      const w = textWidth(label) + (touch ? 8 : 6);
       const on = this.tab === id;
-      panel(g, x, 2, w, 11, on ? C.teal : C.plum, on ? C.butter : C.sage);
-      text(g, label, x + 4, 5, on ? C.butter : C.wool);
-      if (ui.click(`tab-${id}`, x, 2, w, 11)) { this.tab = id; this.row = 0; }
+      panel(g, x, top, w, th, on ? C.teal : C.plum, on ? C.butter : C.sage);
+      text(g, label, x + w / 2, top + tt, on ? C.butter : C.wool, { align: 'center' });
+      if (ui.click(`tab-${id}`, x - 1, top - p, w + 2, th + p * 2)) this.setTab(game, id);
       x += w + 2;
     }
-    const dw = 30;
-    panel(g, W - dw - 2, 2, dw, 11, C.plum, C.butter);
-    text(g, 'DONE', W - dw / 2 - 2, 5, C.wool, { align: 'center' });
-    if (ui.click('done', W - dw - 2, 2, dw, 11)) result = 'exit';
+    const dw = touch ? 34 : 30;
+    panel(g, R - dw, top, dw, th, ui.isActive('done') ? C.teal : C.plum, C.butter);
+    text(g, 'DONE', R - dw / 2, top + tt, C.wool, { align: 'center' });
+    if (ui.click('done', R - dw - p, top - p, dw + p * 2, th + p * 2)) result = 'exit';
     const coinStr = `${game.coins}$`;
     const cw = textWidth(coinStr) + 8;
-    panel(g, W - cw - 2, 15, cw, 11);
-    text(g, coinStr, W - 6, 18, C.wool, { align: 'right', iconColor: C.butter });
+    panel(g, R - cw, top + th + 2, cw, 11);
+    text(g, coinStr, R - 4, top + th + 5, C.wool, { align: 'right', iconColor: C.butter });
+    const uiTop = top + th + 14; // world taps start below the top bar
 
     if (this.tab === 'build') this.drawBuildBar(game, g, W, H);
+    else if (this.tab === 'decor') this.drawDecorBar(game, g, W, H);
+    else if (this.tab === 'ranch') this.drawRanch(game, g, W, H);
     else if (this.tab === 'dog') this.drawDog(game, g, W, H);
     else this.drawMarket(game, g, W, H);
 
     if (this.msg) {
       const m = this.msg;
       const tw = textWidth(m.text);
-      panel(g, Math.round(W / 2 - tw / 2 - 5), 30, tw + 10, 11, C.plum, m.good ? C.butter : C.sage);
-      text(g, m.text, W / 2, 33, m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
+      panel(g, Math.round(W / 2 - tw / 2 - 5), uiTop + 2, tw + 10, 11, C.plum, m.good ? C.butter : C.sage);
+      text(g, m.text, W / 2, uiTop + 5, m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
     }
 
     // World taps / clicks move the cursor (and a mouse click builds).
-    if (this.tab === 'build') {
+    if (this.tab === 'build' || this.tab === 'decor') {
       const { ox, oy } = game.view();
       for (const p of inp.ptrs.values()) {
-        if (p.justDown && !p.owner && p.y > 28) p.owner = 'world';
+        if (p.justDown && !p.owner && p.y > uiTop) p.owner = 'world';
         if (p.owner === 'world') {
           this.cx = Math.floor((p.x + ox) / TS);
           this.cy = Math.floor((p.y + oy) / TS);
@@ -362,7 +489,7 @@ export class BuildMode {
         }
       }
       const hv = inp.hover;
-      if (hv && !inp.touchMode && hv.y > 28 && hv.y < H - 44) {
+      if (hv && !inp.touchMode && hv.y > uiTop && hv.y < H - 44 - S.bottom) {
         this.cx = Math.floor((hv.x + ox) / TS);
         this.cy = Math.floor((hv.y + oy) / TS);
       }
@@ -373,12 +500,17 @@ export class BuildMode {
   private drawBuildBar(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
     const ui = game.ui;
     const n = CATALOG.length;
-    const cw = Math.min(28, Math.floor((W - 4) / n));
-    const bx = Math.round(W / 2 - (cw * n) / 2), by = H - 26;
+    const S = safeArea(game.screen);
+    const L = 2 + S.left, R = W - 2 - S.right;
+    const cw = Math.min(28, Math.floor((R - L) / n));
+    const bx = Math.round((L + R) / 2 - (cw * n) / 2), by = H - 26 - S.bottom;
+    const goalItem = goalBuilding(game);
     panel(g, bx - 2, by - 2, cw * n + 4, 28);
     CATALOG.forEach((d, i) => {
       const x = bx + i * cw;
       const sel = i === this.item;
+      // The building the current goal asks for blinks in the bar.
+      if (i === goalItem && !sel && Math.floor(game.t * 3) % 2 === 0) panel(g, x, by, cw - 1, 24, C.plum, C.butter);
       const locked = d.tier > game.tier;
       if (sel) panel(g, x, by, cw - 1, 24, C.teal, C.butter);
       rect(g, x + 2, by + 2, cw - 5, 12, C.meadow);
@@ -418,19 +550,19 @@ export class BuildMode {
     }
     const ih = 10 + lines.length * 6;
     const iy = by - 6 - ih;
-    panel(g, 2, iy, W - 4, ih);
-    text(g, title, 6, iy + 3, C.butter, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l, 6, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
+    panel(g, L, iy, R - L, ih);
+    text(g, title, L + 4, iy + 3, C.butter, { iconColor: C.butter });
+    lines.forEach((l, i) => text(g, l, L + 4, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
 
     // Touch buttons.
     if (game.input.touchMode) {
-      const bw = 34, bh = 13, rx = W - bw - 2;
-      let y = iy - bh - 2;
+      const bw = 40, bh = 15, rx = R - bw;
+      let y = iy - bh - 3;
       const btn = (id: string, label: string, act: () => void) => {
         panel(g, rx, y, bw, bh, ui.isActive(id) ? C.teal : C.plum, C.butter);
-        text(g, label, rx + bw / 2, y + 4, C.wool, { align: 'center' });
-        if (ui.click(id, rx, y, bw, bh)) act();
-        y -= bh + 2;
+        text(g, label, rx + bw / 2, y + 5, C.wool, { align: 'center' });
+        if (ui.click(id, rx - 3, y - 1, bw + 4, bh + 2)) act();
+        y -= bh + 3;
       };
       btn('b-place', 'BUILD', () => game.input.push('confirm'));
       if (this.def.rotates) btn('b-rot', 'TURN', () => game.input.push('rotate'));
@@ -445,11 +577,11 @@ export class BuildMode {
 
   private drawDog(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
     const ui = game.ui;
-    const pw = Math.min(W - 8, 170), ph = 20 + (UPGRADES.length + 1) * 16;
+    const pw = Math.min(W - 8, 170), ph = 20 + (UPGRADES.length + 2) * 16;
     const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
     panel(g, x0, y0, pw, ph);
     const hasKennel = game.ranch.buildings.some((b) => b.kind === 'kennel');
-    text(g, hasKennel ? 'KENNEL: TRAIN YOUR DOG' : 'BUILD A KENNEL TO TRAIN', W / 2, y0 + 5, C.butter, { align: 'center' });
+    text(g, hasKennel ? `KENNEL: TRAIN ${game.look.name}` : 'BUILD A KENNEL TO TRAIN', W / 2, y0 + 5, C.butter, { align: 'center' });
     UPGRADES.forEach((u, i) => {
       const y = y0 + 16 + i * 16;
       const lvl = game.upgrades[u.key];
@@ -485,6 +617,119 @@ export class BuildMode {
         if (ui.click('hire', bx, y, bw, 11)) { this.row = i; this.hire(game); }
       }
     }
+    // The dog's look: name, coat and neck piece.
+    {
+      const i = UPGRADES.length + 1, y = y0 + 16 + i * 16;
+      if (this.row === i) rect(g, x0 + 3, y - 2, pw - 6, 15, C.teal);
+      text(g, `${game.look.name}'S LOOK`, x0 + 7, y, C.wool);
+      text(g, 'COAT, MASK, NECK', x0 + 7, y + 6, C.sage);
+      const bw = 34, bx = x0 + pw - bw - 6;
+      panel(g, bx, y, bw, 11, ui.isActive('dog-look') ? C.teal : C.plum, C.butter);
+      text(g, 'DRESS', bx + bw / 2, y + 3, C.wool, { align: 'center' });
+      if (ui.click('dog-look', bx - 2, y - 2, bw + 4, 15)) { this.row = i; game.openLook('kennel'); }
+      else if (ui.click('row-look', x0, y - 2, pw - 40, 15)) this.row = i;
+    }
+  }
+
+  // ---- Decor tab: a bar of pieces, as the build bar ----
+  private drawDecorBar(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
+    const ui = game.ui;
+    const n = PIECES.length;
+    const S = safeArea(game.screen);
+    const L = 2 + S.left, R = W - 2 - S.right;
+    const cw = Math.min(26, Math.floor((R - L) / n));
+    const bx = Math.round((L + R) / 2 - (cw * n) / 2), by = H - 32 - S.bottom;
+    panel(g, bx - 2, by - 2, cw * n + 4, 34);
+    PIECES.forEach((p, i) => {
+      const x = bx + i * cw;
+      const sel = i === this.piece;
+      const open = p.open(game);
+      if (sel) panel(g, x, by, cw - 1, 30, C.teal, C.butter);
+      rect(g, x + 2, by + 2, cw - 5, 19, C.meadow);
+      const ic = pieceIcon(p.id);
+      const sx = Math.max(0, Math.floor((ic.w - (cw - 5)) / 2)), sw = Math.min(ic.w, cw - 5);
+      const sh = Math.min(ic.h, 19);
+      g.drawImage(ic.img, sx, ic.h - sh, sw, sh, x + 2 + Math.floor((cw - 5 - sw) / 2), by + 2 + 19 - sh, sw, sh);
+      if (!open) ditherRect(g, x + 1, by + 1, cw - 3, 28, 10, C.plum);
+      text(g, open ? `${p.cost}` : 'X', x + cw / 2, by + 23, !open ? C.wool : game.coins >= p.cost ? C.butter : C.sage, { align: 'center' });
+      if (ui.click(`piece-${i}`, x, by, cw - 1, 30)) this.piece = i;
+    });
+
+    // Info card: the piece under the cursor, else the selected one.
+    const under = decorAt(game, this.cx, this.cy);
+    const lines: string[] = [];
+    let title: string;
+    if (under) {
+      const up = pieceOf(under.id);
+      title = up.name;
+      lines.push(`X: PICK IT UP (+${up.cost}$)`);
+    } else {
+      const p = this.pieceDef;
+      title = `${p.name}  ${p.cost}$`;
+      lines.push(...wrap(p.desc, R - L - 8));
+      const { tx, ty } = this.pieceSpot();
+      const why = decorBlocked(game, p, tx, ty, (x, y) => this.buildable(game, x, y));
+      if (why) lines.push(why);
+      else lines.push('DECOR NEVER GETS IN THE STOCK\'S WAY');
+    }
+    const ih = 10 + lines.length * 6;
+    const iy = by - 6 - ih;
+    panel(g, L, iy, R - L, ih);
+    text(g, title, L + 4, iy + 3, C.butter, { iconColor: C.butter });
+    lines.forEach((l, i) => text(g, l, L + 4, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
+    if (game.input.touchMode) {
+      const bw = 40, bh = 15, rx = R - bw;
+      let y = iy - bh - 3;
+      const btn = (id: string, label: string, act: () => void) => {
+        panel(g, rx, y, bw, bh, ui.isActive(id) ? C.teal : C.plum, C.butter);
+        text(g, label, rx + bw / 2, y + 5, C.wool, { align: 'center' });
+        if (ui.click(id, rx - 3, y - 1, bw + 4, bh + 2)) act();
+        y -= bh + 3;
+      };
+      btn('d-place', 'PLACE', () => game.input.push('confirm'));
+      if (under) btn('d-rm', 'PICK UP', () => game.input.push('remove'));
+    } else {
+      text(g, 'ARROWS MOVE  Q/E PICK  SPACE PLACE  X PICK UP', W / 2, iy - 8, C.wool, { align: 'center', shadow: C.plum });
+    }
+  }
+
+  // ---- Ranch tab: the name on the sign, the farmhouse paint ----
+  private drawRanch(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
+    const ui = game.ui;
+    const touch = game.input.touchMode;
+    const S = safeArea(game.screen);
+    const rh = touch ? 14 : 12, gap = touch ? 3 : 2;
+    const pw = Math.min(W - 8 - S.left - S.right, 190);
+    const ph = 30 + (RANCH_ROWS.length + 1) * (rh + gap) + 10;
+    const x0 = Math.round(W / 2 - pw / 2), y0 = H - S.bottom - 4 - ph;
+    panel(g, x0, y0, pw, ph);
+    text(g, 'YOUR RANCH', W / 2, y0 + 5, C.butter, { align: 'center' });
+    const signName = game.look.ranch || tierOf(game.tier).name;
+    text(g, `THE SIGN READS: COME BY ${signName}`, W / 2, y0 + 13, C.sage, { align: 'center' });
+    let y = y0 + 22;
+    const bx = x0 + 6, bw = pw - 12;
+    {
+      const dice = 16;
+      if (ui.hovering(bx, y, bw, rh)) this.row = 0;
+      textField(game.screen, g, 'ranchname', bx, y, bw - dice - 3, rh, game.look.ranch || 'NAME YOUR RANCH', RANCH_MAX, (s) => { game.look.ranch = s; }, game.t, this.row === 0, () => {
+        game.look.ranch = game.look.ranch.trim();
+      });
+      const dx = bx + bw - dice;
+      panel(g, dx, y, dice, rh, ui.isActive('ranch-dice') ? C.teal : C.plum, C.butter);
+      text(g, '?', dx + dice / 2 + 1, y + Math.floor((rh - 5) / 2), C.butter, { align: 'center' });
+      if (ui.click('ranch-dice', dx - 1, y - 2, dice + 2, rh + 4)) {
+        stopTyping();
+        game.look.ranch = pickName(RANCH_NAMES, game.look.ranch);
+        this.row = 0;
+      }
+      y += rh + gap;
+    }
+    RANCH_ROWS.forEach((r, i) => {
+      const sel = this.row === i + 1;
+      if (optionRow(game, g, `ranch-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { this.row = i + 1; r.step(game, d); applyLook(game.look); })) this.row = i + 1;
+      y += rh + gap;
+    });
+    ui.captureAll('ranch-bg');
   }
 
   private drawMarket(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {

@@ -18,16 +18,34 @@ original and drawn in code. No external art files, ever.
   Playwright screenshot + console-error check (writes to `shots/`).
 - URL switches: `?debug` exposes `window.game`, `window.sim` and
   `window.resetFlock` (see `src/debug.ts`) and skips the title (add
-  `&title` to keep it); `?play` skips the title; `?sprites=N` shows the
-  sprite sheet from row N.
+  `&title` to keep it), and `&weather=rain|fog|wind|storm` holds a sky;
+  `?play` skips the title; `?sprites=N` shows the
+  sprite sheet from row N; `?safe=top,right,bottom,left` fakes safe-area
+  insets (CSS px) to check notched phones.
 - Scripts (all Playwright, all start their own Vite server):
   `scripts/shot.mjs` screenshots + console errors (`--hold`, `--press`,
   `--eval` steps), `scripts/zoom.mjs` enlarges part of a PNG,
   `scripts/mapshot.mjs` exports the whole world, `scripts/tune.mjs` runs
-  bot herding scenarios per species and prints stress/time/splits,
+  bot herding scenarios per species and prints stress/time/splits
+  (`--weather=rain` etc.; `--seed=N` makes a run exact for before/after),
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
-  `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end.
+  `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
+  `scripts/resttest.mjs`, `scripts/weathertest.mjs`
+  and `scripts/tour.mjs` check the loops end to end,
+  `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
+  from day one to the valley thriving and logs each tier (days, minutes,
+  coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`),
+  `scripts/regions.mjs` screenshots every region at real scale (`--night`,
+  `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
+  include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
+  phone, notched-phone, landscape and desktop sizes onto contact sheets
+  (`shots/ui/`), `scripts/playthrough.mjs` plays a new save with the bot
+  and logs every hint, tip, banner and card against the clock (for pacing
+  and pile-ups; shots in `shots/play/`), `scripts/audiotest.mjs` renders the music, stingers and
+  soundscape offline and prints levels, peaks, tuning, theory checks and
+  CPU (we cannot listen, so we measure). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
+  `regions.mjs` their own port when other checkouts are running servers too.
 
 ## Rendering rules
 
@@ -65,13 +83,15 @@ stays unique.
 | Move            | WASD / arrow keys                | virtual stick (left thumb)    |
 | Sprint          | Shift (hold, uses stamina)       | push stick to the rim         |
 | Bark            | Space / K                        | BARK button                   |
-| Nip             | E / J                            | NIP button                    |
+| Nip             | E / J (also: open a pen gate, start a trial at the post) | NIP button  |
 | Lie down        | Q / L (hold)                     | DOWN button (hold)            |
+| Rest            | lie down on the ranch, no stock near (day passes x12) | same |
 | Build mode      | B (on the ranch)                 | BUILD button                  |
 | Ranch Ledger    | Tab / G                          | LEDGER button                 |
 | Helper command  | H                                | HELP button                   |
 | Pause           | Esc / P                          | pause button                  |
-| Mute            | M                                | in pause menu                 |
+| Mute            | M                                | sliders to 0 in pause menu    |
+| Volume          | pause menu, left/right           | pause menu, - and +           |
 
 ## Design laws
 
@@ -101,14 +121,23 @@ stays unique.
 
 - `src/main.ts` boot + loop; `src/game.ts` state machine and orchestration.
 - `src/gfx/` screen scaling, sprites, font, pixel primitives.
-- `src/art/` sprite grids and procedural art (trees, rocks, buildings).
+- `src/art/` sprite grids and procedural art (trees, rocks, buildings);
+  the player's choices: `dogstyle.ts` (markings, neck piece),
+  `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
 - `src/world/` tile map, regions, terrain/canopy baking.
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
-- `src/systems/` day cycle, economy, progression, save, audio, particles,
-  spawner.
-- `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
-- `src/render/` world drawing and the night dither.
+- `src/systems/` day cycle, economy, progression, save, audio (mixer and
+  sound effects), music (generative score), soundscape, synth (sample bank),
+  particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
+  orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
+  weather state everything else reads: `game.weather`).
+- `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
+  `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
+  pieces, `textfield.ts` typed names.
+- `src/render/` world drawing and the night dither; `animals.ts` animal
+  poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
+  wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
   the model for helper dogs.
 
@@ -122,7 +151,9 @@ The game is live at https://gboneck.github.io/come-by/ and deploys from
 - Work on a branch. Before shipping: `npm run typecheck`, `npm run build`,
   and `npm run shot` (desktop + phone screenshots in `shots/`, fails on
   console errors). Look at the screenshots. For anything touching herding,
-  run `node scripts/tune.mjs <species>` before and after and compare.
+  run `node scripts/tune.mjs <species>` before and after and compare. For
+  anything touching sound, run `node scripts/audiotest.mjs` (fails on
+  clipping, detuning or console errors).
 - Ship by opening a pull request into `main`; merging it redeploys the
   site in about a minute. When the user says to ship or merge, merge it
   yourself (`gh pr merge --squash --delete-branch`) and say when the

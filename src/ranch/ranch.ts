@@ -1,18 +1,32 @@
 import type { Animal } from '../entities/animal';
-import { BLOCK_ANIMAL, CW, CH, REGIONS, TS, type WorldMap } from '../world/map';
-import { Building, Farmhouse, Pen, RegionGate, type Rot } from './buildings';
+import { BLOCK_ANIMAL, CW, CH, MH, MW, REGIONS, TS, YARDS, type WorldMap } from '../world/map';
+import { Building, Farmhouse, Pen, RegionGate, type BuildingKind, type Rot } from './buildings';
 import { FieldGate } from './structures';
+import { Course, Yard, type Fixture } from './fixtures';
+import { setPenPrice } from './catalog';
+import { placementProblem, roadMask } from './road';
 
 export type RanchEvent =
   | { kind: 'penned'; animal: Animal; pen: Pen }
   | { kind: 'shut'; pen: Pen; batch: Animal[] }
-  | { kind: 'open'; pen: Pen };
+  | { kind: 'open'; pen: Pen }
+  | { kind: 'out'; animal: Animal; pen: Pen };
 
 export class Ranch {
   buildings: Building[] = [];
   regionGates: RegionGate[] = [];
+  // Out in the valley: buyers' yards and the Show Ground's trial course.
+  yards: Yard[];
+  course: Course;
+  fixtures: Fixture[];
+  // The drove road through the clearing (tiles), kept free of building.
+  road: Uint8Array;
 
   constructor(public map: WorldMap) {
+    this.road = roadMask(map);
+    this.yards = YARDS.map((s) => new Yard(s));
+    this.course = new Course();
+    this.fixtures = [...this.yards, this.course];
     for (const r of REGIONS) {
       if (!r.gate) continue;
       const span = this.gateSpan(r.gate.x, r.gate.y, r.gate.vertical);
@@ -76,8 +90,27 @@ export class Ranch {
   }
 
   restamp() {
+    setPenPrice(this.pens.length);
     this.map.structFlags.fill(0, 0, CW * CH);
     for (const b of this.buildings) b.stamp(this.map);
+    for (const f of this.fixtures) f.stamp(this.map);
+  }
+
+  onRoad(tx: number, ty: number) {
+    return tx >= 0 && ty >= 0 && tx < MW && ty < MH && this.road[ty * MW + tx] === 1;
+  }
+
+  // Why a new building cannot go here (null: it can): the drove road, and a
+  // pen gate that would open onto a wall or trees.
+  placementProblem(kind: BuildingKind, tx: number, ty: number, w: number, h: number, rot: Rot): string | null {
+    return placementProblem(this.map, this.road, this.buildings, kind, tx, ty, w, h, rot);
+  }
+
+  // Hold a pen's gate open so its stock can be driven out (or stop).
+  setLetOut(p: Pen, on: boolean) {
+    p.letOut = on;
+    p.letOutQuiet = 0;
+    if (on) p.open = true;
   }
 
   setupStarter() {
@@ -90,9 +123,9 @@ export class Ranch {
     const ev: RanchEvent[] = [];
     // Penning.
     for (const a of animals) {
-      if (a.pen || a.gone || a.carried) continue;
+      if (a.pen || a.gone || a.carried || a.trial) continue;
       for (const p of this.pens) {
-        if (p.contains(a.x, a.y)) {
+        if (!p.letOut && p.contains(a.x, a.y)) {
           a.pen = p;
           a.penT = 0;
           a.stray = false;
@@ -106,6 +139,18 @@ export class Ranch {
     }
     // Gates.
     for (const p of this.pens) {
+      if (p.letOut) {
+        // Whoever leaves the pen is loose again; the gate shuts behind the
+        // dog once it has gone and the gateway is clear.
+        for (const a of p.animals) {
+          if (a.gone || p.covers(a.x, a.y)) continue;
+          a.pen = null;
+          a.home = true;
+          a.penT = 0;
+          a.peakStress = a.stress;
+          ev.push({ kind: 'out', animal: a, pen: p });
+        }
+      }
       p.animals = p.animals.filter((a) => !a.gone && a.pen === p);
       if (p.animals.length === 0 && p.batch.length === 0) p.species = null;
       const gp = p.gatePoint(0);
@@ -117,7 +162,13 @@ export class Ranch {
         if (!a.pen && d < a.sp.r + 9) inGateway++;
       }
       const was = p.open;
-      if (p.full && p.batch.length === 0) {
+      if (p.letOut) {
+        p.open = true;
+        let busy = Math.hypot(dogX - gp.x, dogY - gp.y) < 56;
+        for (const a of p.animals) if (Math.hypot(a.x - gp.x, a.y - gp.y) < a.sp.r + 9) busy = true;
+        if (busy || inGateway > 0) p.letOutQuiet = 0;
+        else if ((p.letOutQuiet += dt) > 1.2) p.letOut = false;
+      } else if (p.full && p.batch.length === 0) {
         if (inGateway === 0) p.open = false;
       } else if (waiting > 0) {
         p.open = true;
