@@ -13,12 +13,24 @@ export interface BotOpts {
   keyboard?: boolean; // 8 directions, full speed or stopped, like a key player
   chase?: boolean; // naive: run straight at the nearest animal
   nip?: boolean; // nip the heel of a rearmost animal when close behind it
+  flock?: Animal[]; // work only these (default: every loose animal)
 }
 
-export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: number; sprint: boolean; lie: boolean; bark: boolean; nip?: boolean } {
+export interface BotCmd {
+  x: number;
+  y: number;
+  sprint: boolean;
+  lie: boolean;
+  bark: boolean;
+  nip?: boolean;
+  tx?: number; // where the dog is heading, for callers that path round obstacles
+  ty?: number;
+}
+
+export function botStep(game: Game, o: BotOpts, t: number): BotCmd {
   const d = game.dog;
   const trial = !!game.trials.run;
-  const flock: Animal[] = game.animals.filter((a) => !a.pen && !a.gone && a.trial === trial);
+  const flock: Animal[] = (o.flock ?? game.animals).filter((a) => !a.pen && !a.gone && !a.carried && a.trial === trial);
   if (!flock.length) return { x: 0, y: 0, sprint: false, lie: false, bark: false };
   let cx = 0, cy = 0;
   for (const a of flock) { cx += a.x; cy += a.y; }
@@ -85,11 +97,11 @@ export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: numb
     const close = Math.hypot(rear.x - d.x, rear.y - d.y) < rear.sp.r + 9;
     const nipNow = close && d.nipCd <= 0 && Math.floor(t * 1.2) !== Math.floor((t - 1 / 60) * 1.2);
     if (nipNow) { d.hx = (rear.x - d.x) / (Math.hypot(rear.x - d.x, rear.y - d.y) || 1); d.hy = (rear.y - d.y) / (Math.hypot(rear.x - d.x, rear.y - d.y) || 1); }
-    return { x: nl > 1 ? (nx / nl) * Math.min(1, nl / 6) : 0, y: nl > 1 ? (ny / nl) * Math.min(1, nl / 6) : 0, sprint: false, lie: false, bark: false, nip: nipNow };
+    return { x: nl > 1 ? (nx / nl) * Math.min(1, nl / 6) : 0, y: nl > 1 ? (ny / nl) * Math.min(1, nl / 6) : 0, sprint: false, lie: false, bark: false, nip: nipNow, tx: bx, ty: by };
   }
   const k = ml > 0 ? Math.min(1, dist / 6) / ml : 0;
   const bark = !!o.bark && Math.floor(t / o.bark) !== Math.floor((t - 1 / 60) / o.bark);
-  return { x: mx * k, y: my * k, sprint: !!o.sprint || dist > 120, lie: false, bark };
+  return { x: mx * k, y: my * k, sprint: !!o.sprint || dist > 120, lie: false, bark, tx, ty };
 }
 
 // Where a trial flock should go next: just past the next gate, the post, or

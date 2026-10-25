@@ -3,6 +3,7 @@ import { BLOCK_ANIMAL, CW, CH, REGIONS, TS, YARDS, type WorldMap } from '../worl
 import { Building, Farmhouse, Pen, RegionGate, type Rot } from './buildings';
 import { FieldGate } from './structures';
 import { Course, Yard, type Fixture } from './fixtures';
+import { setPenPrice } from './catalog';
 
 export type RanchEvent =
   | { kind: 'penned'; animal: Animal; pen: Pen }
@@ -85,6 +86,7 @@ export class Ranch {
   }
 
   restamp() {
+    setPenPrice(this.pens.length);
     this.map.structFlags.fill(0, 0, CW * CH);
     for (const b of this.buildings) b.stamp(this.map);
     for (const f of this.fixtures) f.stamp(this.map);

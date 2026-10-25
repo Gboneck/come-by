@@ -46,7 +46,6 @@ const owns = (kind: string) => (g: Game) => (g.ranch.buildings.some((b) => b.kin
 const allPenned = (g: Game) => g.ranch.pens.reduce((n, p) => n + p.animals.filter((a) => !a.gone).length, 0);
 
 const penGoal = (id: SpeciesId, n: number): Goal => ({ label: `PEN ${n} ${SPECIES[id].plural.toUpperCase()}`, target: n, value: penned(id) });
-const ribbons = (g: Game) => g.totals.ribbons[0] + g.totals.ribbons[1] + g.totals.ribbons[2];
 const won = (id: string) => (g: Game) => (g.trials.won.includes(id as never) ? 1 : 0);
 
 export const TIERS: Tier[] = [
@@ -54,7 +53,7 @@ export const TIERS: Tier[] = [
     n: 1, name: 'HOMESTEAD', species: 'duck', region: 'meadow',
     blurb: 'A CABIN, A PEN AND A FEW DUCKS.',
     goals: [
-      penGoal('duck', 6),
+      penGoal('duck', 5),
       { label: 'A CALM DRIVE HOME', target: 1, value: (g) => g.totals.calmBatches },
       { label: 'BUILD A KENNEL', target: 1, value: owns('kennel') },
     ],
@@ -88,7 +87,7 @@ export const TIERS: Tier[] = [
       penGoal('cow', 6),
       { label: 'A NIGHT WITH NO LOSSES', target: 1, value: (g) => g.totals.nightsNoLoss },
       { label: 'HIRE A HELPER DOG', target: 1, value: (g) => g.helpers.length },
-      { label: 'PLACE IN A TRIAL', target: 1, value: (g) => Math.min(1, ribbons(g)) },
+      { label: 'SCORE 60 IN A TRIAL', target: 60, value: (g) => g.totals.bestTrial },
     ],
     brings: ['CATTLE AT THE RIVER FORD', 'HELPER DOGS', 'WOLVES BY NIGHT'],
   },
@@ -96,7 +95,7 @@ export const TIERS: Tier[] = [
     n: 5, name: 'VALLEY ESTATE', species: 'pony', region: 'high',
     blurb: 'WILD PONIES RUN THE HIGH RANGE.',
     goals: [
-      penGoal('pony', 6),
+      penGoal('pony', 4),
       { label: '50 ANIMALS PENNED', target: 50, value: allPenned },
       { label: 'BUILD THE WINDMILL', target: 1, value: owns('windmill') },
     ],
