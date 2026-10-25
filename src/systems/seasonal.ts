@@ -59,6 +59,9 @@ export class Seasonal {
   news: string | null = null; // last night's feeding, for the morning
 }
 
+// The action button's name: E on a keyboard, NIP on a phone.
+const keyE = (g: Game) => (g.input.touchMode ? 'NIP' : 'E');
+
 export const isFairDay = (g: Game) => g.tier >= 2 && g.season.season === 'autumn' && g.season.dayOf === FAIR_DAY;
 const isWinterTier = (g: Game) => g.tier >= 2; // hay comes with tier 2 (barns, nights)
 
@@ -81,10 +84,18 @@ export function hayNeed(g: Game) {
 
 // ---- The day ----
 
+// A morning banner and how much it matters: the morning shows only its most
+// important one (jobsMorning). 3: winter's feeding, the shearer, the fair;
+// 1: a new season.
+export interface MorningBanner {
+  big: string;
+  small: string;
+  prio: number;
+}
+
 // Each morning (and on loading a save): the calendar, the day's length, the
-// season's work. Returns the season's banner for the morning, if any (the
-// caller shows it after the weather's and the trial's).
-export function seasonalMorning(g: Game, fresh: boolean): [string, string] | null {
+// season's work. Returns the season's banner for the morning, if any.
+export function seasonalMorning(g: Game, fresh: boolean): MorningBanner | null {
   const S = g.season;
   const was = S.season;
   S.morning(g.day.day);
@@ -97,14 +108,14 @@ export function seasonalMorning(g: Game, fresh: boolean): [string, string] | nul
     if (isFairDay(g)) setOutBreeders(g);
     return null;
   }
-  let banner: [string, string] | null = null;
+  let banner: MorningBanner | null = null;
   const turned = S.season !== was || S.dayOf === 1;
   // Last night's feeding.
   for (const p of g.ranch.pens) if (p.hungry) for (const a of p.animals) a.stress = Math.min(1, a.stress + 0.25);
   if (g.seasonal.news) {
-    banner = [g.seasonal.news.startsWith('HUNGRY') ? 'A HUNGRY NIGHT' : 'HAY', g.seasonal.news];
+    banner = { big: g.seasonal.news.startsWith('HUNGRY') ? 'A HUNGRY NIGHT' : 'HAY', small: g.seasonal.news, prio: 3 };
     g.seasonal.news = null;
-  } else if (turned && S.dayOf === 1 && g.day.day > 1) banner = [`${S.season.toUpperCase()}, YEAR ${S.year}`, SEASON_LINE[S.season]]; // not over a new game's welcome
+  } else if (turned && S.dayOf === 1 && g.day.day > 1) banner = { big: `${S.season.toUpperCase()}, YEAR ${S.year}`, small: SEASON_LINE[S.season], prio: 1 }; // not over a new game's welcome
   if (S.season === 'spring' && S.dayOf <= 2 && g.tier >= 2) lambing(g);
   if (S.season === 'autumn' && S.dayOf === 1) {
     growUp(g);
@@ -113,7 +124,7 @@ export function seasonalMorning(g: Game, fresh: boolean): [string, string] | nul
   if (isFairDay(g)) {
     g.seasonal.fair = [];
     setOutBreeders(g);
-    banner = ['THE AUTUMN FAIR', 'AT THE SHOW GROUND: YOUR BEST ANIMAL TO THE SHOW RING, RARE BREEDS AT THE SALE YARD'];
+    banner = { big: 'THE AUTUMN FAIR', small: 'AT THE SHOW GROUND: YOUR BEST ANIMAL TO THE SHOW RING, RARE BREEDS AT THE SALE YARD', prio: 3 };
   }
   if (S.season === 'winter' && S.dayOf === 1) g.seasonal.hungryNights = 0;
   // Tips, once each.
@@ -124,7 +135,7 @@ export function seasonalMorning(g: Game, fresh: boolean): [string, string] | nul
   };
   if (S.season === 'autumn' && S.dayOf >= SEASON_DAYS - 1 && isWinterTier(g)) tip('hay', `WINTER IS COMING: PENNED STOCK EATS HAY EVERY NIGHT. BUILD HAYSTACKS NOW (DOUBLE PRICE IN WINTER) AND KEEP THEM IN A BARN'S RING.`);
   if (S.winter && isWinterTier(g)) tip('winter', `WINTER: EVERY NIGHT EACH PEN EATS A BALE FOR EVERY ${HAY_PER} PLACES OF STOCK. YOU HAVE ${hayHeld(g)} BALES, THE PENS NEED ${hayNeed(g)} A NIGHT.`);
-  if (isFairDay(g)) tip('fair', 'THE FAIR: DRIVE ONE ANIMAL OF A KIND INTO THE SHOW RING TO BE JUDGED. CALM COUNTS FOR MOST. THE SALE YARD SELLS RARE BREEDS: STAND BY ONE AT THE FENCE AND PRESS E.');
+  if (isFairDay(g)) tip('fair', `THE FAIR: DRIVE ONE ANIMAL OF A KIND INTO THE SHOW RING TO BE JUDGED. CALM COUNTS FOR MOST. THE SALE YARD SELLS RARE BREEDS: STAND BY ONE AT THE FENCE AND PRESS ${keyE(g)}.`);
   return banner;
 }
 
@@ -272,23 +283,24 @@ function growUp(g: Game) {
 // ---- Summer: the shearer ----
 
 // After the morning's orders are drawn up: the shearer on summer's first day.
-export function seasonalOrders(g: Game) {
+export function seasonalOrders(g: Game): MorningBanner | null {
   const S = g.season;
-  if (S.season === 'summer' && S.dayOf === 1 && g.tier >= 2) shearingOrder(g);
+  if (S.season === 'summer' && S.dayOf === 1 && g.tier >= 2) return shearingOrder(g);
+  return null;
 }
 
-function shearingOrder(g: Game) {
+function shearingOrder(g: Game): MorningBanner | null {
   const year = g.season.year;
   const owned = g.ranch.pens.reduce((s, p) => s + p.animals.filter((a) => a.sp.id === 'sheep' && !a.young && a.shorn !== year).length, 0);
-  if (owned < 3) return;
+  if (owned < 3) return null;
   const yard = g.orders.list.some((o) => o.yard === 'drover' && o.state === 'open') ? 'mill' : 'drover';
   g.orders.list = g.orders.list.filter((o) => o.yard !== yard);
   g.orders.list.push({ id: g.orders.nextId++, yard, species: 'sheep', n: Math.min(8, owned), due: hourToT(17), got: 0, paid: 0, state: 'open', kind: 'shear' });
-  g.showBanner('THE SHEARER IS HERE', `AT ${yardOf(g, yard).site.name}: BRING YOUR SHEEP. THEY COME BACK SHORN`, 3.4);
   if (!g.tipsSeen.has('shear')) {
     g.tipsSeen.add('shear');
-    g.tip = { text: 'THE SHEARER PAYS A WOOL BONUS FOR EACH SHEEP YOU BRING (CALM ONES MORE). LET THEM OUT OF THEIR PEN WITH E AT THE GATE, AND WALK THEM HOME AFTER.', t: 10 };
+    g.tip = { text: `THE SHEARER PAYS A WOOL BONUS FOR EACH SHEEP YOU BRING (CALM ONES MORE). LET THEM OUT OF THEIR PEN WITH ${keyE(g)} AT THE GATE, AND WALK THEM HOME AFTER.`, t: 10 };
   }
+  return { big: 'THE SHEARER IS HERE', small: `AT ${yardOf(g, yard).site.name}: BRING YOUR SHEEP. THEY COME BACK SHORN`, prio: 3 };
 }
 
 // ---- Autumn: the fair ----

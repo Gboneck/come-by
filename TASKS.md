@@ -480,7 +480,30 @@ from lambs (bodies still never overlap), and lambs aim where their mother
 is going and keep her pace. The herding bot (and so the helper dogs) reads
 a flock by its grown animals.
 
-(Pacing across a year: see below, filled in from `pacetest.mjs --year`.)
+Pacing to the valley thriving (`pacetest.mjs`, seeds 1-3) is unchanged:
+days 7, 8, 7 (before: 9, 8, 7), the same per-tier days, minutes and
+purse within a little (tier 4 earns 696$/day against 765$, tier 5 975$
+against 1020$: the shearer's morning and autumn's shorter days).
+
+Across a year (`pacetest.mjs --year --days=22`, seeds 1-3, averages):
+
+| season | earned $ | spent $ | haystacks bought | hungry pen-nights | wild stock out (morning) | what happened |
+|---|---|---|---|---|---|---|
+| year 1 spring | 1142 | 1065 | 0 | 0 | 27 | tiers 1-2; no sheep penned yet, so no lambs |
+| year 1 summer | 3537 | 430 | 0 | 0 | 97 | shearer: 8/8 at the drover's; at the mill 0/8 and 4/8 missed |
+| year 1 autumn | 4175 | 587 | 13.7 | 0 | 120 | fair day: no breed bought (pens full, no land) |
+| year 1 winter | 3680 | 120 | 1.3 (at 80$) | 0 | 92 | winter sends a quarter of the wild stock away |
+| year 2 spring | 5074 | 27 | 0 | 0 | 127 | 32 lambs born in the pens |
+| year 2 summer | 2545 | 0 | 0 | 0 | 138 | shearer: 8/8, 8/8, 2/8 |
+
+Hay comes to about 600$ a winter for a tier-5 ranch of ~130 head, an
+eighth of a season's income; nobody went hungry. An earlier run, before
+the bot waited for autumn, bought hay in summer, and lambs were logged on
+the day before the morning they arrived (fixed in pacetest). In an earlier
+run one seed bought the Highland cow at the fair and won first with it.
+Land, not coin, is what runs out late ("no room for a pen" is the top
+stall at tier 5), so the purse still grows (about 18,000$ by day 23): see
+Decisions on land.
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -1124,3 +1147,65 @@ a flock by its grown animals.
   same player after its storage read, not before, and says nothing about a
   drop that was already mended. A host who is back before the relay notices
   never shows guests the waiting card; guests just get a fresh world.
+- Seasons (gameplay, round three): four days a season, so a year is 16
+  days and a decent player sees the first winter around tier 4-5. Day 1 is
+  the first of spring, year 1; the calendar follows from the day number, so
+  old saves load as spring, year 1 (with a full loft) without a new field.
+  Autumn days run at 1.1x with dusk at 0.76, winter's at 1.25x with dusk at
+  0.7 (`DAY_PACE` in season.ts). No season banner on a new game's first
+  morning (it would talk about lambing to someone with five ducks).
+- Lambing only in ranch pens and only from tier 2 (sheep arrive at tier 2;
+  in year one spring has passed by then, so the first pen lambs come in
+  year two). Half the ewes lamb on spring's first morning, nearly all the
+  rest on the second, 15% twins. Wild ewes: 40% have a lamb in spring's
+  morning spawns, never in a region's opening spawn (the first sheep a
+  player meets are plain). Lambs are worth 2$, take one pen place, make no
+  goods, cannot go to buyers, the shearer or the fair, and a fox would
+  rather take a lamb. Lambing ignores pen room: a pen can end up over full, which
+  shows on its sign and is a reason to build or upgrade.
+- A ewe feels a lamb only by touch (no flocking, no personal space) and a
+  lamb aims 0.4s ahead of its mother and keeps her pace; any looser and
+  each pair drifts off on its own. Ewes turn back past 36px apart, lambs
+  run to her past 6px; parted ewes fret at 0.2/s, lambs 0.26/s.
+- The shearer comes on summer's first morning (tier 2+, three or more
+  grown unshorn sheep penned) at the drover's, or the mill's if the drover
+  already has an order; up to eight; 6$ a head times the calm multiplier,
+  1.5x for a rare breed; once a year per sheep. They come back out of the
+  yard's gate (not led away) and are yours to walk home.
+- The fair is on autumn's second day from tier 2, in a 6x5 show ring (gate
+  north, towards the Home Meadow) east of the trial course. Score = a base
+  per kind + 34 x calm + 14 for a rare breed, +-4; three seeded rivals that
+  get 3 better each year (to +12). Ribbons pay 40/20/10$. Entries go home at
+  the day's end by themselves (to a pen of their kind with room, else by
+  the farmhouse door): the drive there is the work. The sale yard takes no
+  order that day; its breeders' pen holds each rare breed your tier allows,
+  and you buy the one you stand by at the fence (E), not the one nearest
+  the gate (you could not choose). Unsold breeds leave at the day's end.
+- Rare breeds are new coats of existing species (call duck = duck coat 1,
+  black sheep = sheep 1, pygmy goat = goat 2, Highland cow = cow 2), so
+  they travel in co-op and saves as they are. The black sheep found at the
+  stone circle is the same coat and now counts as rare too. No pony breed.
+  Rare: double value at the market and to buyers, goods 1.5x.
+- Winter feed: a bale a night per four pen places (rounded up per pen),
+  from the farmhouse loft (10 bales, refilled each autumn), then stacks in
+  a barn's ring, then the rest; stacks outside a barn's ring lose 2 bales a
+  night; empty stacks are cleared away. Haystack: 2x2, tier 2, 20 bales,
+  40$ (80$ in winter). A pen without hay makes no goods the next day and
+  its stock starts the day at +0.25 stress. Nothing dies of hunger: calm
+  beats chaos, and a hungry pen is warning enough.
+- Snow slows loose animals by 12% and the dog by 8% at full cover.
+  Winter keeps one wild flock fewer per region (never under one, and a
+  region that has just opened still gets its two): wild stock above that
+  goes down the valley on a winter morning, smallest flocks first, a big
+  flock only thinned; never your own strays or a hidden place's flock.
+- Not done: more land to buy. The year run shows land, not coin, is what
+  runs out at tier 5 ("no room for a pen" is the commonest stall), so a
+  land deed would be the late game's best sink; it needs build.ts (Feel and
+  UI) to let bought parcels count as ranch.
+- Co-op: `src/net` is left to Co-op. Their hooks (`animalExtra` in
+  snapshot.ts, `SHARED` in shared.ts) carry lambs (bit 0), the loft, hungry
+  nights and the fair (`seasonal`), and haystack bales (`hay`); the show
+  ring joins `allPens`, and the guest sets the calendar's year and day,
+  winter's dusk and the snow's drag on its own dog. The patch (tested on a
+  merge with coop-r3: cooptest passes, with a new check) is in the shared
+  notes as `gameplay-r3-coop-hooks.patch`.
