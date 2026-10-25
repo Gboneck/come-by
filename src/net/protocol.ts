@@ -185,13 +185,13 @@ export interface DogState {
 }
 
 export interface DogEvent {
-  kind: 'bark' | 'nip';
+  kind: 'bark' | 'nip' | 'ping';
   seq: number;
   x: number;
   y: number;
   hx: number;
   hy: number;
-  target: number; // nip: the animal id the guest saw at its nose (0 = none)
+  target: number; // nip: the animal id the guest saw at its nose (0 = none); ping: which word
 }
 
 export function writeDog(w: Writer, t: number, d: DogState, events: DogEvent[]) {
@@ -208,7 +208,7 @@ export function writeDog(w: Writer, t: number, d: DogState, events: DogEvent[]) 
   w.u8(d.face | (d.lying ? 4 : 0) | (d.sprint ? 8 : 0));
   w.u8(events.length);
   for (const e of events) {
-    w.u8(e.kind === 'bark' ? 1 : 2);
+    w.u8(e.kind === 'bark' ? 1 : e.kind === 'nip' ? 2 : 3);
     w.u16(e.seq);
     w.pos(e.x);
     w.pos(e.y);
@@ -230,7 +230,7 @@ export function readDog(r: Reader): { t: number; dog: DogState; events: DogEvent
     const k = r.u8();
     const seq = r.u16();
     const ex = r.pos(), ey = r.pos(), ehx = r.i8() / 127, ehy = r.i8() / 127;
-    events.push({ kind: k === 1 ? 'bark' : 'nip', seq, x: ex, y: ey, hx: ehx, hy: ehy, target: r.u32() });
+    events.push({ kind: k === 1 ? 'bark' : k === 2 ? 'nip' : 'ping', seq, x: ex, y: ey, hx: ehx, hy: ehy, target: r.u32() });
   }
   return { t, dog, events };
 }

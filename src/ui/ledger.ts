@@ -13,6 +13,7 @@ import { SKY_WORD, skyIcon } from './icons';
 import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
 import { discoveryLines, drawFog, drawPlaceMarks } from './discovery';
+import { travelLines } from '../net/travels';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -137,6 +138,7 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   }
   add('');
   for (const l of discoveryLines(game, colW - 12)) add(l.s, l.c);
+  for (const l of travelLines(colW - 12)) add(l.s, l.c);
   add('');
   const tot = game.totals;
   const deliv = Object.values(tot.delivered).reduce((s, n) => s + (n ?? 0), 0);

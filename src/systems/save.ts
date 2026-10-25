@@ -14,6 +14,7 @@ import { applyLook, readLook, type Look } from '../ui/look';
 import { PIECES, type PlacedDecor } from '../ui/decorbuild';
 import { SKIES, type Sky } from './weather';
 import type { DiscoverySave } from './discovery';
+import { mergeTravels } from '../net/travels';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
@@ -112,6 +113,11 @@ function read(): SaveData | null {
   }
 }
 
+// What our own ranch has found exploring (a co-op guest counts it too).
+export function ownDiscovery(): DiscoverySave | undefined {
+  return read()?.discovery;
+}
+
 export function saveInfo(): { day: number; tier: number; look?: Partial<Look> } | null {
   const d = read();
   return d ? { day: d.day, tier: d.tier, look: d.look } : null;
@@ -167,6 +173,7 @@ export function loadInto(game: Game): boolean {
   game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery);
+  mergeTravels(game); // places and keepsakes found visiting friends' ranches
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));

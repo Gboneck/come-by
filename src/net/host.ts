@@ -7,10 +7,12 @@ import { CALLS, type TapKind } from '../systems/audio';
 import { saveData, type SaveData } from '../systems/save';
 import { dogStatsFor } from '../systems/economy';
 import { gateAction } from '../systems/orders';
-import { trialNip } from '../systems/trials';
 import { readLook, type Look } from '../ui/look';
 import type { Particle } from '../systems/particles';
 import { damp } from '../util';
+import { sharedOut } from './shared';
+import { PING_KINDS, Pings, pingHelp, type PingKind, type PingNet } from './ping';
+import { atPost, braceReady, classLabel, currentClass, trialNip } from '../systems/trials';
 import { Link, createRoom, relayBase } from './link';
 import { allPens, animalRec, encodeSnap, sameAnimal, worldRecs, type AnimalRec, type DogRec } from './snapshot';
 import { D_BARK, D_LYING, D_SPRINT } from './snapshot';
@@ -37,9 +39,11 @@ interface Seat {
   leaving: number; // >0: trotting off, seconds left
   fresh: boolean; // needs the world and a full snapshot
   lastSeq: number;
+  bg: boolean; // their screen is off (they said so): their dog naps
 }
 
-const LEAVE_AFTER = 12; // a dropped guest's dog waits this long, then trots off
+const LEAVE_AFTER = 45; // a dropped guest's dog waits this long, then trots off
+const BG_KEEP = 240; // ... or this long, if they said their screen was going off
 const TROT_OFF = 2.5;
 const HOME_OFFSETS = [[-16, 10], [16, 10], [0, 18], [-24, 2]];
 
@@ -47,8 +51,11 @@ const HOME_OFFSETS = [[-16, 10], [16, 10], [0, 18], [-24, 2]];
 const LOCAL_SOUND = /^(ui-|click)/;
 const LOCAL_BANNER = /^GO HOME TO BUILD|: (HOLD THE FLANK|STAY|GO HOME)/;
 
-export class HostNet {
+export class HostNet implements PingNet {
   readonly role = 'host' as const;
+  readonly slot = 0;
+  pings = new Pings();
+  private quiet = 0; // sounds played here that each screen plays for itself
   status: 'opening' | 'open' | 'reconnecting' | 'failed' | 'closed' = 'opening';
   error = '';
   code = '';
@@ -80,8 +87,19 @@ export class HostNet {
     game.net = this;
     this.day = game.day.day;
     this.tap(true);
+    document.addEventListener('visibilitychange', this.onVis);
     void this.start();
   }
+
+  // Our screen going off: friends are told (our game stops with it).
+  private onVis = () => {
+    const off = document.hidden;
+    if (this.link?.open) this.link.send(jsonFrame(0, { t: 'bg', on: off }));
+    if (!off) {
+      this.link?.ask();
+      if (this.status === 'reconnecting') this.retryT = 0;
+    }
+  };
 
   get name(): string {
     return this.game.look.name;
@@ -167,6 +185,7 @@ export class HostNet {
       if (!s) return;
       if (m.gone) s.leaving = TROT_OFF;
       else s.away = 1e-3;
+      this.sendPlayers();
     }
   }
 
@@ -174,7 +193,7 @@ export class HostNet {
     let s = this.seats.get(slot);
     if (!s || s.id !== id) {
       if (s?.dog) this.drop(s);
-      s = { slot, id, name: name || 'DOG', look: null, dog: null, want: null, at: 0, away: 0, leaving: 0, fresh: true, lastSeq: -1 };
+      s = { slot, id, name: name || 'DOG', look: null, dog: null, want: null, at: 0, away: 0, leaving: 0, fresh: true, lastSeq: -1, bg: false };
       this.seats.set(slot, s);
     }
     return s;
@@ -192,8 +211,13 @@ export class HostNet {
     const s = this.seats.get(slot);
     if (!s) return;
     if (kind === K_JSON) {
-      const m = JSON.parse(r.str()) as { t: string; name?: string; look?: Partial<Look> };
-      if (m.t === 'hello') {
+      const m = JSON.parse(r.str()) as { t: string; name?: string; look?: Partial<Look>; on?: boolean };
+      if (m.t === 'bg') {
+        // A friend's screen went off (or came back): their dog naps meanwhile.
+        if (!!m.on !== s.bg && s.dog) this.game.showBanner(m.on ? `${s.name} STEPPED AWAY` : `${s.name} IS BACK`, m.on ? 'THEIR DOG HAS A NAP MEANWHILE' : undefined, 1.8);
+        s.bg = !!m.on;
+        this.sendPlayers();
+      } else if (m.t === 'hello') {
         s.name = this.uniqueName(String(m.name ?? s.name).slice(0, 10) || 'DOG', slot);
         s.look = readLook({ name: s.name, dog: m.look?.dog });
         if (!s.dog) {
@@ -206,7 +230,15 @@ export class HostNet {
           s.dog = d;
           this.dogs.push(d);
           this.game.showBanner(`${s.name} IS HERE`, 'A FRIEND CAME TO HELP', 2.4);
-          this.game.audio?.play('ui-select');
+          this.quiet++;
+          this.game.audio?.play('coop-join');
+          this.quiet--;
+          // The first friend ever: what they can do, and how to talk to them.
+          const game = this.game;
+          if (!game.tipsSeen.has('coop-host')) {
+            game.tipsSeen.add('coop-host');
+            game.tip = { text: `${s.name}'S DOG MOVES THE HERD TOO, AND THE PAY IS YOURS. ${pingHelp(game.input.touchMode)}`, t: 10 };
+          }
         } else {
           s.dog.skin = friendDogSprites(s.look.dog);
           s.dog.tag = s.name;
@@ -214,6 +246,7 @@ export class HostNet {
         s.fresh = true;
         s.away = 0;
         s.leaving = 0;
+        s.bg = false;
       }
     } else if (kind === K_DOG && s.dog) {
       const { dog, events } = readDog(r);
@@ -247,6 +280,11 @@ export class HostNet {
 
   private guestEvent(s: Seat, e: DogEvent) {
     const game = this.game, dog = s.dog!;
+    if (e.kind === 'ping') {
+      const kind = PING_KINDS[e.target] ?? 'here';
+      this.say(s.slot, s.name, kind, e.x, e.y);
+      return;
+    }
     const stats = dogStatsFor(game.upgrades); // the kennel trains every dog on the ranch
     if (game.mode === 'summary' || game.mode === 'build' || game.trials.result) return;
     this.origin = s.slot;
@@ -305,6 +343,39 @@ export class HostNet {
     }
   }
 
+  // The hint line: at the post with a friend about, say what makes a brace.
+  hint(game: Game): string | null {
+    if (!this.dogs.length || game.trials.run || !atPost(game) || braceReady(game)) return null;
+    const c = currentClass(game);
+    const friend = this.dogs[0].tag || 'A FRIEND';
+    return c ? `${game.input.touchMode ? 'NIP' : 'E'}: ${classLabel(c)}. WITH ${friend} AT THE POST TOO, IT IS A BRACE.` : null;
+  }
+
+  // ---- Pings ----
+
+  dogOf(slot: number): Dog | null {
+    return slot === 0 ? this.game.dog : this.seats.get(slot)?.dog ?? null;
+  }
+
+  nameOf(slot: number): string {
+    return slot === 0 ? this.name : this.seats.get(slot)?.name ?? 'A FRIEND';
+  }
+
+  sendPing(game: Game, kind: PingKind) {
+    this.say(0, this.name, kind, game.dog.x, game.dog.y);
+  }
+
+  // A ping on this screen and everyone's (each plays its own whistle).
+  private say(slot: number, name: string, kind: PingKind, x: number, y: number) {
+    this.quiet++;
+    try {
+      this.pings.add(this.game, { slot, name, kind, x, y });
+    } finally {
+      this.quiet--;
+    }
+    this.events.push(['ping', slot, kind, Math.round(x), Math.round(y)]);
+  }
+
   // ---- Listening to the world (sounds and effects go to the guests) ----
 
   private tap(on: boolean) {
@@ -322,7 +393,7 @@ export class HostNet {
   }
 
   private onSound(kind: TapKind, a: unknown[]) {
-    if (!this.dogs.length) return;
+    if (!this.dogs.length || this.quiet) return;
     if (kind === 'play') {
       const name = a[0] as string;
       if (LOCAL_SOUND.test(name)) return;
@@ -346,6 +417,7 @@ export class HostNet {
       this.connect();
     }
     this.moveDogs(dt, now);
+    this.pings.update(dt);
     this.watch();
     if (!this.link?.open) {
       this.events.length = 0; // the guests get a whole snapshot when it is back
@@ -495,17 +567,24 @@ export class HostNet {
         d.puppet(dt, { x: d.x + (dx / l) * v * dt, y: d.y + (dy / l) * v * dt, vx: (dx / l) * v, vy: (dy / l) * v, face: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'r' : 'l') : dy > 0 ? 'd' : 'u', lying: false, sprint: false }, game.map, game.fx);
         if (s.leaving <= 0) {
           game.fx.puff(d.x, d.y + 2);
+          this.quiet++;
+          game.audio?.play('coop-leave');
+          this.quiet--;
           this.drop(s);
           this.sendPlayers();
         }
         continue;
       }
-      if (s.away > 0 && (s.away += dt) > LEAVE_AFTER) {
+      if (s.away > 0 && (s.away += dt) > (s.bg ? BG_KEEP : LEAVE_AFTER)) {
         s.leaving = TROT_OFF;
         game.showBanner(`${s.name} HEADED HOME`, undefined, 2);
         continue;
       }
       const w = s.want;
+      if (s.bg) {
+        d.puppet(dt, { x: d.x, y: d.y, vx: 0, vy: 0, face: d.face, lying: true, sprint: false }, game.map, game.fx);
+        continue;
+      }
       if (!w) {
         d.puppet(dt, { x: d.x, y: d.y, vx: 0, vy: 0, face: d.face, lying: d.lying, sprint: false }, game.map, game.fx);
         continue;
@@ -546,9 +625,15 @@ export class HostNet {
     if (!this.sig) this.sig = this.worldSig();
   }
 
+  // Is this friend's dog napping (their screen off) or waiting on a dropped line?
+  isAway(d: Dog): boolean {
+    for (const s of this.seats.values()) if (s.dog === d) return s.bg || s.away > 0;
+    return false;
+  }
+
   private sendPlayers() {
-    const list = [{ slot: 0, name: this.name, look: this.game.look.dog }];
-    for (const s of this.seats.values()) if (s.dog && s.look && s.leaving <= 0) list.push({ slot: s.slot, name: s.name, look: s.look.dog });
+    const list = [{ slot: 0, name: this.name, look: this.game.look.dog, away: false }];
+    for (const s of this.seats.values()) if (s.dog && s.look && s.leaving <= 0) list.push({ slot: s.slot, name: s.name, look: s.look.dog, away: s.bg || s.away > 0 });
     this.link?.send(jsonFrame(0, { t: 'players', list }));
   }
 
@@ -571,6 +656,7 @@ export class HostNet {
       mode: this.hostMode(),
       host: this.name,
       helpers: g.helpers.map((h) => h.name),
+      shared: sharedOut(g),
     };
   }
 
@@ -586,6 +672,7 @@ export class HostNet {
     if (this.status === 'closed') return;
     this.status = 'closed';
     this.tap(false);
+    document.removeEventListener('visibilitychange', this.onVis);
     if (this.link) {
       this.link.sendText(JSON.stringify({ t: 'close' }));
       this.link.close(4000, 'the ranch closed');

@@ -5,6 +5,7 @@ import { Sound } from './systems/audio';
 import { clearSave, loadInto, saveGame } from './systems/save';
 import { installDebug, drawSpriteSheet } from './debug';
 import { joining } from './net/guest';
+import { mergeTravels } from './net/travels';
 import { openCoop } from './ui/coop';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
@@ -66,6 +67,7 @@ if (params.has('sprites')) {
         if (req === 'continue') loadInto(next);
         else clearSave();
         if (req === 'new') {
+          mergeTravels(next); // anything found visiting friends before this ranch
           saveGame(next);
           next.openLook('new'); // name the dog and choose its look first
         }

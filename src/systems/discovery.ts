@@ -11,8 +11,8 @@ import { FINDS, FLOCK_EVERY, KEEPSAKES, PLACES, inPlace, keepsakeById, placeById
 // Fog cells are two tiles square, the same as the Ledger map's pixels.
 export const FW = MW / 2;
 export const FH = MH / 2;
-const WALK_R = 9; // fog cells cleared round the dog
-const LOOK_R = 48; // glimpsed from the lookout
+export const WALK_R = 9; // fog cells cleared round the dog
+export const LOOK_R = 48; // glimpsed from the lookout
 export const SEEN = 2; // walked near
 export const GLIMPSED = 1; // seen from afar (the lookout)
 
@@ -28,7 +28,7 @@ export interface DiscoverySave {
 }
 
 // Fog as runs: "<value><count in base 36>," repeated.
-function packFog(f: Uint8Array): string {
+export function packFog(f: Uint8Array): string {
   let s = '', v = f[0], n = 0;
   for (let i = 0; i <= f.length; i++) {
     if (i < f.length && f[i] === v) { n++; continue; }
@@ -38,7 +38,7 @@ function packFog(f: Uint8Array): string {
   }
   return s;
 }
-function unpackFog(s: string, f: Uint8Array) {
+export function unpackFog(s: string, f: Uint8Array) {
   let i = 0;
   for (const run of s.split(',')) {
     if (!run) continue;

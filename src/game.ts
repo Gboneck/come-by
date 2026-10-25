@@ -957,7 +957,10 @@ export class Game {
   hint(): string | null {
     if (this.rest > 1.5) return 'RESTING... THE PENS KEEP MAKING GOODS.';
     if (this.tip) return this.tip.text;
-    if (this.net?.role === 'guest') return this.net.hint(this);
+    if (this.net) {
+      const h = this.net.hint(this);
+      if (h || this.net.role === 'guest') return h;
+    }
     const jh = jobsHint(this);
     if (jh) return jh;
     const touch = this.input.touchMode;

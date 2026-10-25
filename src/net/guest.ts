@@ -8,9 +8,13 @@ import { Person } from '../entities/folk';
 import { SPECIES_ORDER } from '../entities/species';
 import { friendDogSprites } from '../art/dogstyle';
 import type { Coat } from '../art/animals';
-import { loadWorld, saveInfo, type SaveData } from '../systems/save';
+import { loadWorld, ownDiscovery, saveInfo, type SaveData } from '../systems/save';
+import { Travels } from './travels';
 import { SKIES } from '../systems/weather';
-import { CLASSES, type Run } from '../systems/trials';
+import { SEASON_LIST } from '../systems/season';
+import { sharedIn } from './shared';
+import { PING_KINDS, Pings, pingHelp, type PingKind, type PingNet } from './ping';
+import { BRACE, CLASSES, type Run } from '../systems/trials';
 import { tierOf } from '../systems/progression';
 import type { StingerKind } from '../systems/music';
 import { DOG_NAMES, pickName, readLook, type Look } from '../ui/look';
@@ -21,7 +25,7 @@ import type { SpeciesId } from '../world/map';
 import { clamp } from '../util';
 import { Link, relayBase } from './link';
 import { COLOURS, DOG_HZ, FACES, INTERP_MS, K_JSON, K_SNAP, Reader, Writer, faceId, jsonFrame, writeDog, type DogEvent, type HostMode } from './protocol';
-import { A_CARRIED, A_EAT, A_HOME, A_HOP, A_PANIC, A_ROCK, A_TRIAL, A_WATER, D_LYING, D_SPRINT, FOLK_IDS, PHASES, POSES, PRED_STATES, allPens, decodeSnap, faceOf, type AnimalRec, type Snap } from './snapshot';
+import { A_CARRIED, A_EAT, A_HOME, A_HOP, A_PANIC, A_ROCK, A_TRIAL, A_WATER, D_LYING, D_SPRINT, FOLK_IDS, PHASES, POSES, PRED_STATES, allPens, applyAnimalExtra, decodeSnap, faceOf, type AnimalRec, type Snap } from './snapshot';
 
 // Playing on a friend's ranch. Their browser runs the world; this one runs
 // only our own dog (moved here, so it never lags) and draws the rest from
@@ -55,6 +59,7 @@ interface Meta {
   mode: HostMode;
   host: string;
   helpers: string[];
+  shared?: Record<string, unknown>; // round three's extra ranch state (shared.ts)
 }
 
 // The guest session being set up on the title screen (main.ts takes it).
@@ -73,8 +78,9 @@ function playerId(): string {
   }
 }
 
-export class GuestNet {
+export class GuestNet implements PingNet {
   readonly role = 'guest' as const;
+  pings = new Pings();
   status: 'connecting' | 'joining' | 'playing' | 'away' | 'reconnecting' | 'ended' = 'connecting';
   ended: Ended | null = null;
   slot = 0;
@@ -82,7 +88,9 @@ export class GuestNet {
   world: SaveData | null = null;
   private worldNew = false;
   meta: Meta | null = null;
-  players = new Map<number, { name: string; look: Look['dog'] }>();
+  players = new Map<number, { name: string; look: Look['dog']; away?: boolean }>();
+  hostBg = false; // the host's screen is off: their game (the world) waits
+  private failT = 0; // seconds spent failing to get back in
   private frames: Frame[] = [];
   private base: Map<number, AnimalRec> | null = null;
   private offset: number | null = null;
@@ -110,13 +118,36 @@ export class GuestNet {
   readonly look: Look; // our own dog, from our own save
   readonly base_: string | null = relayBase();
 
+  travels = new Travels(); // what we find here is ours to keep
+  private resultSeen: string | null = null;
+  private firstVisit = false;
+
   constructor(public code: string) {
+    this.travels.include(ownDiscovery());
     const saved = saveInfo()?.look;
     this.look = readLook(saved);
     // No dog of our own yet: not BLUE as well (the host's most likely is).
     if (!saved?.name) this.look.name = pickName(DOG_NAMES, 'BLUE');
     joining = this;
+    document.addEventListener('visibilitychange', this.onVis);
     this.connect();
+  }
+
+  // Our screen going off: the host is told, and our dog naps meanwhile.
+  // Coming back: is the line still there?
+  private onVis = () => {
+    const off = document.hidden;
+    if (this.link?.open) this.link.send(jsonFrame(0, { t: 'bg', on: off }));
+    if (!off) {
+      this.link?.ask();
+      if (this.status === 'reconnecting') this.retryT = 0;
+    }
+  };
+
+  // Is this friend's dog napping or waiting on a dropped line?
+  isAway(d: Dog): boolean {
+    for (const [slot, p] of this.puppets) if (p === d) return !!this.players.get(slot)?.away;
+    return false;
   }
 
   private connect() {
@@ -136,6 +167,7 @@ export class GuestNet {
 
   private end(title: string, line: string) {
     this.status = 'ended';
+    document.removeEventListener('visibilitychange', this.onVis);
     this.ended = { title, line };
     this.link?.close(4000, 'bye');
     this.link = null;
@@ -150,8 +182,7 @@ export class GuestNet {
     if (code === 4001) return this.end('PLAYING ELSEWHERE', 'YOU JOINED THIS RANCH FROM ANOTHER TAB.');
     // Never got in at all: the server is not there.
     if (this.status === 'connecting' && this.retry === 0) return this.end("CAN'T CONNECT", "THE CO-OP SERVER DIDN'T ANSWER. CHECK YOUR CONNECTION.");
-    // A drop: try again for a while.
-    if (this.retry > 8) return this.end('CONNECTION LOST', 'THE LINE TO YOUR FRIEND WENT QUIET.');
+    // A drop: try again (for two minutes on screen; update() counts them).
     this.status = 'reconnecting';
     this.retryT = Math.min(4, 0.5 * 2 ** this.retry++);
   }
@@ -160,12 +191,15 @@ export class GuestNet {
     if (m.t === 'welcome') {
       this.slot = m.slot as number;
       this.retry = 0;
+      this.failT = 0;
       this.base = null; // a whole snapshot comes after the hello
       this.status = this.game ? (m.host ? 'playing' : 'away') : 'joining';
       this.link?.send(jsonFrame(0, { t: 'hello', name: this.look.name, look: { dog: this.look.dog } }));
     } else if (m.t === 'host-away') this.status = 'away';
+    else if (m.t === 'bg') this.hostBg = !!m.on;
     else if (m.t === 'host-back') {
       this.status = 'playing';
+      this.hostBg = false;
       this.base = null;
     }
   }
@@ -192,7 +226,7 @@ export class GuestNet {
       if (this.game) this.applyMeta(this.game);
     } else if (m.t === 'players') {
       this.players.clear();
-      for (const p of m.list as { slot: number; name: string; look: Look['dog'] }[]) this.players.set(p.slot, { name: p.name, look: p.look });
+      for (const p of m.list as { slot: number; name: string; look: Look['dog']; away?: boolean }[]) this.players.set(p.slot, { name: p.name, look: p.look, away: p.away });
       for (const [slot, d] of this.puppets) {
         const p = this.players.get(slot);
         if (p) {
@@ -250,6 +284,10 @@ export class GuestNet {
     game.mode = 'play';
     this.goHome(game);
     this.joinedAt = game.t;
+    this.firstVisit = this.travels.firstTime('coop-guest');
+    // A stamp for the ranch.
+    const ranch = this.world?.look?.ranch || `${this.hostName}'S RANCH`;
+    if (this.travels.stamp(ranch, this.hostName)) game.showBanner(`A NEW STAMP: ${ranch}`, `RANCHES VISITED: ${this.travels.stamps.length}`, 3);
     if (this.status === 'joining') this.status = 'playing';
   }
 
@@ -257,6 +295,7 @@ export class GuestNet {
     if (!this.world) return;
     this.worldNew = false;
     loadWorld(game, this.world, this.look);
+    this.travels.overlay(game.discovery); // our own map and finds, over theirs
     this.lastTier = game.tier;
     // Pens and gates are new objects: the next frame re-finds them.
     this.swingWas = new WeakMap();
@@ -287,9 +326,17 @@ export class GuestNet {
     game.trials.cups = m.trials.cups;
     game.trials.lastPrizeDay = m.trials.last;
     game.trials.result = m.result;
+    // A brace ribbon won here goes on our own shelf.
+    const res = m.result;
+    const key = res ? `${game.day.day}-${res.cls.id}-${res.total}` : null;
+    if (res && key !== this.resultSeen && res.cls.id === 'brace' && res.place >= 1 && res.place <= 3) {
+      this.travels.ribbon();
+      game.tip = { text: 'A BRACE RIBBON FOR YOUR OWN SHELF: IT IS IN YOUR LEDGER AT HOME.', t: 6 };
+    }
+    if (key) this.resultSeen = key;
     game.summary = m.summary;
     const r = m.run;
-    const cls = r ? CLASSES.find((c) => c.id === r.cls) : undefined;
+    const cls = r ? [...CLASSES, BRACE].find((c) => c.id === r.cls) : undefined;
     if (r && cls) {
       const old = game.trials.run;
       const run: Run = old && old.cls === cls ? old : { cls, prize: r.prize, t: 0, step: 0, flock: [], scores: [], bolts: 0, grips: 0, stressT: 0, outrun: 0, startX: 0, startY: 0, side: new Map(), through: new Set(), panicking: new Set(), awayT: 0, endT: 0, penned: false };
@@ -308,6 +355,7 @@ export class GuestNet {
         game.feel.confetti(game.screen.W);
       }
     }
+    sharedIn(game, m.shared);
     while (game.helpers.length < m.helpers.length) game.helpers.push(new Helper(m.helpers[game.helpers.length], 0, 0, 'flank', game.helpers.length));
     game.helpers.length = m.helpers.length;
   }
@@ -329,9 +377,12 @@ export class GuestNet {
     game.t += dt;
     const input = game.input;
     if (input.pressed('mute') && game.audio) game.audio.setMuted(!game.audio.muted);
-    if (this.status === 'reconnecting' && (this.retryT -= dt) <= 0) {
-      this.retryT = 1e9;
-      this.connect();
+    if (this.status === 'reconnecting') {
+      if (!document.hidden && (this.failT += dt) > 120) this.end('CONNECTION LOST', 'THE LINE TO YOUR FRIEND WENT QUIET.');
+      else if ((this.retryT -= dt) <= 0) {
+        this.retryT = 1e9;
+        this.connect();
+      }
     }
     if (this.worldNew) this.rebuild(game);
     if (this.ended) {
@@ -366,6 +417,8 @@ export class GuestNet {
     this.send(game, dt);
 
     this.apply(game, dt);
+    this.pings.update(dt);
+    if (free) this.travels.update(game, dt);
     if (game.trials.result) resultAge(game, dt);
     if ((this.groupT -= dt) <= 0) {
       game.groups = findGroups(game.animals);
@@ -445,6 +498,12 @@ export class GuestNet {
     const dx = lerp(A.s.dirX, B.s.dirX), dy = lerp(A.s.dirY, B.s.dirY), dl = Math.hypot(dx, dy) || 1;
     w.dirX = dx / dl;
     w.dirY = dy / dl;
+    const se = game.season;
+    se.season = SEASON_LIST[near.season] ?? 'summer';
+    se.progress = near.sprog / 255;
+    se.bloom = lerp(A.s.bloom, B.s.bloom) / 255;
+    se.leaves = lerp(A.s.leaves, B.s.leaves) / 255;
+    se.snow = lerp(A.s.snow, B.s.snow) / 255;
 
     // Everyone else's dogs.
     const seenDogs = new Set<number>();
@@ -613,6 +672,7 @@ export class GuestNet {
       if (a.pen) (a.pen as (typeof pens)[number]).animals.push(a);
       a.gone = false;
       a.phase += (a.speed * dt) / (a.sp.r * 1.3 + 1.5);
+      applyAnimalExtra(a, rb.ex);
     }
     if (this.byId.size !== live.size) {
       for (const [id, a] of this.byId) if (!live.has(id)) {
@@ -675,6 +735,9 @@ export class GuestNet {
           if (h) h.barkAnim = 0.25;
           break;
         }
+        case 'ping':
+          if (!own) this.pings.add(game, { slot: e[1] as number, name: this.nameOf(e[1] as number), kind: e[2] as PingKind, x: e[3] as number, y: e[4] as number });
+          break;
       }
     }
   }
@@ -682,7 +745,19 @@ export class GuestNet {
   // ---- Lines for the HUD and the cards ----
 
   hint(game: Game): string | null {
-    if (game.t - this.joinedAt < 14) return `HELP ${this.hostName} BRING THEM HOME. EVERYTHING EARNED GOES TO ${this.hostName}'S RANCH.`;
+    const host = this.hostName, t = game.t - this.joinedAt;
+    // The first visit ever explains a little more.
+    if (this.firstVisit) {
+      if (t < 9) return `YOU ARE ON ${host}'S RANCH: THE PAY GOES TO THEM, BUT HIDDEN PLACES AND KEEPSAKES YOU FIND ARE YOURS.`;
+      if (t < 18) return pingHelp(game.input.touchMode);
+    } else if (t < 8) return `HELP ${host} BRING THEM HOME.`;
+    // At the Show Ground's post: two dogs make a brace.
+    const p = game.ranch.course.post;
+    const at = (x: number, y: number) => Math.hypot(x - p.x, y - (p.y + 4)) < 22;
+    if (!game.trials.run && at(game.dog.x, game.dog.y)) {
+      const h = this.puppets.get(0);
+      return h && at(h.x, h.y) ? `${host} PRESSES ${game.input.touchMode ? 'NIP' : 'E'} TO START THE BRACE: TEN SHEEP, BOTH OF YOU.` : `A BRACE RUN NEEDS ${host} AT THE POST TOO. PING THEM OVER.`;
+    }
     return null;
   }
 
@@ -690,9 +765,23 @@ export class GuestNet {
     return slot === 0 ? this.hostName : this.players.get(slot)?.name ?? 'A FRIEND';
   }
 
+  dogOf(slot: number): Dog | null {
+    return slot === this.slot ? this.game?.dog ?? null : this.puppets.get(slot) ?? null;
+  }
+
+  // Our ping: here at once, and to the host (who passes it on).
+  sendPing(game: Game, kind: PingKind) {
+    const d = game.dog;
+    this.pings.add(game, { slot: this.slot, name: this.look.name, kind, x: d.x, y: d.y });
+    this.seq = (this.seq + 1) & 0xffff;
+    this.pending.push({ kind: 'ping', seq: this.seq, x: d.x, y: d.y, hx: d.hx, hy: d.hy, target: PING_KINDS.indexOf(kind) });
+    this.sendT = 0;
+  }
+
   // Leave the ranch, back to our own title screen.
   leave(game?: Game) {
     this.status = 'ended';
+    document.removeEventListener('visibilitychange', this.onVis);
     this.link?.close(4000, 'left');
     this.link = null;
     if (joining === this) joining = null;

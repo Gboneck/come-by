@@ -14,7 +14,7 @@ import { clamp } from '../util';
 // gate, round the post, drive gate, cross-drive gate, pen. Scored on gates
 // and calm; bolting animals and gripping (nipping sheep) cost points.
 
-export type ClassId = 'novice' | 'open' | 'cattle' | 'cup';
+export type ClassId = 'novice' | 'open' | 'cattle' | 'cup' | 'brace';
 
 export interface TrialClass {
   id: ClassId;
@@ -34,6 +34,17 @@ export const CLASSES: TrialClass[] = [
   { id: 'cattle', name: 'CATTLE', species: 'cow', n: 4, tier: 4, needs: 'open', limit: 240, rivals: [50, 70], prizes: [80, 45, 20] },
   { id: 'cup', name: 'VALLEY CUP', species: 'sheep', n: 7, tier: 5, needs: 'cattle', limit: 210, rivals: [64, 82], prizes: [140, 70, 35] },
 ];
+
+// Co-op: two dogs on one course, scored together. Not one of the ladder's
+// classes: it runs whenever a friend's dog stands at the post with yours.
+export const BRACE: TrialClass = { id: 'brace', name: 'BRACE', species: 'sheep', n: 10, tier: 2, needs: null, limit: 240, rivals: [52, 76], prizes: [70, 40, 20] };
+
+// A friend's dog at the post beside yours (only the host starts runs).
+export function braceReady(game: Game): boolean {
+  if (game.net?.role !== 'host' || game.tier < BRACE.tier) return false;
+  const p = game.ranch.course.post;
+  return game.coop.some((d) => Math.hypot(d.x - p.x, d.y - (p.y + 4)) < 22);
+}
 
 export const TRIAL_EVERY = 3;
 export const isTrialDay = (day: number) => day % TRIAL_EVERY === 0;
@@ -103,7 +114,9 @@ export function availableClasses(game: Game): TrialClass[] {
 }
 
 // The first class you have not won yet; once all are won, the hardest.
+// With a friend's dog at the post too, the brace.
 export function currentClass(game: Game): TrialClass | null {
+  if (braceReady(game)) return BRACE;
   const av = availableClasses(game);
   return av.find((c) => !game.trials.won.includes(c.id)) ?? av[av.length - 1] ?? null;
 }
@@ -218,8 +231,9 @@ export function updateRun(game: Game, dt: number) {
       if (r.bolts <= 5) game.fx.float(a.x, a.y - 12, 'BOLT -2', C.wool, 1);
     } else if (a.panicT <= 0) r.panicking.delete(a);
   }
-  // Walking off the field retires the run.
-  if (game.map.regionAt(game.dog.x, game.dog.y)?.id !== 'show') {
+  // Walking off the field retires the run (in a brace, either dog).
+  const off = (d: { x: number; y: number }) => game.map.regionAt(d.x, d.y)?.id !== 'show';
+  if (off(game.dog) || (r.cls === BRACE && game.coop.some(off))) {
     if ((r.awayT += dt) > 2.5) return endRun(game, true);
   } else r.awayT = 0;
   if (r.t >= r.cls.limit) return endRun(game, false);
