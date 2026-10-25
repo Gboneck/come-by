@@ -8,6 +8,10 @@ import { wrap } from '../gfx/font';
 import { touchLayout } from './touch';
 import { safeArea } from './safe';
 import { coachHint, drawCoach } from './coach';
+import { jobArrows, jobCard } from './jobs';
+import { skyIcon } from './icons';
+import { CALM_MAX } from '../systems/trials';
+import { clamp } from '../util';
 
 // Rasterised triangle arrow pointing along `ang`.
 export function arrow(g: CanvasRenderingContext2D, cx: number, cy: number, ang: number, size: number, color: string) {
@@ -49,6 +53,20 @@ export function edgeArrow(g: CanvasRenderingContext2D, game: Game, wx: number, w
   }
 }
 
+// A hint stays up long enough to be read before the next one replaces it
+// (a fresh tip, which is about what just happened, still cuts in at once).
+let held: string | null = null;
+let heldAt = 0;
+function steadyHint(game: Game, want: string | null): string | null {
+  if (want === held) return held;
+  const read = held ? Math.min(3.5, 1.2 + held.length * 0.045) : 0;
+  const urgent = !!want && (want === game.tip?.text || want.startsWith('RESTING') || !!held?.startsWith('RESTING'));
+  if (held && game.t - heldAt < read && !urgent) return held;
+  held = want;
+  heldAt = game.t;
+  return held;
+}
+
 // A HUD button. Touch gets a generous invisible hit area round it.
 function button(game: Game, g: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, h: number, rim: string, pulse = false): boolean {
   const hot = game.ui.isActive(id);
@@ -66,10 +84,31 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   const bh = touch ? 13 : 11; // button height
   const ty = (touch ? 4 : 3); // text inset in a button
 
-  drawCoach(game, g);
+  // ---- Hint line layout (drawn later): it bounds the view from below ----
+  const hint = steadyHint(game, coachHint(game) ?? game.hint());
+  let bottomY = TL ? TL.top - 2 : H - 4 - S.bottom;
+  let hcx = (L + R) / 2, hmax = Math.min(W - 16 - S.left - S.right, 200);
+  if (TL && W > H) {
+    // Landscape: the thumbs sit in the corners, so the hint can use the
+    // bottom edge between them instead of the middle of the field.
+    const x0 = TL.stickHome.x + 28, x1 = TL.lie.x - TL.lie.r - 6;
+    if (x1 - x0 >= 120) {
+      hcx = (x0 + x1) / 2;
+      hmax = Math.min(200, x1 - x0 - 10);
+      bottomY = H - 4 - S.bottom;
+    }
+  }
+  const hl = hint ? wrap(hint, hmax) : [];
+  const hh = hl.length * 7 + 5;
+  const hy = Math.round(bottomY - hh);
+  // What is left of the field to point at: below this, a marker would hide
+  // under the hint or the thumbs, so it gets an edge arrow instead.
+  const viewBottom = Math.min(hint ? hy - 2 : H, TL ? TL.top : H - S.bottom - 4);
+
+  drawCoach(game, g, T + 12, viewBottom);
 
   // ---- Edge arrows: groups out in the pastures, and home when driving ----
-  const M: Margins = { top: T + 12, bottom: TL ? H - TL.top + 2 : S.bottom + 8, left: S.left, right: S.right };
+  const M: Margins = { top: T + 12, bottom: H - viewBottom + 2, left: S.left, right: S.right };
   const gr = game.nearestGroup();
   const driving = gr && Math.hypot(gr.x - game.dog.x, gr.y - game.dog.y) < 90;
   if (driving) {
@@ -87,15 +126,18 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
       .slice(0, 2);
     for (const grp of groups) edgeArrow(g, game, grp.x, grp.y, C.butter, `${grp.members.length}`, M);
   }
+  jobArrows(game, g, M);
 
   // ---- Clock (top-left) ----
   const d = game.day;
-  panel(g, L, T, 52, 18);
+  panel(g, L, T, 62, 18);
   text(g, `DAY ${d.day}`, L + 4, T + 3, C.wool);
   const resting = game.rest > 1.5;
   text(g, d.clock(), L + 49, T + 3, d.phase === 'dusk' || resting ? C.butter : C.wool, { align: 'right' });
+  // Today's sky, at the end of the clock.
+  skyIcon(g, game.weather.sky, L + 52, T + 2, d.phase === 'night');
   // Resting: the clock runs fast.
-  if (resting && Math.floor(game.t * 4) % 2 === 0) text(g, '>>', L + 55, T + 3, C.butter, { shadow: C.plum });
+  if (resting && Math.floor(game.t * 4) % 2 === 0) text(g, '>>', L + 65, T + 3, C.butter, { shadow: C.plum });
   // Sun track: day in sage, dusk in teal; a sun dot travels along it.
   const tx = L + 4, tky = T + 12, tw = 44;
   rect(g, tx, tky, tw, 2, C.sage);
@@ -172,15 +214,25 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     cardY += bh + 2;
   }
 
+  // ---- Orders and trials: the day's jobs, under the goal ----
+  cardY += jobCard(game, g, L, cardY, W);
+
   // ---- Flock card: how they feel now, and what they will pay ----
   if (gr) {
     const sp = gr.members[0].sp;
     const n = gr.members.length;
     const peak = gr.members.reduce((s, a) => s + a.peakStress, 0) / n;
     const pay = calmRating(peak);
-    const col = pay.mult > 1 ? C.butter : C.wool;
+    let col: string = pay.mult > 1 ? C.butter : C.wool;
     const label = `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}`;
-    const mood = `${pay.label} X${pay.mult}`;
+    let mood = `${pay.label} X${pay.mult}`;
+    const run = game.trials.run;
+    if (run && gr.members[0].trial) {
+      // On the course the flock earns calm points, not pay.
+      const calm = Math.round(CALM_MAX * clamp(1 - (run.t > 0 ? run.stressT / run.t : 0) / 0.45, 0, 1));
+      mood = `CALM ${calm}/${CALM_MAX}`;
+      col = calm >= CALM_MAX * 0.7 ? C.butter : C.wool;
+    }
     const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8;
     panel(g, L, cardY, w, 19);
     text(g, label, L + 4, cardY + 3, C.wool);
@@ -191,27 +243,11 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   }
 
   // ---- Hint line (tutorial and region tips) ----
-  const hint = coachHint(game) ?? game.hint();
-  let bottomY = TL ? TL.top - 2 : H - 4 - S.bottom;
-  let hcx = (L + R) / 2, hmax = Math.min(W - 16 - S.left - S.right, 200);
-  if (TL && W > H) {
-    // Landscape: the thumbs sit in the corners, so the hint can use the
-    // bottom edge between them instead of the middle of the field.
-    const x0 = TL.stickHome.x + 28, x1 = TL.lie.x - TL.lie.r - 6;
-    if (x1 - x0 >= 120) {
-      hcx = (x0 + x1) / 2;
-      hmax = Math.min(200, x1 - x0 - 10);
-      bottomY = H - 4 - S.bottom;
-    }
-  }
   if (hint) {
-    const lines = wrap(hint, hmax);
-    const hw = Math.max(...lines.map((l) => textWidth(l))) + 10;
-    const hh = lines.length * 7 + 5;
-    const hy = Math.round(bottomY - hh);
+    const hw = Math.max(...hl.map((l) => textWidth(l))) + 10;
     const hx = Math.round(hcx - hw / 2);
     panel(g, hx, hy, hw, hh);
-    lines.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
+    hl.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
   }
 
   // ---- Place name and banners ----
@@ -231,13 +267,14 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const b = game.banner;
     const age = b.max - b.t;
     const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
-    const sc = textWidth(b.big, 2) <= W - 8 ? 2 : 1;
+    // The shepherd's call names the dog.
+    const big = b.big === "THAT'LL DO!" ? `THAT'LL DO, ${game.look.name}!` : b.big;
+    const sc = textWidth(big, 2) <= W - 8 ? 2 : 1;
     // Big moments land with a stamp: one size up for a few frames.
-    const stamp = b.big === "THAT'LL DO!" && age < 0.09 && textWidth(b.big, sc + 1) <= W - 8 ? 1 : 0;
-    text(g, b.big, W / 2, y - stamp * 3, C.butter, { align: 'center', scale: sc + stamp, shadow: C.plum });
+    const stamp = big.endsWith('!') && age < 0.09 && textWidth(big, sc + 1) <= W - 8 ? 1 : 0;
+    text(g, big, W / 2, y - stamp * 3, C.butter, { align: 'center', scale: sc + stamp, shadow: C.plum });
     if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, y + 7 * sc + 4 + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
   }
-  f.drawTop(g);
 }
 
 // Tier-up: what you reached and everything it brings, for a few seconds.

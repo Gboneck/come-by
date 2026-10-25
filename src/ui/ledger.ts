@@ -6,8 +6,12 @@ import type { Game } from '../game';
 import { MH, MW, REGIONS, TS, Ter, type WorldMap } from '../world/map';
 import { TIERS, goalDone, tierOf } from '../systems/progression';
 import { jobsLedger } from './jobs';
+import { yardOf } from '../systems/orders';
+import { currentClass, prizeToday } from '../systems/trials';
 import { safeArea } from './safe';
-import { drawCover } from './feel';
+import { SKY_WORD, skyIcon } from './icons';
+import type { Sky } from '../systems/weather';
+import { dimView } from './feel';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -54,6 +58,17 @@ function drawMap(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number
     const gx = x0 + Math.round(gr.x / TS / 2), gy = y0 + Math.round(gr.y / TS / 2);
     rect(g, gx - 1, gy - 1, 2, 2, C.wool);
   }
+  // Where today's jobs are: buyers waiting, and the crook on a trial day.
+  const spot = (wx: number, wy: number) => {
+    const sx = x0 + Math.round(wx / TS / 2), sy = y0 + Math.round(wy / TS / 2);
+    rect(g, sx - 2, sy - 2, 4, 4, C.plum);
+    rect(g, sx - 1, sy - 1, 2, 2, C.butter);
+  };
+  for (const o of game.orders.open) {
+    const gp = yardOf(game, o.yard).pen.gatePoint(0);
+    spot(gp.x, gp.y);
+  }
+  if (prizeToday(game) && currentClass(game)) spot(game.ranch.course.post.x, game.ranch.course.post.y);
   const f = game.ranch.farmhouse;
   if (f) {
     const hx = x0 + Math.round(f.cx / TS / 2), hy = y0 + Math.round(f.cy / TS / 2);
@@ -63,7 +78,30 @@ function drawMap(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number
   if (Math.floor(game.t * 3) % 2 === 0) rect(g, x0 + Math.round(game.dog.x / TS / 2) - 1, y0 + Math.round(game.dog.y / TS / 2) - 1, 3, 3, C.red);
 }
 
-// The Ranch Ledger: where you are, what to do, what comes next.
+interface Line { s: string; c: string; x?: number; sky?: Sky }
+
+function drawLines(g: CanvasRenderingContext2D, lines: Line[], x0: number, y: number): number {
+  for (const l of lines) {
+    if (l.sky) {
+      skyIcon(g, l.sky, x0, y - 1);
+      text(g, l.s, x0 + 10, y, l.c);
+    } else if (l.s) {
+      if (l.s.startsWith('#') || l.s.startsWith('- ')) {
+        const done = l.s.startsWith('#');
+        rect(g, x0, y, 5, 5, done ? C.butter : C.sage);
+        if (!done) rect(g, x0 + 1, y + 1, 3, 3, C.plum);
+        text(g, l.s.slice(2), x0 + 8, y, l.c, { iconColor: C.butter });
+      } else text(g, l.s, x0 + (l.x ?? 0) + (l.x ? 8 : 0), y, l.c, { iconColor: C.butter });
+    }
+    y += l.sky ? 9 : 7;
+  }
+  return y;
+}
+
+const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? 9 : 7), 0);
+
+// The Ranch Ledger: where you are, what to do, what comes next. On a wide
+// screen the goals sit on the left, the map and the day's jobs on the right.
 export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H: number): boolean {
   const ui = game.ui;
   const tier = tierOf(game.tier);
@@ -71,9 +109,10 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   const wide = W >= 300;
   const mapW = MW / 2, mapH = MH / 2;
   const colW = wide ? Math.min(170, W - mapW - 30) : Math.min(W - 16, 200);
-  const pw = wide ? colW + mapW + 22 : colW;
-  const lines: { s: string; c: string; x?: number }[] = [];
-  const add = (s: string, c: string = C.wool, x = 0) => lines.push({ s, c, x });
+  const rightW = wide ? Math.max(mapW, Math.min(140, W - colW - 34)) : colW;
+  const pw = wide ? colW + rightW + 22 : colW;
+  const A: Line[] = [];
+  const add = (s: string, c: string = C.wool, x = 0) => A.push({ s, c, x });
 
   add(`TIER ${tier.n}: ${tier.name}`, C.butter);
   for (const l of wrap(tier.blurb, colW - 12)) add(l, C.sage);
@@ -84,7 +123,6 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
     add(`${done ? '#' : '-'} ${goal.label}`, done ? C.butter : C.wool);
     if (goal.target > 1) add(`${v}/${goal.target}`, done ? C.butter : C.sage, 8);
   }
-  for (const l of jobsLedger(game, colW - 12)) add(l.s, l.c, l.x);
   add('');
   if (next) {
     add(`NEXT: ${next.name}`, C.butter);
@@ -98,36 +136,40 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   const deliv = Object.values(tot.delivered).reduce((s, n) => s + (n ?? 0), 0);
   add(`DAY ${game.day.day}  HOME ${deliv}  EARNED ${tot.earned}$`, C.sage);
 
-  const ph = Math.max(20 + lines.length * 7, wide ? mapH + 28 : 0) + (wide ? 0 : mapH + 8) + 16;
+  // The day: weather, then trials and orders.
+  const B: Line[] = [
+    { s: `TODAY: ${SKY_WORD[game.weather.sky]}`, c: C.wool, sky: game.weather.sky },
+    { s: `TOMORROW: ${SKY_WORD[game.weather.forecast]}`, c: C.wool, sky: game.weather.forecast },
+    ...jobsLedger(game, (wide ? rightW : colW) - (wide ? 2 : 12)),
+  ];
+
   const S = safeArea(game.screen);
+  const top = 16, foot = 16;
+  const ph = wide ? Math.max(top + linesH(A), top + 2 + mapH + 6 + linesH(B)) + foot : top + linesH(A) + 4 + linesH(B) + 4 + mapH + 4 + foot;
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
-  drawCover(g, W, H, 8);
+  dimView(g, game.view());
   panel(g, x0, y0, pw, ph);
   text(g, 'RANCH LEDGER', x0 + pw / 2, y0 + 4, C.butter, { align: 'center' });
   rect(g, x0 + 5, y0 + 11, pw - 10, 1, C.sage);
   // Tier pips.
   for (let i = 0; i < TIERS.length; i++) rect(g, x0 + pw - 8 - (TIERS.length - i) * 5, y0 + 4, 4, 4, i < game.tier ? C.butter : C.sage);
-  let y = y0 + 16;
-  for (const l of lines) {
-    if (l.s) {
-      if (l.s.startsWith('#') || l.s.startsWith('- ')) {
-        const done = l.s.startsWith('#');
-        rect(g, x0 + 7, y, 5, 5, done ? C.butter : C.sage);
-        if (!done) rect(g, x0 + 8, y + 1, 3, 3, C.plum);
-        text(g, l.s.slice(2), x0 + 15, y, l.c, { iconColor: C.butter });
-      } else text(g, l.s, x0 + 7 + (l.x ?? 0) + (l.x ? 8 : 0), y, l.c, { iconColor: C.butter });
-    }
-    y += 7;
+  if (wide) {
+    drawLines(g, A, x0 + 7, y0 + top);
+    const mx = x0 + colW + 12 + Math.round((rightW - mapW) / 2);
+    drawMap(game, g, mx, y0 + top + 2);
+    drawLines(g, B, x0 + colW + 12, y0 + top + 2 + mapH + 6);
+  } else {
+    let y = drawLines(g, A, x0 + 7, y0 + top);
+    y = drawLines(g, B, x0 + 7, y + 4);
+    drawMap(game, g, Math.round(W / 2 - mapW / 2), y + 4);
   }
-  const mx = wide ? x0 + colW + 12 : Math.round(W / 2 - mapW / 2);
-  const my = wide ? y0 + 18 : y + 2;
-  drawMap(game, g, mx, my);
 
   // Close.
-  const label = game.input.touchMode ? 'CLOSE' : 'TAB: CLOSE';
-  const bw = textWidth(label) + 10;
-  const bx = Math.round(x0 + pw / 2 - bw / 2), by = y0 + ph - 13;
-  panel(g, bx, by, bw, 11, ui.isActive('ledger-close') ? C.teal : C.plum, C.butter);
-  text(g, label, bx + bw / 2, by + 3, C.wool, { align: 'center' });
-  return ui.click('ledger-close', bx, by, bw, 11) || ui.captureAll('ledger-bg');
+  const touch = game.input.touchMode;
+  const label = touch ? 'CLOSE' : 'TAB: CLOSE';
+  const bw = textWidth(label) + (touch ? 16 : 10), bh = touch ? 13 : 11;
+  const bx = Math.round(x0 + pw / 2 - bw / 2), by = y0 + ph - bh - 2;
+  panel(g, bx, by, bw, bh, ui.isActive('ledger-close') ? C.teal : C.plum, C.butter);
+  text(g, label, bx + bw / 2, by + Math.floor((bh - 5) / 2), C.wool, { align: 'center' });
+  return ui.click('ledger-close', bx, by, bw, bh) || ui.captureAll('ledger-bg');
 }

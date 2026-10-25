@@ -36,7 +36,9 @@ original and drawn in code. No external art files, ever.
   `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
   include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
   phone, notched-phone, landscape and desktop sizes onto contact sheets
-  (`shots/ui/`), `scripts/audiotest.mjs` renders the music, stingers and
+  (`shots/ui/`), `scripts/playthrough.mjs` plays a new save with the bot
+  and logs every hint, tip, banner and card against the clock (for pacing
+  and pile-ups; shots in `shots/play/`), `scripts/audiotest.mjs` renders the music, stingers and
   soundscape offline and prints levels, peaks, tuning, theory checks and
   CPU (we cannot listen, so we measure). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
   `regions.mjs` their own port when other checkouts are running servers too.
@@ -115,7 +117,9 @@ stays unique.
 
 - `src/main.ts` boot + loop; `src/game.ts` state machine and orchestration.
 - `src/gfx/` screen scaling, sprites, font, pixel primitives.
-- `src/art/` sprite grids and procedural art (trees, rocks, buildings).
+- `src/art/` sprite grids and procedural art (trees, rocks, buildings);
+  the player's choices: `dogstyle.ts` (markings, neck piece),
+  `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
 - `src/world/` tile map, regions, terrain/canopy baking.
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
@@ -124,7 +128,9 @@ stays unique.
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
   weather state everything else reads: `game.weather`).
-- `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
+- `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
+  `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
+  pieces, `textfield.ts` typed names.
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
   wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.

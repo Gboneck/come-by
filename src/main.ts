@@ -56,7 +56,10 @@ if (params.has('sprites')) {
         const next = new Game(screen, input, { audio: sound });
         if (req === 'continue') loadInto(next);
         else clearSave();
-        if (req === 'new') saveGame(next);
+        if (req === 'new') {
+          saveGame(next);
+          next.openLook('new'); // name the dog and choose its look first
+        }
         swap(next);
       }
     }

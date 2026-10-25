@@ -75,7 +75,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     const near = Math.hypot(game.dog.x - b.cx, game.dog.y - b.cy) < 120 || game.mode === 'build';
     ents.push(...buildingDrawables(g, b, game.t, night, near));
   }
-  const tierName = tierOf(game.tier).name;
+  const tierName = game.look.ranch || tierOf(game.tier).name; // the ranch sign
   ents.push(...game.extraDrawables(g));
   for (const d of DECOR) {
     if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, (d.x + (d.w ?? 1)) * TS, (d.y + (d.h ?? 1)) * TS, 40)) continue;

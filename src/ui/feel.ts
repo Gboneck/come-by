@@ -27,8 +27,10 @@ function coverPattern(g: CanvasRenderingContext2D, level: number): CanvasPattern
   return patterns[level];
 }
 
-// Plum dither over the whole screen: 0 = clear, 16 = solid.
-export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, level: number) {
+// Plum dither over the whole screen: 0 = clear, 16 = solid. Pass the view
+// offset to anchor it to the world like the night's dither, so a dimmed
+// night stays at the night's own level instead of filling in solid.
+export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, level: number, ox = 0, oy = 0) {
   const l = Math.max(0, Math.min(16, Math.round(level)));
   if (l <= 0) return;
   if (l >= 16) {
@@ -38,8 +40,17 @@ export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, lev
   }
   const p = coverPattern(g, l);
   if (!p) return;
+  const sx = ox & 3, sy = oy & 3;
+  g.save();
+  g.translate(-sx, -sy);
   g.fillStyle = p;
-  g.fillRect(0, 0, W, H);
+  g.fillRect(0, 0, W + sx, H + sy);
+  g.restore();
+}
+
+// The dim behind a menu or card.
+export function dimView(g: CanvasRenderingContext2D, view: { ox: number; oy: number; W: number; H: number }, level = 8) {
+  drawCover(g, view.W, view.H, level, view.ox, view.oy);
 }
 
 export class Feel {
@@ -93,14 +104,14 @@ export class Feel {
   // ---- Coins ----
 
   // A coin flies from a screen point to the purse; the counter waits for it.
-  flyCoins(sx: number, sy: number, value: number, pieces = 1) {
+  flyCoins(sx: number, sy: number, value: number, pieces = 1, delay = 0) {
     const n = Math.max(1, Math.min(pieces, value, 6));
     let left = value;
     for (let i = 0; i < n; i++) {
       const v = i === n - 1 ? left : Math.floor(value / n);
       left -= v;
       this.pending += v;
-      this.flying.push({ x0: sx + (Math.random() - 0.5) * 6, y0: sy, t: -i * 0.07, max: 0.55 + Math.random() * 0.1, value: v, arc: 14 + Math.random() * 10 });
+      this.flying.push({ x0: sx + (Math.random() - 0.5) * 6, y0: sy, t: -delay - i * 0.07, max: 0.55 + Math.random() * 0.1, value: v, arc: 14 + Math.random() * 10 });
     }
   }
 

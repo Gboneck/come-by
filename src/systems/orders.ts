@@ -77,7 +77,7 @@ export function morningOrders(game: Game) {
   if (o.list.length && !game.tipsSeen.has('orders')) {
     game.tipsSeen.add('orders');
     const e = game.input.touchMode ? 'NIP' : 'E';
-    game.tip = { text: `A BUYER WANTS STOCK (TOP OF THE SCREEN). DRIVE THEM TO THE YARD IN TIME. ${e} AT A PEN GATE LETS YOUR OWN STOCK OUT.`, t: 10 };
+    game.tip = { text: `A BUYER WANTS STOCK (UNDER YOUR GOAL). DRIVE THEM TO THE YARD BY THE TIME SHOWN, OR LET YOUR OWN OUT WITH ${e} AT A PEN GATE.`, t: 9 };
   }
 }
 

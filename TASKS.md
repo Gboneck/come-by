@@ -199,6 +199,37 @@ Round two:
 - [x] Voices as pitched blips per person, footsteps, hammering and chopping
 - [x] `scripts/folktest.mjs`; tune.mjs before and after for every species
 
+## M15 Feel and UI, round two (trials, orders, weather, replay pass)
+- [x] Orders and trials card in the HUD's left column, under the goal; a run
+      shows class, clock, the six parts as pips and the score
+- [x] Coach markers: HERE at the crook, "E HOLDS THE GATE OPEN" at a pen a
+      buyer wants (until you have done it once), the next gate / post / pen
+      during a run, the yard gate while driving a buyer's stock
+- [x] Judge's card: rows arrive, the total counts up, the placing stamps in,
+      prize coins fly to the purse, input waits 0.7s, touch-sized button
+- [x] Ledger: two columns when wide; trials, orders, today's and tomorrow's
+      sky; buyers' yards and the crook marked on the map
+- [x] Sky icon by the clock; tomorrow's forecast on the summary and in the Ledger
+- [x] Replay pass from a new save (`scripts/playthrough.mjs`) on phone and
+      desktop; UI friction fixed, pacing reported to the gameplay side
+- [x] Typecheck, build, shot, uitour, commit
+
+## M16 Customization
+- [x] The dog: a name (typed with the device's own keyboard, or a dice of
+      cozy names), coat flecks, face mask, saddle patch, tail tip, and a
+      bandana, neckerchief or collar, always in Bandana red
+- [x] The ranch: a name for the sign ("COME BY WILLOW CREEK"), the
+      farmhouse roof (slate, teal, moss, thatch) and trim
+- [x] Decor in a DECOR tab: flower bed, hay bale, dog bed, bench, signpost,
+      birdbath, scarecrow, ribbon board, trophy; opened by tier, the kennel
+      and trial ribbons and wins
+- [x] Offered at a new game (MEET YOUR HEELER), at the kennel (DOG tab),
+      in the pause menu, and in build mode (DECOR and RANCH tabs)
+- [x] The name in "THAT'LL DO, BLUE!", the kennel and the trial table; the
+      title screen shows your own dog
+- [x] Saved additively; old saves load with the defaults (`savetest.mjs`)
+- [x] Typecheck, build, shot, uitour, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -624,3 +655,56 @@ Round two:
   penned in 4 of 5 runs against 1 of 5 (26 s against 79 s, a third of the
   panics); goats reach the tune goal in 25 s against 49 s. Plain tune.mjs
   before and after (unseeded, 3 runs) moves within its usual noise.
+- Round two of feel and UI. The jobs card moved from the top centre into
+  the HUD's left column (goal, then jobs, then the flock card): what you are
+  doing on the left, money and buttons on the right, passing messages in
+  the middle. At the top centre it collided with the clock and a long goal
+  on phones, and with the place name.
+- The replay pass (`scripts/playthrough.mjs`: the bot plays from a new save
+  and every hint, tip, banner and card is logged against the clock) found:
+  tutorial hints that flashed past (the "walk in slowly" line was up for a
+  second, the calm-pay and Ledger lines for none, because the first penned
+  animal did not restart the step clock); the rest tip firing at 6:00 with
+  stock waiting; a frame of RESTING at dawn; the tier-up card hiding "that'll
+  do" (the 6th duck tiers up before the gate shuts) and hiding the TRIAL
+  DAY banner on the same morning; the stress tip blaming the player for
+  stock rattled overnight; no word on why a new kind could not be penned;
+  markers and arrows under the hint line and the thumbs; and the Show
+  Ground's crook and trial pen sitting under the thumbs on a phone, because
+  the region is at the world's bottom edge.
+- Fixes: a hint stays up for 1.2-3.5s (by length) before another replaces
+  it, though a fresh tip or resting cuts in. Tutorial step 1 needs four
+  seconds of actually pushing the flock. The tier-up waits for any pen gate
+  about to shut; a banner waits behind the tier card, which replaces the
+  tier banner. The stress tip needs the dog close by. A one-time tip says a
+  pen holds one kind and what another costs. Markers only draw in the field
+  left clear above the hint line and thumbs; a target below that gets an
+  edge arrow. On a phone held upright the camera frames the dog above the
+  thumbs and may run past the world's bottom edge by their height (teal,
+  more forest), so nothing is ever stuck under a thumb.
+- Menu dims are anchored to the world's 4x4 grid like the night dither, so
+  a night summary stays at the night's 50% instead of filling in solid.
+- Sky icons are 7x7 UI glyphs in `src/ui/icons.ts`, alongside the font,
+  rather than sprites in `src/art/`.
+- Build mode opens with the building a "BUILD A ..." goal asks for already
+  picked, and its slot blinks in the bar.
+- Customization. The dog's markings are rewrites of the pose grids (in
+  `src/art/dogstyle.ts`; `makeDogSprites` takes the look), so every frame
+  of the trot, gallop, bark and lie picks them up: few or heavy flecks,
+  one eye patch or a pale face, a plum saddle, a wool tail tip. The neck
+  piece is always red: a collar is the one-pixel band, a neckerchief adds
+  a point at the chest (a knot at the nape from behind).
+- The farmhouse paint is read by the farmhouse drawing from
+  `src/art/ranchstyle.ts`; the ranch name replaces the tier name on the
+  sign by the road, so it reads "COME BY <NAME>". Left empty, the sign
+  names the tier as before.
+- Names are typed with the device's own keyboard through a hidden input
+  (`src/ui/textfield.ts`), focused from inside the tap so phones show it;
+  game keys are ignored while it has focus. Upper case, the font's letters
+  only, 10 for the dog and 12 for the ranch.
+- Decor is for looks only: it never blocks the stock or the dog, so it
+  cannot spoil a drive or trap a flock. It cannot overlap buildings, other
+  decor or the ranch's own touches; building over it clears it and gives
+  the money back, and picking it up refunds it in full.
+- A new game opens the dog's look screen before day one; Esc or LET'S GO
+  takes it as it is.

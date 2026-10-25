@@ -2,7 +2,7 @@ import { C } from './palette';
 import type { Screen } from './gfx/screen';
 import type { Input } from './input';
 import { UI } from './ui/ui';
-import { drawTouchControls } from './ui/touch';
+import { drawTouchControls, touchLayout } from './ui/touch';
 import { Particles } from './systems/particles';
 import { Dog } from './entities/dog';
 import { Animal, barkAt, findGroups, nipFrom, updateHerd, type Group, type HerdCtx, type PressureSource } from './entities/animal';
@@ -29,7 +29,11 @@ import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
 import { Helper, HELPER_COSTS, HELPER_NAMES, type HelperMode } from './entities/helper';
 import { CALLS, type Sound } from './systems/audio';
-import { saveGame } from './systems/save';
+import { saveGame, saveInfo } from './systems/save';
+import { applyLook, defaultLook, readLook, type Look } from './ui/look';
+import { drawLook, lookKeys, type LookFrom } from './ui/lookui';
+import { decorDrawables, type PlacedDecor } from './ui/decorbuild';
+import { stopTyping } from './ui/textfield';
 import { drawPause, drawTitle, pauseKeys, titleKeys, type MenuState } from './ui/title';
 import { Feel } from './ui/feel';
 import { buzz } from './ui/settings';
@@ -40,13 +44,13 @@ import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsUpdate } from './systems/jobs';
-import { drawJobs } from './ui/jobs';
+import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
 import { courseDrawables } from './art/course';
 import type { Drawable } from './art/buildings';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look';
 export type Request = 'new' | 'continue' | 'title' | null;
 
 export interface DayStats {
@@ -131,6 +135,12 @@ export class Game {
   won = false;
   predators: Predator[] = [];
   private quietT = 0;
+  // The player's choices (dog and ranch looks) and the decor they placed.
+  look: Look = defaultLook();
+  decor: PlacedDecor[] = [];
+  lookFrom: LookFrom = 'pause';
+  lookSel = 0;
+  private lookBack: Mode = 'play';
   tut = 0; // tutorial step
   tutT = 0;
   private tierCheckT = 0;
@@ -146,6 +156,9 @@ export class Game {
 
   constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null } = {}) {
     this.demo = !!opts.demo;
+    // Behind the title, the saved dog does the herding.
+    if (this.demo) this.look = readLook(saveInfo()?.look);
+    applyLook(this.look);
     this.audio = opts.audio ?? null;
     this.g = screen.g;
     this.ui = new UI(input);
@@ -241,7 +254,7 @@ export class Game {
     this.ranch.restamp();
     if (fresh) {
       const t = tierOf(n);
-      this.showBanner(`TIER ${n}: ${t.name}`, t.blurb, 4.5);
+      // The tier card is the banner; whatever banner was up waits behind it.
       this.feel.tierCard = { n, name: t.name, blurb: t.blurb, brings: t.brings, t: 5.5, max: 5.5 };
       this.feel.confetti(this.screen.W);
       this.feel.shake(1, 0.35);
@@ -324,6 +337,9 @@ export class Game {
     this.dog.vx = this.dog.vy = 0;
     this.dog.face = 'd';
     this.dog.stamina = this.dog.stats.stamina;
+    this.rest = 1;
+    this.restT = 0;
+    this.idleT = 0;
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     for (const a of this.animals) a.stress *= 0.3;
@@ -410,6 +426,10 @@ export class Game {
       pauseKeys(this);
       return;
     }
+    if (this.mode === 'look') {
+      lookKeys(this);
+      return;
+    }
     if (this.mode === 'summary') {
       this.fx.update(dt);
       // A beat before the card takes input, so a bark held through dusk
@@ -449,7 +469,10 @@ export class Game {
     if (this.trials.result) {
       // Trial result card: everything waits until it is closed.
       this.fx.update(dt);
-      if (this.input.pressed('confirm') || this.input.pressed('bark') || this.input.pressed('cancel')) closeResult(this);
+      // A beat before it takes input, so a press at the end of the run
+      // does not skip the judge's card.
+      if (resultAge(this, dt) < RESULT_READY) this.input.clearQueue();
+      else if (this.input.pressed('confirm') || this.input.pressed('bark') || this.input.pressed('cancel')) closeResult(this);
       return;
     }
     if (this.input.pressed('ledger')) {
@@ -465,7 +488,7 @@ export class Game {
       return;
     }
     // The tier-up waits for a "that'll do" moment to finish playing.
-    if ((this.tierCheckT -= dt) <= 0 && this.feel.moment <= 0) {
+    if ((this.tierCheckT -= dt) <= 0 && this.feel.moment <= 0 && !this.ranch.pens.some((p) => p.batch.length)) {
       this.tierCheckT = 0.5;
       this.checkTier();
     }
@@ -533,12 +556,12 @@ export class Game {
       const tip = REGION_TIPS[reg.id];
       if (tip && !this.tipsSeen.has(reg.id) && reg.tier <= this.tier) {
         this.tipsSeen.add(reg.id);
-        this.tip = { text: this.input.touchMode ? tip.replace('(E)', '') : tip, t: 8 };
+        this.tip = { text: this.input.touchMode ? tip.replace(' (E)', '') : tip, t: 8 };
       }
     }
     if (this.tip && (this.tip.t -= dt) <= 0) this.tip = null;
     if (this.place && (this.place.t -= dt) <= 0) this.place = null;
-    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    if (this.banner && !this.feel.tierCard && (this.banner.t -= dt) <= 0) this.banner = null;
   }
 
   // ---- Resting ----
@@ -558,7 +581,9 @@ export class Game {
       this.restT = 0;
       this.rest = 1;
       // Standing about on a quiet ranch: say once that resting is a thing.
-      const idle = this.inRanch() && this.day.phase !== 'night' && this.dog.speed < 4 && !this.nearestGroup(110);
+      // (Only once nothing is left out to herd: a morning with stock waiting
+      // is no time to tell anyone to rest.)
+      const idle = this.inRanch() && this.day.phase !== 'night' && this.dog.speed < 4 && !this.groups.some((gr) => !gr.members[0].trial);
       this.idleT = idle ? this.idleT + dt : 0;
       if (this.idleT > 4 && this.tut >= 7 && !this.tipsSeen.has('rest') && !this.input.override) {
         this.tipsSeen.add('rest');
@@ -722,7 +747,7 @@ export class Game {
       this.stats.deliveredValue += value;
       this.stats.delivered[a.sp.id] = (this.stats.delivered[a.sp.id] ?? 0) + 1;
       this.totals.delivered[a.sp.id] = (this.totals.delivered[a.sp.id] ?? 0) + 1;
-      if (this.tut === 3) this.tut = 4;
+      if (this.tut === 3) { this.tut = 4; this.tutT = 0; }
       if (mult > 1) this.stats.calm++;
       this.fx.float(a.x, a.y - 10, `+${value}$`, C.butter, 1.1);
       this.audio?.play('coin', { x: a.x, y: a.y, vol: 0.7 });
@@ -746,6 +771,24 @@ export class Game {
       for (let i = 0; i < 10; i++)
         this.fx.add({ kind: 'spark', x: gp.x, y: gp.y - 4, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, max: 0.5, color: C.butter });
     }
+  }
+
+  // The dog's look screen: at a new game, from the kennel, from the pause menu.
+  openLook(from: LookFrom) {
+    this.lookFrom = from;
+    if (this.mode !== 'look') this.lookBack = this.mode;
+    this.mode = 'look';
+    this.lookSel = 0;
+    this.input.clearQueue();
+  }
+
+  closeLook() {
+    stopTyping();
+    if (!this.look.name.trim()) this.look.name = defaultLook().name;
+    applyLook(this.look);
+    this.mode = this.lookFrom === 'new' ? 'play' : this.lookBack;
+    this.input.clearQueue();
+    saveGame(this);
   }
 
   // Title menu choice: fade out, then main.ts swaps in the new game.
@@ -821,7 +864,9 @@ export class Game {
     const step = (n: number) => { this.tut = n; this.tutT = 0; };
     switch (this.tut) {
       case 0: if (near) step(1); break;
-      case 1: if (this.animals.some((a) => !a.pen && a.pressure > 0.15)) { if (this.tutT > 4) step(2); } else this.tutT = Math.min(this.tutT, 3.5); break;
+      // Four seconds of actually pushing them, so the "walk in slowly" hint
+      // has time to be read and tried.
+      case 1: if (this.animals.some((a) => !a.pen && a.pressure > 0.15)) { if (this.tutT > 4) step(2); } else this.tutT = Math.max(0, this.tutT - 2 * dt); break;
       case 2: if ((this.dog.lying && this.tutT > 1) || this.tutT > 14) step(3); break;
       case 3: break; // advanced by the first penned animal
       case 4: if (this.tutT > 5) step(5); break;
@@ -880,25 +925,37 @@ export class Game {
       tx += (gr.x - d.x) * 0.3;
       ty += (gr.y - d.y) * 0.3;
     }
+    // On a phone held upright, frame the dog in the field above the thumbs.
+    const { W, H } = this.screen;
+    const band = this.thumbBand();
+    if (H > W) ty += band / 2;
     const k = damp(4, dt);
     this.cam.x += (tx - this.cam.x) * k;
     this.cam.y += (ty - this.cam.y) * k;
-    const { W, H } = this.screen;
     this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
-    this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+    this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2 + band);
+  }
+
+  // Height of the strip the touch controls cover at the bottom. The view may
+  // run that far past the world's bottom edge, so nothing down there (the
+  // Show Ground's crook and pen) is ever stuck under a thumb.
+  thumbBand(): number {
+    if (!this.input.touchMode || this.mode === 'title') return 0;
+    const { W, H } = this.screen;
+    return Math.max(0, H - touchLayout(this, W, H).top);
   }
 
   view() {
     const { W, H } = this.screen;
     const k = this.feel.offset();
     const ox = clamp(Math.round(this.cam.x - W / 2) + k.x, 0, WORLD_W - W);
-    const oy = clamp(Math.round(this.cam.y - H / 2) + k.y, 0, WORLD_H - H);
+    const oy = clamp(Math.round(this.cam.y - H / 2) + k.y, 0, WORLD_H - H + this.thumbBand());
     return { ox, oy, W, H };
   }
 
   // Trial course, buyers' yards and carts, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return courseDrawables(this, g);
+    return [...courseDrawables(this, g), ...decorDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.
@@ -917,6 +974,11 @@ export class Game {
   render() {
     const g = this.g;
     const v = this.view();
+    // Past the world's bottom edge (phones, see thumbBand) is more forest.
+    if (v.oy + v.H > WORLD_H) {
+      g.fillStyle = C.teal;
+      g.fillRect(0, WORLD_H - v.oy, v.W, v.oy + v.H - WORLD_H);
+    }
     drawWorld(this, g, v);
     drawSpeech(this, g, v);
     this.input.uiHeld.clear();
@@ -938,6 +1000,8 @@ export class Game {
       if (this.build.drawUI(this, g, v.W, v.H) === 'exit') this.input.push('cancel');
     } else if (this.mode === 'ledger') {
       if (drawLedger(this, g, v.W, v.H)) this.input.push('ledger');
+    } else if (this.mode === 'look') {
+      drawLook(this, g, v.W, v.H);
     }
     this.feel.drawCover(g, v.W, v.H);
   }

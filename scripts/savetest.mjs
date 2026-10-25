@@ -18,6 +18,10 @@ await step('title', () => ({ mode: window.game.mode, demo: window.game.demo }));
 await page.keyboard.press('Enter');
 await page.waitForTimeout(300);
 await step('started', () => ({ mode: window.game.mode, demo: window.game.demo, saved: !!localStorage.getItem('comeby-save-v1') }));
+// A new game opens the dog's look screen first; Esc takes the defaults.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(100);
+await step('dressed', () => ({ mode: window.game.mode, name: window.game.look.name }));
 await page.evaluate(async () => {
   const g = window.game;
   const pen = g.ranch.pens[0];
@@ -31,6 +35,9 @@ await page.evaluate(async () => {
   const c = await import('/src/ranch/catalog.ts');
   g.ranch.add(m.makeBuilding(c.defOf('kennel'), 90, 108, 0));
   g.hireHelper();
+  // The player's looks and a piece of decor.
+  g.look = { ...g.look, name: 'ZIGGY', ranch: 'TWO OAKS', roof: 'moss', trim: 'butter', dog: { ...g.look.dog, saddle: true, neck: 'collar' } };
+  g.decor.push({ id: 'hay', tx: 95, ty: 112 });
   // Orders, trials and a sheep let out of a pen.
   g.trials.won = ['novice'];
   g.trials.lastPrizeDay = 3;
@@ -57,7 +64,7 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
 await step('continued', () => {
   const g = window.game;
-  return { mode: g.mode, demo: g.demo, coins: g.coins, tier: g.tier, speed: g.upgrades.speed, walk: g.dog.stats.walk, kennel: g.ranch.buildings.some((b) => b.kind === 'kennel'), penned: g.ranch.pens[0].animals.length, helpers: g.helpers.map((h) => h.name), gatesOpen: g.ranch.regionGates.filter((x) => x.unlocked).length, farmLevel: g.ranch.farmhouse.level,
+  return { look: `${g.look.name}/${g.look.ranch}/${g.look.roof}/${g.look.trim}/${g.look.dog.saddle}/${g.look.dog.neck}`, decor: g.decor.length, mode: g.mode, demo: g.demo, coins: g.coins, tier: g.tier, speed: g.upgrades.speed, walk: g.dog.stats.walk, kennel: g.ranch.buildings.some((b) => b.kind === 'kennel'), penned: g.ranch.pens[0].animals.length, helpers: g.helpers.map((h) => h.name), gatesOpen: g.ranch.regionGates.filter((x) => x.unlocked).length, farmLevel: g.ranch.farmhouse.level,
     won: g.trials.won, lastPrize: g.trials.lastPrizeDay, orders: g.orders.list.map((o) => `${o.id}:${o.yard}:${o.species}:${o.got}/${o.n}`), nextOrder: g.orders.nextId, filled: g.totals.orders, ribbons: g.totals.ribbons, home: g.animals.filter((a) => a.home).length };
 });
 

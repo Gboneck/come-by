@@ -2,15 +2,14 @@ import { C } from '../palette';
 import { panel, rect } from '../gfx/draw';
 import { text, textWidth } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
-import { makeDogSprites } from '../art/dog';
+import { playerDogSprites } from '../art/dogstyle';
 import type { Game } from '../game';
 import { saveInfo } from '../systems/save';
 import { tierOf } from '../systems/progression';
 import { canVibrate, saveSettings, settings } from './settings';
-import { drawCover } from './feel';
+import { dimView } from './feel';
 import { safeArea } from './safe';
 
-let dogSpr: ReturnType<typeof makeDogSprites> | null = null;
 
 // Big chunky letters: the 3x5 font scaled up, with a plum outline.
 function logo(g: CanvasRenderingContext2D, s: string, cx: number, y: number, scale: number) {
@@ -28,7 +27,8 @@ export interface MenuState {
 export type TitleAction = 'continue' | 'new' | null;
 
 export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H: number, m: MenuState): TitleAction {
-  dogSpr ??= makeDogSprites('r');
+  // The saved dog, dressed as the player left it (the demo game read it).
+  const dogSpr = playerDogSprites(game.look.dog);
   const ui = game.ui;
   const info = saveInfo();
   const items: { id: TitleAction; label: string }[] = [];
@@ -157,6 +157,7 @@ export const PAUSE_ITEMS: PauseItem[] = [
   // Volumes, 0-10: left/right or the < > ends step them, confirm steps round.
   { id: 'music', label: () => 'MUSIC', act: (g, dir) => g.audio?.stepMusic(dir), level: (g) => g.audio?.musicVol ?? 0, steps: 10, show: (g) => !!g.audio },
   { id: 'sfx', label: () => 'SOUND', act: (g, dir) => g.audio?.stepSound(dir), level: (g) => g.audio?.soundVol ?? 0, steps: 10, show: (g) => !!g.audio },
+  { id: 'dog', label: (g) => `${g.look.name}'S LOOK`, act: (g, dir) => { if (dir === 0) g.openLook('pause'); } },
   { id: 'quit', label: () => 'SAVE AND QUIT', act: (g, dir) => { if (dir === 0) g.quitToTitle(); } },
 ];
 
@@ -186,7 +187,7 @@ export function drawPause(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const rh = touch ? 15 : 12, gap = touch ? 4 : 3;
   const pw = Math.min(W - 16, 150), ph = 36 + rows.length * (rh + gap);
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
-  drawCover(g, W, H, 8);
+  dimView(g, game.view());
   panel(g, x0, y0, pw, ph);
   text(g, 'PAUSED', W / 2, y0 + 6, C.butter, { align: 'center' });
   text(g, `DAY ${game.day.day}  ${tierOf(game.tier).name}`, W / 2, y0 + 14, C.sage, { align: 'center' });

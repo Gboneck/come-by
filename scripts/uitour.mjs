@@ -126,6 +126,159 @@ const STATES = {
       return 240;
     },
   },
+  order: {
+    fn: async () => {
+      const g = window.game;
+      const o = await import('/src/systems/orders.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.orders.list = [{ id: 1, yard: 'mill', species: 'sheep', n: 4, due: o.hourToT(12), got: 1, paid: 9, state: 'open' }];
+      g.animals = g.animals.filter((a) => a.pen);
+      g.spawnFlock('sheep', g.dog.x + 30, g.dog.y + 20, 5);
+      g.place = null;
+      return 30;
+    },
+  },
+  orderpen: {
+    fn: async () => {
+      const g = window.game;
+      const o = await import('/src/systems/orders.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      const pen = g.ranch.pens[0];
+      g.animals = [];
+      g.spawnFlock('sheep', pen.cx, pen.cy, 5);
+      for (let i = 0; i < 60; i++) g.update(1 / 60);
+      g.orders.list = [{ id: 1, yard: 'drover', species: 'sheep', n: 3, due: o.hourToT(13), got: 0, paid: 0, state: 'open' }];
+      const gp = pen.gatePoint(30);
+      g.dog.x = gp.x; g.dog.y = gp.y; g.cam.x = gp.x; g.cam.y = gp.y;
+      g.place = null; g.banner = null;
+      return 30;
+    },
+  },
+  trialday: {
+    fn: () => {
+      const g = window.game;
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      g.animals = g.animals.filter((a) => a.pen);
+      g.place = null; g.banner = null;
+      return 30;
+    },
+  },
+  atpost: {
+    fn: () => {
+      const g = window.game;
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      const p = g.ranch.course.post;
+      g.dog.x = p.x; g.dog.y = p.y + 6; g.cam.x = p.x; g.cam.y = p.y;
+      for (let i = 0; i < 120; i++) g.update(1 / 60);
+      return 60;
+    },
+  },
+  trialrun: {
+    fn: async () => {
+      const g = window.game;
+      const tr = await import('/src/systems/trials.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      const p = g.ranch.course.post;
+      g.dog.x = p.x; g.dog.y = p.y + 6; g.cam.x = p.x; g.cam.y = p.y;
+      tr.startRun(g);
+      for (let i = 0; i < 90; i++) g.update(1 / 60);
+      g.banner = null;
+      return 30;
+    },
+  },
+  trialresult: {
+    fn: async () => {
+      const g = window.game;
+      const tr = await import('/src/systems/trials.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      const p = g.ranch.course.post;
+      g.dog.x = p.x; g.dog.y = p.y + 6; g.cam.x = p.x; g.cam.y = p.y;
+      tr.startRun(g);
+      const r = g.trials.run;
+      r.scores = [8, 15, 10, 10, 15, 20]; r.penned = true; r.t = 95;
+      tr.endRun(g, false);
+      return 60;
+    },
+  },
+  rest: {
+    fn: () => {
+      const g = window.game;
+      g.tut = 9; g.tip = null;
+      g.animals = g.animals.filter((a) => a.pen);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ' }));
+      return 200;
+    },
+  },
+  rain: { query: 'debug&weather=rain', fn: () => { window.game.tut = 9; window.game.tip = null; return 30; } },
+  fog: { query: 'debug&weather=fog', fn: () => { const g = window.game; g.tut = 9; g.tip = null; g.weather.forecast = 'storm'; g.endDay(); return 120; } },
+  look: { fn: () => { const g = window.game; g.openLook('new'); return 30; } },
+  lookcustom: {
+    fn: async () => {
+      const g = window.game;
+      const L = await import('/src/ui/look.ts');
+      g.look = { ...g.look, name: 'BANJO', dog: { speckle: 'heavy', mask: 'one', saddle: true, tailTip: true, neck: 'neckerchief' } };
+      L.applyLook(g.look);
+      g.openLook('kennel');
+      g.lookSel = 5;
+      return 30;
+    },
+  },
+  decortab: {
+    fn: async () => {
+      const g = window.game;
+      g.setTier(3, false);
+      g.coins = 80;
+      g.totals.ribbons = [1, 0, 1];
+      g.ranch.add(window.__mk('kennel', 90, 108));
+      window.__decorate(g);
+      g.enterBuild();
+      g.build.setTab(g, 'decor');
+      g.build.piece = 6;
+      return 30;
+    },
+  },
+  ranchtab: {
+    fn: async () => {
+      const g = window.game;
+      const L = await import('/src/ui/look.ts');
+      g.look.ranch = 'WILLOW CREEK';
+      g.look.roof = 'thatch';
+      g.look.trim = 'butter';
+      L.applyLook(g.look);
+      g.enterBuild();
+      g.build.setTab(g, 'ranch');
+      g.build.row = 1;
+      return 60;
+    },
+  },
+  decorworld: {
+    fn: async () => {
+      const g = window.game;
+      const L = await import('/src/ui/look.ts');
+      g.setTier(3, false);
+      g.totals.ribbons = [1, 0, 1];
+      g.trials.won = ['novice'];
+      g.coins = 200;
+      g.ranch.add(window.__mk('kennel', 90, 108));
+      g.look = { ...g.look, name: 'BANJO', ranch: 'WILLOW CREEK', roof: 'moss', trim: 'teal', dog: { speckle: 'heavy', mask: 'none', saddle: true, tailTip: true, neck: 'collar' } };
+      L.applyLook(g.look);
+      window.__decorate(g);
+      g.tut = 9; g.tip = null; g.banner = null; g.place = null;
+      const f = g.ranch.farmhouse;
+      g.dog.x = f.cx + 20; g.dog.y = f.y1 + 14; g.cam.x = f.cx + 10; g.cam.y = f.cy + 10;
+      return 40;
+    },
+  },
   tierup: {
     fn: () => {
       const g = window.game;
@@ -157,6 +310,20 @@ for (const sn of sizeNames) {
       const m = await import('/src/ui/build.ts');
       const c = await import('/src/ranch/catalog.ts');
       window.__mk = (id, tx, ty) => m.makeBuilding(c.CATALOG.find((d) => d.id === id), tx, ty, 0);
+      const db = await import('/src/ui/decorbuild.ts');
+      // Put one of each piece the ranch has opened near the farmhouse.
+      window.__decorate = (g) => {
+        for (const p of db.PIECES) {
+          if (!p.open(g)) continue;
+          let done = false;
+          for (let r = 2; r < 12 && !done; r++)
+            for (let dy = -r; dy <= r && !done; dy++)
+              for (let dx = -r; dx <= r && !done; dx++) {
+                const tx = 92 + dx, ty = 103 + dy;
+                if (!db.decorBlocked(g, p, tx, ty, (x, y) => g.build.buildable(g, x, y))) { g.decor.push({ id: p.id, tx, ty }); done = true; }
+              }
+        }
+      };
     });
     await page.waitForTimeout(300);
     const frames = (await page.evaluate(STATES[st].fn)) ?? 0;
