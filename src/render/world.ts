@@ -9,6 +9,7 @@ import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights } from '../ranch/decor';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
+import { drawSway, drawWater } from './sway';
 
 export interface View {
   ox: number;
@@ -21,9 +22,11 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   const { ox, oy, W, H } = v;
   const night = game.day.darkness() > 0.3;
   g.drawImage(game.baked.ground, ox, oy, W, H, 0, 0, W, H);
+  drawWater(g, game.baked.water, ox, oy, W, H, game.t);
 
   g.save();
   g.translate(-ox, -oy);
+  drawSway(g, game.baked.sway, ox, oy, W, H, game.t);
   const inView = (x0: number, y0: number, x1 = x0, y1 = y0, m = 24) => x1 > ox - m && x0 < ox + W + m && y1 > oy - m && y0 < oy + H + m;
 
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a);
