@@ -182,11 +182,13 @@ stays unique.
   :8787), then `npm run dev`; under `npm run dev` the game finds the relay
   on the page's own host at :8787. Same Wi-Fi: `npm run dev:lan` in
   `server/` and open the Vite network address on both phones.
-- **Online:** `cd server && npx wrangler login && npm run deploy` prints
-  the Worker's URL; set it as the repository variable `RELAY_URL`
-  (`gh variable set RELAY_URL --body https://...workers.dev`) and redeploy
-  the site. With no relay set, the game builds with co-op switched off.
-- Before shipping co-op changes: `node scripts/cooptest.mjs`.
+- **Online:** the relay is live at https://come-by-relay.gboneck.workers.dev
+  and the repository variable `RELAY_URL` points the Pages build at it.
+  Redeploy the relay after changing `server/`: `cd server && npm run deploy`
+  (wrangler is logged in on the user's Mac; ask before deploying). With no
+  `RELAY_URL`, the game builds with co-op switched off.
+- Before shipping co-op changes: `node scripts/cooptest.mjs`, and after a
+  relay deploy `node scripts/cooptest.mjs --relay=https://come-by-relay.gboneck.workers.dev`.
 
 ## Working from a cloud session (often from a phone)
 
