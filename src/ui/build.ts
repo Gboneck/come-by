@@ -12,6 +12,7 @@ import { SPECIES } from '../entities/species';
 import { HELPER_COSTS } from '../entities/helper';
 import { buildingDrawables } from '../render/world';
 import { safeArea } from './safe';
+import { drawGateMark, drawRoad } from '../art/road';
 
 export type Tab = 'build' | 'dog' | 'market';
 
@@ -118,6 +119,8 @@ export class BuildMode {
     for (let y = ty; y < ty + h; y++)
       for (let x = tx; x < tx + w; x++) if (!this.buildable(game, x, y)) return { ...gh, reason: 'NOT ON RANCH LAND' };
     for (const b of game.ranch.buildings) if (b.kind !== 'regiongate' && b.overlapsTiles(tx, ty, w, h)) return { ...gh, reason: 'SOMETHING IS IN THE WAY' };
+    const why = game.ranch.placementProblem(def.kind, tx, ty, w, h, this.rot); // the drove road, a pen gate onto a wall
+    if (why) return { ...gh, reason: why };
     const X0 = tx * TS - 3, Y0 = ty * TS - 3, X1 = (tx + w) * TS + 3, Y1 = (ty + h) * TS + 3;
     const inside = (x: number, y: number) => x > X0 && x < X1 && y > Y0 && y < Y1;
     if (inside(game.dog.x, game.dog.y)) return { ...gh, reason: 'YOUR DOG IS IN THE WAY' };
@@ -291,6 +294,7 @@ export class BuildMode {
         if (!this.buildable(game, tx - 1, ty)) for (let i = 0; i < TS; i += 2) g.fillRect(X, Y + i, 1, 1);
         if (!this.buildable(game, tx + 1, ty)) for (let i = 0; i < TS; i += 2) g.fillRect(X + TS - 1, Y + i, 1, 1);
       }
+    drawRoad(g, game.ranch, t0x, t0y, t1x, t1y, game.t);
     for (const b of game.ranch.buildings) if (b instanceof Barn) ring(g, b.cx, b.cy, b.shelterRadius, C.butter, 6);
     if (this.def.id === 'barn') ring(g, (this.cx + 0.5) * TS, (this.cy + 0.5) * TS, 84, C.butter, 6);
 
@@ -310,6 +314,7 @@ export class BuildMode {
       } else ditherRect(g, X0, Y0, Wd, Hd, 8, C.plum);
       outline(g, X0, Y0, Wd, Hd, gh.ok ? C.butter : C.plum, game.t);
     }
+    if (gh.def.id === 'pen') drawGateMark(g, gh.tx, gh.ty, this.rot, gh.ok, game.t);
     // Cursor tile marker.
     rect(g, this.cx * TS + 3, this.cy * TS + 3, 2, 2, C.butter);
   }

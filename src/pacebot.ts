@@ -244,11 +244,12 @@ export class Pacer {
     return this.g.ranch.pens.reduce((s, p) => s + this.room(p, sp), 0);
   }
 
-  // Tiles kept free: the roads through the ranch and the space in front of
-  // every pen gate.
+  // Tiles the bot keeps free on top of the game's rules (which already
+  // keep the drove road clear): a path round buildings and the space in
+  // front of every pen gate.
   private keepClear(tx: number, ty: number, w: number, h: number, pen = false) {
     const hit = (r: { x0: number; y0: number; x1: number; y1: number }) => tx < r.x1 && tx + w > r.x0 && ty < r.y1 && ty + h > r.y0;
-    const zones = [{ x0: 93, y0: 76, x1: 100, y1: 92 }, { x0: 60, y0: 101, x1: 130, y1: 107 }];
+    const zones: { x0: number; y0: number; x1: number; y1: number }[] = [];
     for (const b of this.g.ranch.buildings) {
       if (b.kind === 'regiongate' || b.kind === 'fence') continue;
       // Pens may stand fence to fence; anything else keeps a path round it.
@@ -494,7 +495,9 @@ export class Pacer {
     const along = Math.abs(p.gatePoint(1).x - p.gatePoint(0).x) > 0.5;
     const back = along ? { x: p.cx - (p.gatePoint(1).x - p.gatePoint(0).x) * 18, y: p.cy } : { x: p.cx, y: p.cy - (p.gatePoint(1).y - p.gatePoint(0).y) * 18 };
     const side = along ? { x: p.cx, y: p.iy1 - 6 } : { x: p.ix1 - 6, y: p.cy };
-    const steps = [p.gatePoint(-6), side, back];
+    // In by the gate, round the side to the back, then sweep slowly
+    // towards the gate behind the last of them.
+    const steps = [p.gatePoint(-6), side, back, p.gatePoint(-14)];
     let si = 0;
     for (let t = 0; t < 25 && this.playing; t += DT) {
       const out = [...before].filter((a) => !a.pen && !a.gone);
@@ -502,8 +505,11 @@ export class Pacer {
       if (si < steps.length - 1 && dist(d, steps[si]) < 4) si++;
       const to = steps[si];
       const dx = to.x - d.x, dy = to.y - d.y, dl = Math.hypot(dx, dy);
-      this.frame(dl > 2 ? { x: (dx / dl) * Math.min(1, dl / 8), y: (dy / dl) * Math.min(1, dl / 8), sprint: false, lie: false } : STILL);
+      const pace = si === steps.length - 1 ? 0.45 : 1;
+      this.frame(dl > 2 ? { x: (dx / dl) * Math.min(pace, dl / 8), y: (dy / dl) * Math.min(pace, dl / 8), sprint: false, lie: false } : STILL);
     }
+    // Then out through the gate after them.
+    this.walkTo(p.gatePoint(12), 8, 4);
     return [...before].filter((a) => !a.pen && !a.gone);
   }
 

@@ -17,7 +17,15 @@ const browser = await chromium.launch();
 
 // [item, tx, ty, rot] in tiles. The sheep pen is the first pen listed.
 const LAYOUTS = {
+  // Cramped, as players build without the road: the way out is 2-3 tiles
+  // between pens, the barn and a fence end.
   player: [
+    ['pen', 98, 108, 2], ['pen', 106, 99, 0], ['pen', 88, 108, 2], ['pen', 78, 101, 2],
+    ['barn', 115, 101, 0], ['market', 90, 101, 0], ['kennel', 99, 99, 0],
+    ['fence', 114, 106, 1], ['fence', 114, 107, 1], ['fence', 96, 107, 1],
+  ],
+  // The east road walled off almost completely.
+  blocked: [
     ['pen', 98, 108, 2], ['pen', 106, 101, 0], ['pen', 88, 108, 2], ['pen', 78, 101, 2],
     ['barn', 114, 99, 0], ['market', 90, 102, 0], ['kennel', 99, 99, 0],
     ['fence', 92, 106, 0], ['fence', 93, 106, 0], ['fence', 116, 105, 1], ['fence', 116, 106, 1],
@@ -47,6 +55,7 @@ for (const seed of seeds) {
       };
     }, seed);
     await page.goto(`http://localhost:${port}/?debug`);
+    if (process.argv.includes('--trace')) await page.evaluate(() => { window.__trace = true; });
     await page.waitForFunction(() => window.game);
     const r = await page.evaluate(async ({ yard, plan, map }) => {
       const g = window.game;
@@ -61,7 +70,13 @@ for (const seed of seeds) {
       g.animals.length = 0;
       // The dense ranch (placed directly, as an old save would have it).
       g.ranch.buildings = g.ranch.buildings.filter((b) => b.kind === 'regiongate' || b.kind === 'farmhouse');
-      for (const [id, tx, ty, rot] of plan) g.ranch.buildings.push(makeBuilding(defOf(id), tx, ty, rot));
+      const broken = [];
+      for (const [id, tx, ty, rot] of plan) {
+        const b = makeBuilding(defOf(id), tx, ty, rot);
+        const why = g.ranch.placementProblem?.(b.kind, b.tx, b.ty, b.w, b.h, rot);
+        if (why) broken.push(`${id}@${tx},${ty}: ${why}`);
+        g.ranch.buildings.push(b);
+      }
       g.ranch.restamp();
       const pen = g.ranch.pens[0];
       for (let i = 0; i < 6; i++) {
@@ -76,8 +91,22 @@ for (const seed of seeds) {
       const t0 = p.real;
       const herd = p.letOut(pen, 6);
       const out = p.real - t0;
+      const trace = [];
+      if (map !== null && window.__trace) {
+        const of = p.frame.bind(p);
+        let n = 0;
+        p.frame = (cmd, act) => {
+          if (n++ % 300 === 0) {
+            const l = herd.filter((a) => !a.pen && !a.gone);
+            const c = l.reduce((s, a) => ({ x: s.x + a.x / l.length, y: s.y + a.y / l.length }), { x: 0, y: 0 });
+            trace.push(`${Math.round(n / 60)}s flock ${Math.round(c.x / 8)},${Math.round(c.y / 8)} (${l.length}) dog ${Math.round(g.dog.x / 8)},${Math.round(g.dog.y / 8)}`);
+          }
+          of(cmd, act);
+        };
+      }
       const res = p.drive(herd, y.pen.gatePoint(24), y.pen.gatePoint(-12), {}, 240, () => g.orders.list[0].state !== 'open');
       const o = g.orders.list[0];
+      const where = herd.map((a) => (a.pen === y.pen ? 'Y' : a.pen ? 'P' : `${Math.round(a.x / 8)},${Math.round(a.y / 8)}${a.stray ? 's' : ''}`)).join(' ');
       let ascii = '';
       if (map) {
         const rowsA = [];
@@ -91,11 +120,13 @@ for (const seed of seeds) {
         }
         ascii = rowsA.join('\n');
       }
-      return { out: Math.round(out), drive: Math.round(res.secs), total: Math.round(p.real - t0), got: o.got, done: o.state === 'done', ascii };
+      return { out: Math.round(out), drive: Math.round(res.secs), total: Math.round(p.real - t0), got: o.got, done: o.state === 'done', ascii, broken, trace, where };
     }, { yard, plan: LAYOUTS[layout], map: process.argv.includes('--map') && seed === seeds[0] && yard === 'mill' });
     if (r.ascii) console.log(r.ascii);
+    if (r.trace?.length) console.log(`  ${yard}: ${r.trace.join(' | ')}`);
+    if (seed === seeds[0] && yard === 'mill') console.log(r.broken?.length ? `layout breaks the placement rules: ${r.broken.join('; ')}` : 'layout follows the placement rules');
     rows.push({ seed, yard, ...r, errors: errors.length });
-    console.log(`seed ${seed} ${yard.padEnd(6)} let out ${r.out}s, drive ${r.drive}s, ${r.got}/4 ${r.done ? 'delivered' : 'NOT DELIVERED'} (total ${r.total}s)${errors.length ? ` ERRORS ${errors[0]}` : ''}`);
+    console.log(`seed ${seed} ${yard.padEnd(6)} let out ${r.out}s, drive ${r.drive}s, ${r.got}/4 ${r.done ? 'delivered' : 'NOT DELIVERED'} (total ${r.total}s)${r.done ? '' : ` [sheep at ${r.where}]`}${errors.length ? ` ERRORS ${errors[0]}` : ''}`);
     await page.close();
   }
 }

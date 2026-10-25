@@ -322,13 +322,15 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
         dirY += (gy / gd) * w;
       }
     }
-    // Pressured animals near an open pen gate drift through it.
+    // Pressured animals near an open pen gate drift through it, if they
+    // are already heading in: a flock walked past a gate keeps going.
     for (const gt of ctx.gates) {
       if (!gt.open || !gt.accepts(a)) continue;
       const gx = gt.x - a.x, gy = gt.y - a.y;
       const gd = Math.hypot(gx, gy);
       if (gd < 46 && gd > 1) {
-        const w = (1 - gd / 46) * 1.6 * Math.min(1, P + 0.3);
+        const towards = smooth01(((gx * a.hx + gy * a.hy) / gd - 0.2) / 0.5);
+        const w = (1 - gd / 46) * 1.6 * Math.min(1, P + 0.3) * towards;
         dirX += (gx / gd) * w;
         dirY += (gy / gd) * w;
       }
@@ -384,6 +386,33 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
       dirX = cohX * cohW * far * 0.6 + sx * sepW + wallX * 3;
       dirY = cohY * cohW * far * 0.6 + sy * sepW + wallY * 3;
       spd = Math.hypot(dirX, dirY) > 0.35 ? sp.graze * 0.7 : 0;
+    }
+  }
+
+  // Driven into a wall, a building corner or a fence end: feel a little to
+  // either side and slide round it rather than pushing into it.
+  if ((driven || a.panicT > 0) && !a.pen) {
+    const dl0 = Math.hypot(dirX, dirY);
+    const look = sp.r + 6;
+    if (dl0 > 0.05) {
+      const ux = dirX / dl0, uy = dirY / dl0;
+      if (ctx.map.blockedPx(a.x + ux * look, a.y + uy * look, mask)) {
+        // Try the side the animal already leans towards first.
+        const side = ux * a.hy - uy * a.hx > 0 ? -1 : 1;
+        for (const turn of [0.5, 1, 1.5]) {
+          let found = false;
+          for (const sgn of [side, -side]) {
+            const c = Math.cos(turn * sgn), s2 = Math.sin(turn * sgn);
+            const vx = ux * c - uy * s2, vy = ux * s2 + uy * c;
+            if (ctx.map.blockedPx(a.x + vx * look, a.y + vy * look, mask)) continue;
+            dirX = vx * dl0;
+            dirY = vy * dl0;
+            found = true;
+            break;
+          }
+          if (found) break;
+        }
+      }
     }
   }
 

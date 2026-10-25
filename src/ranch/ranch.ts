@@ -1,9 +1,10 @@
 import type { Animal } from '../entities/animal';
-import { BLOCK_ANIMAL, CW, CH, REGIONS, TS, YARDS, type WorldMap } from '../world/map';
-import { Building, Farmhouse, Pen, RegionGate, type Rot } from './buildings';
+import { BLOCK_ANIMAL, CW, CH, MH, MW, REGIONS, TS, YARDS, type WorldMap } from '../world/map';
+import { Building, Farmhouse, Pen, RegionGate, type BuildingKind, type Rot } from './buildings';
 import { FieldGate } from './structures';
 import { Course, Yard, type Fixture } from './fixtures';
 import { setPenPrice } from './catalog';
+import { placementProblem, roadMask } from './road';
 
 export type RanchEvent =
   | { kind: 'penned'; animal: Animal; pen: Pen }
@@ -18,8 +19,11 @@ export class Ranch {
   yards: Yard[];
   course: Course;
   fixtures: Fixture[];
+  // The drove road through the clearing (tiles), kept free of building.
+  road: Uint8Array;
 
   constructor(public map: WorldMap) {
+    this.road = roadMask(map);
     this.yards = YARDS.map((s) => new Yard(s));
     this.course = new Course();
     this.fixtures = [...this.yards, this.course];
@@ -90,6 +94,16 @@ export class Ranch {
     this.map.structFlags.fill(0, 0, CW * CH);
     for (const b of this.buildings) b.stamp(this.map);
     for (const f of this.fixtures) f.stamp(this.map);
+  }
+
+  onRoad(tx: number, ty: number) {
+    return tx >= 0 && ty >= 0 && tx < MW && ty < MH && this.road[ty * MW + tx] === 1;
+  }
+
+  // Why a new building cannot go here (null: it can): the drove road, and a
+  // pen gate that would open onto a wall or trees.
+  placementProblem(kind: BuildingKind, tx: number, ty: number, w: number, h: number, rot: Rot): string | null {
+    return placementProblem(this.map, this.road, this.buildings, kind, tx, ty, w, h, rot);
   }
 
   // Hold a pen's gate open so its stock can be driven out (or stop).
