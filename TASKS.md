@@ -414,7 +414,7 @@ novice trial with a calm handler scores 99-100 with or without the change.
 - [x] The music shades with the season: spring a little quicker and brighter (more whistle, more ornaments); autumn leans on the fiddle and minor openings; winter slower and darker, tunes on a music box, the harp thinned, no bodhran, more drone and reverb
 - [x] Lambs: a lamb cut off from its ewe calls and she answers from where she is, both carrying further than other calls; the longer apart, the more urgent; a soft word from each when they are together again
 - [x] The fair: the crowd's babble near it, the auctioneer's chant in bursts, the gavel and a smattering of applause for each sale
-- [x] Co-op: a chime when a friend arrives or heads home; each player's bark and whistle at their own pitch; "over here" and "hold" whistle pings
+- [x] Co-op: a chime when a friend arrives or heads home; each player's bark and whistle at their own pitch; whistle pings for "over here", "hold", "come by" and "away to me"
 - [x] Long sessions: stinger variants (never the same twice running), a little life in the handler's whistle, the main theme rarer, and a rest every five to nine minutes where the music stops and the valley carries on
 - [x] audiotest: spring, summer, autumn, winter, lambs, fair, coop, hour (an hour scheduled), hourlevels (an hour rendered), live3
 
@@ -1082,10 +1082,12 @@ novice trial with a calm handler scores 99-100 with or without the change.
   fence between them) calls every 1.8-4 s, answered 0.5-0.8 s later; at
   most three pairs call at once; lost-lamb calls carry 480 px instead of
   320.
-- Co-op sounds: `play('bark', { who })` (who = player slot, 0 the host),
-  `play('ping-here' | 'ping-hold', { x, y, who })`; join and leave chimes
-  come from the audio diffing `game.net.players` itself. Names proposed to
-  the co-op session; `who` needs passing through their relay.
+- Co-op sounds, agreed with the co-op session: `play('bark', { who })`
+  (who = player slot, 0 the host) and four whistle pings, each under half a
+  second and pitched per player: `ping-here` (two quick notes up),
+  `ping-hold` (one level note: stop), `ping-come` (rising: go round
+  clockwise), `ping-away` (falling: anticlockwise). Join and leave chimes
+  come from the audio diffing `game.net.players` itself, on each side.
 - Long sessions, measured: an hour of varied play (ten days, the seasons
   turning) scheduled in about a second: 250-260 sections, 95% of tunes
   open differently, the main theme 5-8 times (it was 11 before the ranch
