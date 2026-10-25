@@ -2,6 +2,7 @@ import { C } from '../palette';
 import { ellipse, rect } from '../gfx/draw';
 import { drawSpr, type Sprite } from '../gfx/sprite';
 import { animalSprites } from '../art/animals';
+import { lambSprites } from '../art/young';
 import { hash2 } from '../rng';
 import type { Animal } from '../entities/animal';
 import type { SpeciesId } from '../world/map';
@@ -42,7 +43,7 @@ const SHADOW: Record<SpeciesId, [number, number]> = {
 
 export function drawAnimalShadow(g: CanvasRenderingContext2D, a: Animal, sun = 0) {
   if (a.inWater) return;
-  const [rx, ry] = SHADOW[a.sp.id];
+  const [rx, ry] = a.young ? [3, 1] : SHADOW[a.sp.id];
   const side = a.face === 'l' || a.face === 'r';
   const lying = (poses.get(a)?.rest ?? 0) > (poses.get(a)?.lieAfter ?? 1e9);
   ellipse(g, a.x - 1 + sun, a.y + 1, side || lying ? rx + (lying ? 1 : 0) : Math.max(2, rx - 2), ry, C.sage);
@@ -51,7 +52,7 @@ export function drawAnimalShadow(g: CanvasRenderingContext2D, a: Animal, sun = 0
 const cyc = (arr: Sprite[], f: number) => arr[((Math.floor(f) % arr.length) + arr.length) % arr.length];
 
 export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, night = false) {
-  const S = animalSprites(a.sp.id, a.coat);
+  const S = a.young ? lambSprites(a.coat) : animalSprites(a.sp.id, a.coat);
   const speed = Math.hypot(a.vx, a.vy);
   const moving = speed > 2;
   const running = moving && (speed > a.sp.walk * 1.3 || a.panicT > 0);

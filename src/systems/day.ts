@@ -11,6 +11,9 @@ export class DayCycle {
   t = 0; // seconds into the daylight part
   nightT = 0; // seconds into the night
   phase: Phase = 'day';
+  // The season's day: winter runs faster to an earlier dusk (season.ts).
+  pace = 1;
+  duskAt = DUSK_AT;
 
   get frac() {
     return Math.min(1, this.t / DAY_LEN);
@@ -28,8 +31,8 @@ export class DayCycle {
   darkness(): number {
     if (this.phase === 'night') return 0.5;
     const f = this.frac;
-    if (f < DUSK_AT) return 0;
-    return Math.min(0.5, ((f - DUSK_AT) / (1 - DUSK_AT)) * 0.5);
+    if (f < this.duskAt) return 0;
+    return Math.min(0.5, ((f - this.duskAt) / (1 - this.duskAt)) * 0.5);
   }
 
   update(dt: number): 'dusk' | 'nightfall' | 'dawn' | null {
@@ -38,8 +41,8 @@ export class DayCycle {
       return this.nightT >= NIGHT_LEN ? 'dawn' : null;
     }
     const before = this.frac;
-    this.t += dt;
-    if (before < DUSK_AT && this.frac >= DUSK_AT) {
+    this.t += dt * this.pace;
+    if (before < this.duskAt && this.frac >= this.duskAt) {
       this.phase = 'dusk';
       return 'dusk';
     }

@@ -31,7 +31,8 @@ original and drawn in code. No external art files, ever.
   `--eval` steps), `scripts/zoom.mjs` enlarges part of a PNG,
   `scripts/mapshot.mjs` exports the whole world, `scripts/tune.mjs` runs
   bot herding scenarios per species and prints stress/time/splits
-  (`--weather=rain` etc.; `--seed=N` makes a run exact for before/after),
+  (`--weather=rain`, `--season=winter` etc.; `--seed=N` makes a run exact
+  for before/after),
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
   `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
@@ -42,7 +43,12 @@ original and drawn in code. No external art files, ever.
   (`--found`, `--only=circle,hut`),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,
-  coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`),
+  coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`;
+  `--year --days=22` plays on through the seasons and prints a table per
+  season: hay, hungry nights, lambs, the shearer, the fair),
+  `scripts/seasontest.mjs` checks the calendar, winter hay, lambing, the
+  shearer, the fair, rare breeds and seasons in the save (old saves load),
+  `scripts/lambtest.mjs` drives ewes with lambs calm against barking,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
   include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
@@ -128,6 +134,11 @@ stays unique.
 - Stress: rises with pressure, barks, nips and isolation; decays with calm.
   Moderate stress bunches the flock, high stress causes panic and splitting.
   Delivery value and produce are scaled down by stress — calm always pays.
+- Lambs (spring) keep to their mothers; a ewe cut off from her lamb turns
+  back for it and both fret, so a flock with lambs is driven as pairs.
+  Snow (winter) slows everyone a little. The calendar is in
+  `src/systems/season.ts`, what each season brings in
+  `src/systems/seasonal.ts`.
 
 ## Code map
 

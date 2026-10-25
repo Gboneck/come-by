@@ -5,6 +5,8 @@ import { REGIONS, type SpeciesId, type YardId } from '../world/map';
 import type { Pen } from '../ranch/buildings';
 import { admit, evict, swingGate, type Yard } from '../ranch/fixtures';
 import { DAY_LEN } from './day';
+import type { Animal } from '../entities/animal';
+import { FAIR_DAY, SHEAR_PAY } from './seasonal';
 import { tierOf } from './progression';
 import { pick, ri } from '../rng';
 
@@ -21,6 +23,7 @@ export interface Order {
   got: number;
   paid: number;
   state: 'open' | 'done' | 'gone';
+  kind?: 'shear'; // the shearer: sheep come back out shorn, paid a wool bonus
 }
 
 // Per head, times the species value, before the calm multiplier.
@@ -65,7 +68,9 @@ export function morningOrders(game: Game) {
   const wanted = goal ? tierOf(game.tier).species : null;
   let species = SPECIES_ORDER.filter((id) => REGIONS.some((r) => r.species === id && r.tier <= game.tier) && id !== wanted);
   if (!species.length) species = SPECIES_ORDER.filter((id) => REGIONS.some((r) => r.species === id && r.tier <= game.tier));
-  const yards = game.ranch.yards.filter((y) => regionOpen(game, y.site.region));
+  // On fair day the sale yard is the breeders' pen.
+  const fair = game.season.season === 'autumn' && game.season.dayOf === FAIR_DAY;
+  const yards = game.ranch.yards.filter((y) => regionOpen(game, y.site.region) && !(fair && y.site.id === 'sale'));
   const want = game.tier >= 4 ? 2 : 1;
   const weights = species.map((id) => 1 + 2 * Math.min(3, game.ranch.pens.filter((p) => p.species === id).length));
   for (let k = 0; k < want; k++) {
@@ -88,8 +93,8 @@ export function morningOrders(game: Game) {
 }
 
 // What one head is worth to this buyer, given how calm it arrived.
-export function headPrice(id: SpeciesId, peakStress: number): number {
-  return Math.max(1, Math.round(SPECIES[id].value * ORDER_RATE * calmRating(peakStress).mult));
+export function headPrice(id: SpeciesId, peakStress: number, rare = false): number {
+  return Math.max(1, Math.round(SPECIES[id].value * (rare ? 2 : 1) * ORDER_RATE * calmRating(peakStress).mult));
 }
 
 export function updateOrders(game: Game, dt: number) {
@@ -99,9 +104,14 @@ export function updateOrders(game: Game, dt: number) {
     const ord = o.forYard(y.site.id);
     const p = y.pen;
     if (ord) {
-      for (const a of admit(p, game.animals, (a) => !a.trial && a.sp.id === ord.species && ord.got < ord.n)) {
+      const year = game.season.year;
+      const ok = (a: Animal) => !a.trial && !a.forSale && !a.young && a.sp.id === ord.species && ord.got < ord.n && (ord.kind !== 'shear' || a.shorn !== year);
+      for (const a of admit(p, game.animals, ok)) {
         ord.got++;
-        const v = headPrice(a.sp.id, a.peakStress);
+        if (ord.kind === 'shear') a.shorn = year;
+        const v = ord.kind === 'shear'
+          ? Math.max(1, Math.round(SHEAR_PAY * calmRating(a.peakStress).mult * (a.rare ? 1.5 : 1)))
+          : headPrice(a.sp.id, a.peakStress, a.rare);
         ord.paid += v;
         game.earn(v);
         game.fx.float(a.x, a.y - 10, `+${v}$`, C.butter, 1.1);
@@ -117,13 +127,23 @@ export function updateOrders(game: Game, dt: number) {
     if (wasOpen && !p.open) evict(p, game.animals);
     swingGate(p, dt, game.map);
     // The buyer leads the stock away soon after the order is closed.
-    if (!o.forYard(y.site.id) && p.animals.length && (y.leaveT -= dt) <= 0) leadAway(game, p);
+    // (The shearer sends them back out instead; breeds for sale stay.)
+    if (!o.forYard(y.site.id) && p.animals.some((a) => !a.forSale) && (y.leaveT -= dt) <= 0) {
+      if (y.release) releaseAll(game, p);
+      else leadAway(game, p);
+      y.release = false;
+    }
   }
   for (const ord of o.open) {
     if (game.day.t < ord.due && !night) continue;
     ord.state = 'gone';
     const y = yardOf(game, ord.yard);
     y.leaveT = 1.5;
+    if (ord.kind === 'shear') {
+      y.release = true;
+      game.showBanner('THE SHEARER HAS GONE', ord.got ? `SHORE ${ord.got}  +${ord.paid}$. WALK THEM HOME` : 'NO SHEEP CAME TO BE SHORN', 2.6);
+      continue;
+    }
     const who = y.site.name;
     game.showBanner(`${who} HAS GONE`, ord.got ? `TOOK ${ord.got} OF ${ord.n}  +${ord.paid}$` : 'THE ORDER WAS MISSED', 2.6);
   }
@@ -136,6 +156,12 @@ function finish(game: Game, ord: Order, y: Yard) {
   game.totals.orders = (game.totals.orders ?? 0) + 1;
   const sp = SPECIES[ord.species];
   const calm = y.pen.animals.every((a) => calmRating(a.peakStress).mult > 1);
+  if (ord.kind === 'shear') {
+    y.release = true;
+    game.showBanner('ALL SHORN!', `${ord.n} SHEEP${calm ? ', ALL CALM' : ''}  +${ord.paid}$. NOW WALK THEM HOME`, 3);
+    game.audio?.play('gate', { x: y.pen.cx, y: y.pen.cy });
+    return;
+  }
   if (calm) game.totals.calmOrders = (game.totals.calmOrders ?? 0) + 1;
   game.showBanner('SOLD!', `${ord.n} ${(ord.n === 1 ? sp.name : sp.plural).toUpperCase()} TO ${y.site.name}${calm ? '  ALL CALM' : ''}  +${ord.paid}$`, 3);
   game.audio?.play('gate', { x: y.pen.cx, y: y.pen.cy });
@@ -144,10 +170,25 @@ function finish(game: Game, ord: Order, y: Yard) {
 
 function leadAway(game: Game, p: Pen) {
   for (const a of p.animals) {
+    if (a.forSale) continue;
     a.gone = true;
     game.fx.dust(a.x, a.y + 2);
   }
-  p.animals = [];
+  p.animals = p.animals.filter((a) => a.forSale);
+}
+
+// Back out of the gate (the shearer's): loose again, yours, to walk home.
+function releaseAll(game: Game, p: Pen) {
+  const out = p.gatePoint(14);
+  for (const a of p.animals) {
+    if (a.forSale) continue;
+    a.pen = null;
+    a.home = true;
+    a.peakStress = a.stress;
+    a.x = out.x + (Math.random() - 0.5) * 10;
+    a.y = out.y + (Math.random() - 0.5) * 10;
+  }
+  p.animals = p.animals.filter((a) => a.forSale);
 }
 
 // The pen gate the dog is standing at, if any.

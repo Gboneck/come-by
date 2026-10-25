@@ -3,7 +3,8 @@ import { ellipse, ring } from '../gfx/draw';
 import type { Game } from '../game';
 import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from './animals';
 import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
-import { Barn, FieldGate, Fence, Kennel, Market, Windmill } from '../ranch/structures';
+import { Barn, FieldGate, Fence, Haystack, Kennel, Market, Windmill } from '../ranch/structures';
+import { haystackDrawable } from '../art/hay';
 import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
 import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
@@ -154,6 +155,7 @@ export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: n
   if (b instanceof Kennel) return kennelDrawable(g, b);
   if (b instanceof Market) return marketDrawable(g, b);
   if (b instanceof Windmill) return windmillDrawable(g, b, t);
+  if (b instanceof Haystack) return [haystackDrawable(g, b)];
   return [];
 }
 

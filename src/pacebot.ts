@@ -11,14 +11,21 @@ import { goalDone, tierOf } from './systems/progression';
 import { SPECIES } from './entities/species';
 import { closeResult, currentClass, prizeToday, startRun } from './systems/trials';
 import { yardOf, type Order } from './systems/orders';
-import { DAY_LEN, DUSK_AT } from './systems/day';
+import { DAY_LEN } from './systems/day';
 import { HELPER_COSTS } from './entities/helper';
+import { calendar } from './systems/season';
+import { RARE_BREEDS } from './entities/species';
+import { buyBreed, hayHeld, hayNeed, isFairDay, shelteredSpot, HAY_SPOIL } from './systems/seasonal';
+import { Barn } from './ranch/structures';
 
 // A "decent player" for pacing runs (scripts/pacetest.mjs). Each day it
 // runs the trial if it is a trial day, fills orders it can, drives the
 // pastures' flocks home along real routes, rests on the ranch when there is
 // nothing left to do, defends the night, then spends at the day's end on
 // what the goals ask for. It logs what it did and where it got stuck.
+// Through the year it stocks hay before winter (in a barn's ring), takes
+// its sheep to the shearer and walks them home, and at the autumn fair buys
+// a rare breed and shows it in the ring.
 
 const DT = 1 / 60;
 type P = { x: number; y: number };
@@ -84,7 +91,7 @@ export class Pacer {
   // Seconds of daylight before dusk.
   private daylight() {
     const d = this.g.day;
-    return d.phase === 'day' ? DAY_LEN * DUSK_AT - d.t : 0;
+    return d.phase === 'day' ? (DAY_LEN * d.duskAt - d.t) / d.pace : 0;
   }
 
   // ---- Moving the dog ----
@@ -290,8 +297,16 @@ export class Pacer {
           // Pens go near the middle (they are visited all day); the rest
           // keep to the edges and leave the middle for pens.
           const dc = Math.hypot(cx - r.cx, (cy - r.cy) * 1.3);
-          // Pens line up in a row along the road, gates onto it.
-          const s = id === 'pen' ? Math.abs(gh.ty - 107) * 3 + Math.abs(cx - r.cx) + (rot === 2 ? 0 : 6) : -dc;
+          // Pens line up in a row along the road, gates onto it. Hay goes
+          // as close to a barn as it can (in its ring, the snow cannot
+          // spoil it).
+          let s = id === 'pen' ? Math.abs(gh.ty - 107) * 3 + Math.abs(cx - r.cx) + (rot === 2 ? 0 : 6) : -dc;
+          if (id === 'hay') {
+            const hx = (gh.tx + gh.w / 2) * 8, hy = (gh.ty + gh.h / 2) * 8;
+            const barns = g.ranch.buildings.filter((q): q is Barn => q instanceof Barn);
+            const nb = Math.min(1e4, ...barns.map((q) => Math.hypot(q.cx - hx, q.cy - hy)));
+            s = shelteredSpot(g, hx, hy) ? nb : 1e4 - dc;
+          }
           if (s < bs) { bs = s; best = { cx, cy, rot }; }
         }
     return best;
@@ -358,7 +373,58 @@ export class Pacer {
     const sp = tierOf(g.tier).species;
     if (this.roomFor(sp) < SPECIES[sp].spawnGroup[1] && g.coins >= defOf('pen').cost + 5) this.buy('pen');
     if (g.tier >= 2 && !g.ranch.buildings.some((b) => b.kind === 'barn') && g.coins >= 95) this.buy('barn');
+    this.stockHay();
     while (g.coins > 150 && this.train()) { /* spare coin into the dog */ }
+  }
+
+  // Hay for the winter nights ahead (from the autumn's third day; in winter
+  // at double price if it runs short), with a little over for the snow.
+  hayBought = 0;
+  private stockHay() {
+    const g = this.g;
+    if (g.tier < 2) return;
+    const next = g.day.day + 1;
+    let nights = 0;
+    for (let d = next; d < next + 8; d++) if (calendar(d).season === 'winter') nights++;
+    const c = calendar(next);
+    if (!nights || (c.season !== 'winter' && !(c.season === 'autumn' && c.dayOf >= 3))) return;
+    const open = stacksOut(g);
+    let short = hayNeed(g) * nights + open * HAY_SPOIL * nights - hayHeld(g);
+    while (short > 0 && g.coins >= defOf('hay').cost) {
+      if (!this.buy('hay')) break;
+      this.hayBought++;
+      short -= 20;
+    }
+    if (short > 0) this.stuck.push(`HAY: ${short} BALES SHORT FOR THE WINTER`);
+  }
+
+  // ---- The fair ----
+
+  // Buy the dearest rare breed the purse allows (keeping some back), drive
+  // it into the show ring to be judged; it goes home with the fair.
+  rareBought = 0;
+  private doFair() {
+    const g = this.g;
+    const sale = yardOf(g, 'sale').pen;
+    const breeds = sale.animals.filter((a) => a.forSale && a.forSale + 200 <= g.coins && this.roomFor(a.sp.id) > 0);
+    const want = breeds.sort((a, b) => b.forSale - a.forSale)[0];
+    if (!want) return;
+    // Stand by it, outside the fence.
+    const mx = Math.min(Math.max(want.x, sale.x0 - 6), sale.x1 + 6), my = Math.min(Math.max(want.y, sale.y0 - 6), sale.y1 + 6);
+    const side = [{ x: sale.x0 - 6, y: want.y }, { x: sale.x1 + 6, y: want.y }, { x: want.x, y: sale.y0 - 6 }, { x: want.x, y: sale.y1 + 6 }]
+      .sort((a, b) => dist(a, { x: mx, y: my }) - dist(b, { x: mx, y: my }))[0];
+    if (!this.walkTo(side, 90, 4)) return;
+    if (!this.near(want)) return;
+    const name = RARE_BREEDS.find((b) => b.species === want.sp.id && b.coat === want.coat)?.name ?? 'A RARE BREED';
+    const before = g.coins;
+    if (!buyBreed(g) || g.coins >= before) return;
+    this.spent += before - g.coins;
+    this.rareBought++;
+    const ring = g.ranch.ring.pen;
+    const r = this.drive([want], ring.gatePoint(20), ring.gatePoint(-12), STYLE[want.sp.id], 90, () => !!want.pen);
+    const e = g.seasonal.fair.find((x) => x.species === want.sp.id);
+    this.did.push(`FAIR: BOUGHT ${name} ${before - g.coins}$, ${e ? `JUDGED ${['1ST', '2ND', '3RD', '4TH'][e.place - 1]}${e.prize ? ` +${e.prize}$` : ''}` : 'NOT JUDGED'} ${Math.round(r.secs)}S`);
+    if (!want.pen) this.bringHome([want]);
   }
 
   // ---- What to work on ----
@@ -475,10 +541,12 @@ export class Pacer {
     }
     const assisted0 = this.assisted;
     const r = this.drive(herd, door, inside, STYLE[o.species], Math.max(30, left()), () => o.state !== 'open');
-    this.did.push(`ORDER ${o.yard.toUpperCase()} ${o.got}/${o.n} ${SPECIES[o.species].plural.toUpperCase()} ${o.state === 'done' ? 'FILLED' : 'MISSED'} ${Math.round(r.secs)}S${this.assisted > assisted0 ? ' (ASSISTED)' : ''}`);
-    // Home stock that did not go: back to its pen.
+    this.did.push(`${o.kind === 'shear' ? 'SHEARER' : 'ORDER'} ${o.yard.toUpperCase()} ${o.got}/${o.n} ${SPECIES[o.species].plural.toUpperCase()} ${o.state === 'done' ? 'FILLED' : 'MISSED'} ${Math.round(r.secs)}S${this.assisted > assisted0 ? ' (ASSISTED)' : ''}`);
+    // The shearer sends them back out: wait for them.
+    if (o.kind === 'shear') for (let i = 0; i < 6 * 60 && this.playing && yard.pen.animals.length; i++) this.frame(STILL);
+    // Home stock that did not go (and shorn sheep): back to a pen.
     const spare = herd.filter((a) => loose(a));
-    if (from && spare.length) this.bringHome(spare);
+    if ((from || o.kind === 'shear') && spare.length) this.bringHome(spare);
   }
 
   // Let `n` (or more) out of a pen: E at the gate, walk round behind them.
@@ -511,6 +579,18 @@ export class Pacer {
     // Then out through the gate after them.
     this.walkTo(p.gatePoint(12), 8, 4);
     return [...before].filter((a) => !a.pen && !a.gone);
+  }
+
+  private near(a: Animal) {
+    const g = this.g;
+    for (let i = 0; i < 90 && this.playing; i++) {
+      const d = g.dog;
+      if (Math.hypot(a.x - d.x, a.y - d.y) < 20) return true;
+      // Shadow it along the fence.
+      const dx = a.x - d.x, dy = a.y - d.y, l = Math.hypot(dx, dy) || 1;
+      this.frame({ x: (dx / l) * 0.5, y: (dy / l) * 0.5, sprint: false, lie: false });
+    }
+    return false;
   }
 
   // ---- Trials ----
@@ -613,6 +693,7 @@ export class Pacer {
       prize = g.totals.earned - before;
     }
     for (const o of [...g.orders.open].sort((a, b) => a.due - b.due)) if (this.playing) this.doOrder(o);
+    if (isFairDay(g) && this.playing) this.doFair();
     for (let k = 0; k < 10 && this.playing && this.daylight() > 35; k++) {
       const m = this.pickGroup();
       if (!m) break;
@@ -633,6 +714,9 @@ export class Pacer {
     return { day, tier, sky: g.weather.sky, real: Math.round(this.real), rested: Math.round(this.rested), earned: g.totals.earned - earned0, spent: this.spent, coins: g.coins, choice, income, penned: g.ranch.pens.reduce((s, p) => s + p.animals.length, 0), did: this.did, stuck: this.stuck };
   }
 }
+
+// Haystacks out of a barn's ring (the snow spoils them).
+const stacksOut = (g: Game) => g.ranch.buildings.filter((b) => b.kind === 'haystack' && !shelteredSpot(g, b.cx, b.cy)).length;
 
 const SPECIES_BY_PLURAL: Record<string, SpeciesId> = Object.fromEntries(
   Object.values(SPECIES).map((s) => [s.plural.toUpperCase(), s.id]),

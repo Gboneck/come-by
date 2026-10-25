@@ -4,6 +4,7 @@ import { BASE_STATS, type DogStats } from '../entities/dog';
 import type { Pen } from '../ranch/buildings';
 import type { SpeciesId } from '../world/map';
 import { SPECIES } from '../entities/species';
+import { valueOf, type Animal } from '../entities/animal';
 
 // ---- Goods ----
 
@@ -14,8 +15,8 @@ export function updateProduce(game: Game, dt: number) {
   for (const p of game.ranch.pens) {
     for (const a of p.animals) {
       const sp = a.sp;
-      if (!sp.good) continue;
-      const rate = (1 - 0.75 * a.stress) * (p.hasTrough ? 1.4 : 1) * mill;
+      if (!sp.good || a.young || p.hungry) continue; // lambs make nothing; a hungry pen neither
+      const rate = (1 - 0.75 * a.stress) * (p.hasTrough ? 1.4 : 1) * mill * (a.rare ? 1.5 : 1);
       a.produceT += dt * rate;
       if (a.produceT >= sp.goodEvery) {
         a.produceT -= sp.goodEvery;
@@ -49,8 +50,8 @@ export function sellAllGoods(game: Game): { value: number; counts: Partial<Recor
 }
 
 // Selling livestock at the market frees pen space.
-export function livestockPrice(game: Game, id: SpeciesId): number {
-  return Math.round(SPECIES[id].value * 2 * priceMult(game));
+export function livestockPrice(game: Game, id: SpeciesId, a?: Animal): number {
+  return Math.round((a ? valueOf(a) : SPECIES[id].value) * 2 * priceMult(game));
 }
 
 // ---- Kennel upgrades ----

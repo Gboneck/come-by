@@ -5,13 +5,16 @@ import { PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, priz
 import { checkLegacy } from './progression';
 import { SKY_LINE, SKY_TIP } from './weather';
 import { Predator } from '../entities/predator';
+import { breedNear, buyBreed, isFairDay, seasonalMorning, seasonalOrders, seasonalUpdate } from './seasonal';
 
 // The jobs around the herding: buyers' orders and the Show Ground trials.
 // Game calls in here at a handful of points; this keeps those hooks short.
 
 export function jobsMorning(game: Game, fresh: boolean) {
+  const seasonNews = seasonalMorning(game, fresh); // the calendar first: the rest reads it
   if (fresh) {
     morningOrders(game);
+    seasonalOrders(game);
     game.weather.newDay(game.tier);
   }
   const sky = game.weather.sky;
@@ -24,6 +27,7 @@ export function jobsMorning(game: Game, fresh: boolean) {
     game.tipsSeen.add(`sky-${sky}`);
     game.tip = { text: tip, t: 9 };
   }
+  if (seasonNews) game.showBanner(seasonNews[0], seasonNews[1], 3.4);
 }
 
 // Nightfall: a storm brings an extra coyote, and they are all bolder.
@@ -40,6 +44,7 @@ let legacyT = 0;
 export function jobsUpdate(game: Game, dt: number) {
   updateOrders(game, dt);
   updateRun(game, dt);
+  seasonalUpdate(game, dt);
   if ((legacyT -= dt) <= 0) {
     legacyT = 0.5;
     checkLegacy(game);
@@ -49,6 +54,7 @@ export function jobsUpdate(game: Game, dt: number) {
 // E / NIP: start a trial at the handler's post, or open or shut a pen gate.
 export function jobsAction(game: Game): boolean {
   if (atPost(game) && !game.trials.run && currentClass(game)) return startRun(game);
+  if (buyBreed(game)) return true;
   return gateAction(game);
 }
 
@@ -59,7 +65,13 @@ export function jobGates(game: Game) {
     const ord = game.orders.forYard(y.site.id);
     if (!ord) continue;
     const gp = y.pen.gatePoint(-6);
-    out.push({ x: gp.x, y: gp.y, open: y.pen.swing > 0.8, accepts: (a) => !a.pen && !a.trial && a.sp.id === ord.species && ord.got < ord.n });
+    const year = game.season.year;
+    out.push({ x: gp.x, y: gp.y, open: y.pen.swing > 0.8, accepts: (a) => !a.pen && !a.trial && !a.young && !a.forSale && a.sp.id === ord.species && ord.got < ord.n && (ord.kind !== 'shear' || a.shorn !== year) });
+  }
+  if (isFairDay(game)) {
+    const p = game.ranch.ring.pen;
+    const gp = p.gatePoint(-6);
+    out.push({ x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a) => !a.pen && !a.trial && !a.young && !a.forSale && !game.seasonal.fair.some((e) => e.species === a.sp.id) });
   }
   if (game.trials.run) {
     const p = game.ranch.course.pen;
@@ -91,6 +103,8 @@ export function jobsHint(game: Game): string | null {
     if (prizeToday(game)) return `${E}: RUN THE ${classLabel(c)} FOR PRIZES`;
     return `${E}: PRACTICE THE ${classLabel(c)}. NEXT TRIAL DAY IS DAY ${nextTrialDay(isTrialDay(game.day.day) ? game.day.day + 1 : game.day.day)}`;
   }
+  const sale = breedNear(game);
+  if (sale) return `${E}: BUY THE ${sale.breed.name} ${sale.a.forSale}$ (YOU HAVE ${game.coins}$)`;
   const p = penGateAt(game);
   if (p) {
     if (p.letOut) return `WALK IN BEHIND THEM TO DRIVE THEM OUT. ${E}: SHUT THE GATE`;

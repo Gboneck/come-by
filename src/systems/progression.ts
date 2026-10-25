@@ -17,11 +17,16 @@ export interface Totals {
   bestTrial: number; // best trial score, practice included
   trialRuns: number;
   legacy: string[]; // legacy goals reached (labels)
+  lambs: number; // lambs born on the ranch
+  fairRibbons: [number, number, number]; // autumn fair placings
+  wintersFed: number; // winters through with no pen going hungry
+  rareBought: number;
 }
 
 export const newTotals = (): Totals => ({
   days: 0, delivered: {}, earned: 0, calmBatches: 0, upgrades: 0, nightsNoLoss: 0, lost: 0,
   orders: 0, calmOrders: 0, ribbons: [0, 0, 0], bestTrial: 0, trialRuns: 0, legacy: [],
+  lambs: 0, fairRibbons: [0, 0, 0], wintersFed: 0, rareBought: 0,
 });
 
 export interface Goal {
@@ -123,6 +128,10 @@ export const LEGACY: Goal[] = [
   { label: 'SCORE 90 IN A TRIAL', target: 90, value: (g) => g.totals.bestTrial },
   { label: 'FILL 40 ORDERS', target: 40, value: (g) => g.totals.orders },
   { label: 'WIN THE CUP 3 TIMES', target: 3, value: (g) => g.trials.cups },
+  { label: 'RAISE 10 LAMBS', target: 10, value: (g) => g.totals.lambs },
+  { label: 'A WINTER, NO PEN HUNGRY', target: 1, value: (g) => g.totals.wintersFed },
+  { label: 'BEST IN CLASS AT THE FAIR', target: 1, value: (g) => g.totals.fairRibbons[0] },
+  { label: 'BUY A RARE BREED', target: 1, value: (g) => g.totals.rareBought },
 ];
 export const LEGACY_PRIZE = 40;
 

@@ -54,6 +54,7 @@ export class Dog {
   private dustT = 0;
   private skidded = false;
   inWater = false;
+  drag = 0; // 0..1 off the dog's pace (snow)
   events: DogEvent[] = [];
   stats: DogStats = { ...BASE_STATS };
   skin: DogSprites | null = null; // a co-op friend's dog; null = the player's own look
@@ -121,7 +122,7 @@ export class Dog {
     if (this.exhausted && this.stamina > this.stats.stamina * 0.35) this.exhausted = false;
 
     this.inWater = (map.flagsAtPx(this.x, this.y) & SHALLOW) !== 0;
-    let spd = this.sprinting ? this.stats.sprint : this.stats.walk;
+    let spd = (this.sprinting ? this.stats.sprint : this.stats.walk) * (1 - this.drag);
     if (this.exhausted) spd *= 0.8;
     if (this.inWater) spd *= 0.55;
     let tx = mx * spd, ty = my * spd;

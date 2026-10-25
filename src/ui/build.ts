@@ -5,7 +5,7 @@ import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
-import { Barn, FieldGate, Fence, Kennel, Market, Windmill } from '../ranch/structures';
+import { Barn, FieldGate, Fence, Haystack, Kennel, Market, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
 import { SPECIES } from '../entities/species';
@@ -43,6 +43,7 @@ export function makeBuilding(def: BuildDef, tx: number, ty: number, rot: Rot): B
     case 'market': return new Market(tx, ty);
     case 'barn': return new Barn(tx, ty);
     case 'windmill': return new Windmill(tx, ty);
+    case 'hay': return new Haystack(tx, ty);
     default: return new Building(def.kind, tx, ty, def.w, def.h, rot);
   }
 }
@@ -365,7 +366,7 @@ export class BuildMode {
     if (!game.ranch.buildings.some((b) => b.kind === 'market')) return this.say('BUILD A MARKET FIRST');
     const a = [...p.animals].sort((x, y) => y.stress - x.stress)[0];
     if (!a) return;
-    const price = livestockPrice(game, a.sp.id);
+    const price = livestockPrice(game, a.sp.id, a);
     a.gone = true;
     p.animals = p.animals.filter((x) => x !== a);
     game.earn(price);

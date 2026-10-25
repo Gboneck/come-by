@@ -1,5 +1,6 @@
 import { spr, type Sprite } from '../gfx/sprite';
 import type { SpeciesId } from '../world/map';
+import { rareCoat } from './young';
 
 // Every species has whole-frame poses (like the dog), facing right and
 // flipped for left, plus walk frames towards and away from the viewer.
@@ -213,6 +214,8 @@ export type Coat = 0 | 1 | 2;
 // plum and wool (piebald).
 function recoat(id: SpeciesId, coat: Coat, rows: string[]): string[] {
   if (coat === 0) return rows;
+  const rare = rareCoat(id, coat, rows); // the fair's rare breeds (art/young.ts)
+  if (rare) return rare;
   switch (id) {
     case 'sheep': // the black sheep (found, never spawned): dark fleece, pale face and socks
       return rows.map((r) => r.replace(/[wp]/g, (m) => (m === 'w' ? 'p' : 'w')));

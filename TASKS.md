@@ -409,6 +409,79 @@ novice trial with a calm handler scores 99-100 with or without the change.
       150ms each way; tune.mjs before/after; the existing loop tests
 - [ ] BRACE class at the Show Ground for two dogs (optional, not started)
 
+## M22 Seasons: lambing, the shearer, the fair, winter (gameplay, round three)
+- [x] A calendar: four days a season from the first day of spring, a year
+      counter; autumn days run a little quicker and winter's quicker still,
+      with an earlier dusk (`src/systems/season.ts`)
+- [x] Spring: ewes in your pens lamb over the first two mornings (from
+      tier 2), wild ewes on the hills come with lambs at foot. A lamb keeps
+      to its mother and keeps her pace; a ewe cut off from her lamb turns
+      back for it and both fret, so a flock with lambs is driven as pairs.
+      Lambs take one place in a pen, make no goods, are a fox's first
+      choice, and grow up when autumn comes
+- [x] Summer: the shearer waits at the drover's (or the mill's) yard on the
+      first morning; each sheep brought pays a wool bonus (calm ones more,
+      rare ones half again) and comes back out shorn to be walked home
+- [x] Autumn fair on the second day at the Show Ground: a show ring (gate
+      to the north) judges one animal of each kind against three of the
+      valley's, calm counting for most; ribbons pay 40/20/10$. The sale yard
+      is a breeders' pen that day: stand by a breed at the fence, E buys it
+- [x] Rare breeds (new coats, drawn in `src/art/young.ts`): call duck 30$,
+      black sheep 70$, pygmy goat 90$, Highland cow 180$. Worth double at
+      sale and to buyers, goods half again, a boost at the fair
+- [x] Winter: snow slows loose stock and the dog a little, one wild flock
+      fewer per region, short days, and every night each pen eats a bale
+      for every four places of stock: the farmhouse loft first (10 bales,
+      filled each autumn), then haystacks (a new building: 20 bales, 40$,
+      80$ in winter). A stack out of a barn's ring loses 2 bales a night to
+      the snow. A pen that goes hungry makes no goods next day and is
+      restless (nobody starves)
+- [x] Legacy: raise 10 lambs, a winter with no pen hungry, best in class at
+      the fair, buy a rare breed
+- [x] Seasons and lambs in the save (lambs find their mothers again, hay,
+      hungry pens, the fair's results); old saves load as spring, year 1
+- [x] The pace bot stocks hay before winter (in a barn's ring), takes its
+      sheep to the shearer and home, and buys and shows a breed at the fair;
+      `pacetest.mjs --year`
+- [x] `scripts/seasontest.mjs`, `scripts/lambtest.mjs`; tune.mjs
+      `--season=winter`; tune before = after for every species in clear
+
+Herding, seeded (`--seed=1`), 3 runs each. Clear weather is identical
+before and after for all five species (the lamb and snow code only acts
+on lambs, their mothers and snow). In snow, everything gets home as often
+as in clear weather, a little slower, and calm still beats barking:
+
+| species | style | clear: home, time, peak stress | snow |
+|---|---|---|---|
+| duck | calm walk | 3/3 25s 0.00 | 3/3 20s 0.00 |
+| duck | bark every 0.8s | 3/3 7s 1.00, 6 panics | 3/3 15s 1.00, 5 panics |
+| sheep | calm walk | 3/3 11s 0.00 | 3/3 16s 0.00 |
+| sheep | bark every 0.8s | 3/3 22s 1.00, 5 panics | 3/3 6s 1.00, 6 panics |
+| goat | nip heels | 3/3 13s 0.00 | 3/3 16s 0.00 |
+| goat | bark every 0.8s | 3/3 5s 0.99 | 2/3 49s 0.85, 4 panics |
+| cow | nip heels | 1/3 116s 0.17 | 1/3 119s 0.26 |
+| pony | calm walk | 3/3 7s 0.01 | 3/3 9s 0.00 |
+| pony | bark every 0.8s | 3/3 6s 0.37 | 3/3 8s 0.50 |
+
+Lambs (`scripts/lambtest.mjs`, eight ewes, five with a lamb, seed 1):
+
+| style | home | time | mean stress | pairs together at the end | seconds lambs spent cut off |
+|---|---|---|---|---|---|
+| calm walk | 3/3 | 11s (11s with no lambs) | 0.00 | 5/5 | 0 |
+| keyboard, close | 3/3 | 8s | 0.01 | 5/5 | 0 |
+| bark every 2s | 3/3 | 7s | 0.18 | 5/5 | 0 |
+| bark every 0.8s | 1/3 | 82s | 0.23, 17 panics | 4.7/5 | 10 |
+| chase (sprint) | 0/3 | - | 0.50, 17 panics | 3.7/5 | 12 |
+
+The first lamb code made calm drives stall (0-1 of 3 home): a lamb tucked
+inside its mother's personal space, she stepped away, it followed, and each
+pair wandered off on its own. Ewes now neither flock with nor step away
+from lambs (bodies still never overlap), and lambs aim where their mother
+is going and keep her pace. The herding bot (and so the helper dogs) reads
+a flock by its grown animals.
+
+(Pacing across a year: see below, filled in from `pacetest.mjs --year`.)
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
