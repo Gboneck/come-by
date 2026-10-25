@@ -9,6 +9,7 @@ import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights } from '../ranch/decor';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
+import { settings } from '../ui/settings';
 
 export interface View {
   ox: number;
@@ -32,8 +33,9 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const h of game.helpers) if (inView(h.x, h.y)) h.drawShadow(g);
   game.fx.drawLow(g);
 
-  // Lying down lets you read the flock: its flight zone shows faintly.
-  if (game.dog.lying) {
+  // Lying down lets you read the flock: its flight zone shows faintly
+  // (always, if the player turned that on in the pause menu).
+  if (game.dog.lying || settings.zones === 'always') {
     const gr = game.nearestGroup(160);
     if (gr) {
       let rad = 0;

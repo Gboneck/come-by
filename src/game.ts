@@ -27,7 +27,10 @@ import { Barn } from './ranch/structures';
 import { Helper, HELPER_COSTS, HELPER_NAMES, type HelperMode } from './entities/helper';
 import { CALLS, type Sound } from './systems/audio';
 import { saveGame } from './systems/save';
-import { drawPause, drawTitle, titleKeys, type MenuState } from './ui/title';
+import { drawPause, drawTitle, pauseKeys, titleKeys, type MenuState } from './ui/title';
+import { Feel } from './ui/feel';
+import { buzz } from './ui/settings';
+import { updateCoach } from './ui/coach';
 import { botStep } from './bot';
 import { clamp, damp } from './util';
 
@@ -116,6 +119,9 @@ export class Game {
   tut = 0; // tutorial step
   tutT = 0;
   private tierCheckT = 0;
+  feel = new Feel();
+  summaryT = 0; // time the end-of-day card has been up
+  private buffered: Partial<Record<'bark' | 'nip', number>> = {};
 
   constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null } = {}) {
     this.demo = !!opts.demo;
@@ -215,6 +221,10 @@ export class Game {
     if (fresh) {
       const t = tierOf(n);
       this.showBanner(`TIER ${n}: ${t.name}`, t.blurb, 4.5);
+      this.feel.tierCard = { n, name: t.name, blurb: t.blurb, brings: t.brings, t: 5.5, max: 5.5 };
+      this.feel.confetti(this.screen.W);
+      this.feel.shake(1, 0.35);
+      buzz(this.input.touchMode, [30, 60, 30, 60, 90]);
       this.audio?.play('tierup');
       // The new region's animals turn up straight away.
       this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => r.tier === n));
@@ -334,7 +344,20 @@ export class Game {
       buildable: this.buildable(),
     };
     this.mode = 'summary';
+    this.summaryT = 0;
     this.input.clearQueue();
+  }
+
+  // Day transitions go through a dithered plum fade.
+  fadeTo(act: () => void) {
+    if (this.feel.fadeTo(act)) this.input.clearQueue();
+  }
+
+  quitToTitle() {
+    this.fadeTo(() => {
+      saveGame(this);
+      this.request = 'title';
+    });
   }
 
   showBanner(big: string, small?: string, max = 2.2) {
@@ -344,6 +367,14 @@ export class Game {
   // ---- Update ----
 
   update(dt: number) {
+    this.feel.update(dt, this.coins, this.screen.H);
+    if (this.feel.fading) return;
+    // A beat of hit-pause when a nip lands (never under the tuning bot).
+    if (this.mode === 'play' && this.feel.hitstop > 0 && !this.input.override) {
+      this.feel.hitstop -= dt;
+      for (const a of ['bark', 'nip'] as const) if (this.input.pressed(a)) this.buffered[a] = 0.25;
+      return;
+    }
     this.t += dt;
     if (this.audio) {
       this.audio.lx = this.cam.x;
@@ -354,20 +385,23 @@ export class Game {
     if (this.mode === 'title') {
       this.updateDemo(dt);
       const act = titleKeys(this, this.menu);
-      if (act) this.request = act;
+      if (act) this.startGame(act);
       return;
     }
     if (this.mode === 'pause') {
-      if (this.input.pressed('up')) this.pauseSel = (this.pauseSel + 2) % 3;
-      if (this.input.pressed('down')) this.pauseSel = (this.pauseSel + 1) % 3;
-      if (this.input.pressed('pause') || this.input.pressed('cancel')) this.mode = 'play';
-      else if (this.input.pressed('confirm')) this.pauseAction(['resume', 'sound', 'quit'][this.pauseSel] as 'resume' | 'sound' | 'quit');
+      pauseKeys(this);
       return;
     }
     if (this.mode === 'summary') {
       this.fx.update(dt);
-      if (this.input.pressed('build')) this.enterBuild(true);
-      else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.startDay();
+      // A beat before the card takes input, so a bark held through dusk
+      // does not skip the day's choice.
+      if ((this.summaryT += dt) < 0.6) {
+        this.input.clearQueue();
+        return;
+      }
+      if (this.input.pressed('build')) this.fadeTo(() => this.enterBuild(true));
+      else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.fadeTo(() => this.startDay());
       return;
     }
     if (this.mode === 'ledger') {
@@ -377,11 +411,18 @@ export class Game {
     if (this.mode === 'build') {
       this.fx.update(dt);
       this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
-      if (this.build.update(this, dt) === 'exit') this.exitBuild();
+      if (this.build.update(this, dt) === 'exit') {
+        if (this.buildFromSummary) this.fadeTo(() => this.exitBuild());
+        else this.exitBuild();
+      }
+      // Keep the cursor in view without chasing it, so a tap or a mouse
+      // pointer stays put; the view pans when the cursor nears an edge.
       const k = damp(6, dt);
-      this.cam.x += ((this.build.cx + 0.5) * 8 - this.cam.x) * k;
-      this.cam.y += ((this.build.cy + 0.5) * 8 - this.cam.y) * k;
       const { W, H } = this.screen;
+      const bx = (this.build.cx + 0.5) * 8, by = (this.build.cy + 0.5) * 8;
+      const mx = Math.min(W / 2 - 4, 28), mt = Math.min(H / 2 - 4, 40), mb = Math.min(H / 2 - 4, 76);
+      this.cam.x += (clamp(this.cam.x, bx - W / 2 + mx, bx + W / 2 - mx) - this.cam.x) * k;
+      this.cam.y += (clamp(this.cam.y, by - H / 2 + mb, by + H / 2 - mt) - this.cam.y) * k;
       this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
       this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
       return;
@@ -398,11 +439,13 @@ export class Game {
       this.input.clearQueue();
       return;
     }
-    if ((this.tierCheckT -= dt) <= 0) {
+    // The tier-up waits for a "that'll do" moment to finish playing.
+    if ((this.tierCheckT -= dt) <= 0 && this.feel.moment <= 0) {
       this.tierCheckT = 0.5;
       this.checkTier();
     }
     this.updateTutorial(dt);
+    updateCoach(this, dt);
     if (this.input.pressed('build')) {
       if (this.inRanch()) {
         this.enterBuild();
@@ -418,12 +461,12 @@ export class Game {
     if (dayEv === 'nightfall') {
       if (this.tier >= 2) this.startNight();
       else {
-        this.endDay();
+        this.fadeTo(() => this.endDay());
         return;
       }
     }
     if (dayEv === 'dawn') {
-      this.endDay();
+      this.fadeTo(() => this.endDay());
       return;
     }
     if (this.day.phase === 'night') {
@@ -431,6 +474,8 @@ export class Game {
       if (this.mode !== 'play') return;
     }
 
+    this.bufferPress('bark', this.dog.barkCd, dt);
+    this.bufferPress('nip', this.dog.nipCd, dt);
     this.dog.update(dt, this.input, this.map, this.fx);
     for (const ev of this.dog.events) this.onDogEvent(ev);
     this.dog.events.length = 0;
@@ -542,7 +587,7 @@ export class Game {
     const left = this.predators.some((p) => p.state !== 'gone');
     if (!left) {
       this.quietT += dt;
-      if (this.quietT > 2.5) this.endDay();
+      if (this.quietT > 2.5) this.fadeTo(() => this.endDay());
     }
   }
 
@@ -562,9 +607,12 @@ export class Game {
 
   private onDogEvent(ev: 'bark' | 'nip') {
     const d = this.dog;
+    const [kx, ky] = { r: [1, 0], l: [-1, 0], u: [0, -1], d: [0, 1] }[d.face];
     if (ev === 'bark') {
       barkAt(this.animals, d.x, d.y, d.stats.barkRange);
       this.audio?.play('bark', { x: d.x, y: d.y });
+      this.feel.kick(kx, ky, 0.09);
+      buzz(this.input.touchMode, 12);
       // Something in range answers back.
       const near = this.animals.filter((a) => !a.gone && !a.carried && Math.hypot(a.x - d.x, a.y - d.y) < d.stats.barkRange);
       if (near.length) {
@@ -583,6 +631,9 @@ export class Game {
       const hit = nipFrom(this.animals, d.x + d.hx * 4, d.y + d.hy * 4, d.hx, d.hy, d.stats.nipPower);
       this.audio?.play('nip', { x: d.x, y: d.y });
       if (hit) setTimeout(() => this.audio?.play(CALLS[hit.sp.id], { x: hit.x, y: hit.y }), 60);
+      this.feel.kick(Math.round(d.hx * 2), Math.round(d.hy * 2), hit ? 0.14 : 0.08);
+      if (hit) this.feel.hitstop = 0.06;
+      buzz(this.input.touchMode, hit ? 24 : 10);
       const nx = d.x + d.hx * 7, ny = d.y + d.hy * 7 - 2;
       for (let i = 0; i < 4; i++)
         this.fx.add({ kind: 'spark', x: nx, y: ny, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, max: 0.18, color: hit ? C.butter : C.wool });
@@ -603,6 +654,8 @@ export class Game {
       if (mult > 1) this.stats.calm++;
       this.fx.float(a.x, a.y - 10, `+${value}$`, C.butter, 1.1);
       this.audio?.play('coin', { x: a.x, y: a.y, vol: 0.7 });
+      const v = this.view();
+      this.feel.flyCoins(a.x - v.ox, a.y - v.oy - 10, value, 2);
     } else if (ev.kind === 'shut') {
       this.audio?.play('gate', { x: ev.pen.cx, y: ev.pen.cy });
       setTimeout(() => this.audio?.play('thatlldo'), 180);
@@ -613,18 +666,34 @@ export class Game {
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
       this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}  +${value}$`, 2.8);
+      this.feel.moment = 1.8;
+      this.feel.kick(0, 2, 0.16);
+      buzz(this.input.touchMode, [18, 50, 36]);
       const gp = ev.pen.gatePoint(0);
+      this.fx.ring(gp.x, gp.y - 2, 26, C.butter, 0.4, 4);
       for (let i = 0; i < 10; i++)
         this.fx.add({ kind: 'spark', x: gp.x, y: gp.y - 4, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, max: 0.5, color: C.butter });
     }
   }
 
-  pauseAction(a: 'resume' | 'sound' | 'quit') {
-    if (a === 'resume') this.mode = 'play';
-    else if (a === 'sound') this.audio?.setMuted(!this.audio.muted);
-    else {
-      saveGame(this);
-      this.request = 'title';
+  // Title menu choice: fade out, then main.ts swaps in the new game.
+  startGame(act: 'new' | 'continue') {
+    this.fadeTo(() => (this.request = act));
+  }
+
+  // A bark or nip pressed just before the dog is ready still happens.
+  private bufferPress(a: 'bark' | 'nip', cd: number, dt: number) {
+    const b = this.buffered[a] ?? 0;
+    if (this.input.peek(a)) {
+      if (cd > 0) {
+        this.input.pressed(a);
+        if (cd < 0.2) this.buffered[a] = 0.25;
+      }
+    } else if (b > 0) {
+      if (cd <= 0) {
+        this.input.push(a);
+        this.buffered[a] = 0;
+      } else this.buffered[a] = b - dt;
     }
   }
 
@@ -736,7 +805,10 @@ export class Game {
 
   view() {
     const { W, H } = this.screen;
-    return { ox: Math.round(this.cam.x - W / 2), oy: Math.round(this.cam.y - H / 2), W, H };
+    const k = this.feel.offset();
+    const ox = clamp(Math.round(this.cam.x - W / 2) + k.x, 0, WORLD_W - W);
+    const oy = clamp(Math.round(this.cam.y - H / 2) + k.y, 0, WORLD_H - H);
+    return { ox, oy, W, H };
   }
 
   // Debug: the whole world as one image.
@@ -759,20 +831,15 @@ export class Game {
     this.input.uiHeld.clear();
     if (this.mode === 'title') {
       const act = drawTitle(this, g, v.W, v.H, this.menu);
-      if (act) this.request = act;
-      return;
-    }
-    if (this.mode === 'pause') {
+      if (act) this.startGame(act);
+    } else if (this.mode === 'pause') {
       drawHud(this, g, v.W, v.H);
-      const a = drawPause(this, g, v.W, v.H, this.pauseSel);
-      if (a) this.pauseAction(a);
-      return;
-    }
-    if (this.mode === 'play') {
+      drawPause(this, g, v.W, v.H);
+    } else if (this.mode === 'play') {
       drawHud(this, g, v.W, v.H);
-      drawTouchControls(g, this.ui, this.input, v.W, v.H);
+      drawTouchControls(this, g, v.W, v.H);
     } else if (this.mode === 'summary' && this.summary) {
-      const r = drawSummary(g, this.ui, this.summary, v.W, v.H, this.t);
+      const r = drawSummary(this, g, v.W, v.H);
       if (r === 'next') this.input.push('confirm');
       if (r === 'build') this.input.push('build');
     } else if (this.mode === 'build') {
@@ -780,5 +847,6 @@ export class Game {
     } else if (this.mode === 'ledger') {
       if (drawLedger(this, g, v.W, v.H)) this.input.push('ledger');
     }
+    this.feel.drawCover(g, v.W, v.H);
   }
 }

@@ -82,10 +82,13 @@ export class Input {
   touchMode = false;
   hover: { x: number; y: number } | null = null;
   wheel = 0;
-  // Virtual stick state (touch).
-  stick = { id: -1, ox: 0, oy: 0, x: 0, y: 0, active: false };
+  // Virtual stick state (touch). x/y are the thumb offset in stickRadius
+  // units: full walk well inside the rim, sprint once pushed past it.
+  stick = { id: -1, ox: 0, oy: 0, x: 0, y: 0, active: false, sprint: false };
   stickEnabled = true;
   readonly stickRadius = 20;
+  readonly sprintRadius = 26; // thumb this far out (internal px) runs
+  readonly stickReach = 30; // the base follows the thumb beyond this
   // Scripted control (debug bots and tests).
   override: { x: number; y: number; sprint: boolean; lie: boolean } | null = null;
 
@@ -180,7 +183,7 @@ export class Input {
   get sprint(): boolean {
     if (this.override) return this.override.sprint;
     if (this.key('ShiftLeft', 'ShiftRight')) return true;
-    return this.stick.active && Math.hypot(this.stick.x, this.stick.y) > 0.94;
+    return this.stick.active && this.stick.sprint;
   }
 
   get move(): { x: number; y: number } {
@@ -196,9 +199,10 @@ export class Input {
     }
     if (this.stick.active) {
       const l = Math.hypot(this.stick.x, this.stick.y);
-      // Small dead zone, then a gentle curve so slow creeping is easy.
-      if (l < 0.12) return { x: 0, y: 0 };
-      const m = Math.min(1, (l - 0.12) / 0.8);
+      // Small dead zone, a gentle curve so slow creeping is easy, and full
+      // walking pace from 80% of the rim, well before the sprint zone.
+      if (l < 0.15) return { x: 0, y: 0 };
+      const m = Math.min(1, (l - 0.15) / 0.65);
       const k = (m * (0.35 + 0.65 * m)) / l;
       return { x: this.stick.x * k, y: this.stick.y * k };
     }
@@ -209,7 +213,7 @@ export class Input {
   endFrame() {
     for (const p of this.ptrs.values()) {
       if (p.justDown && !p.owner && p.touch && this.stickEnabled && !this.stick.active) {
-        this.stick = { id: p.id, ox: p.x, oy: p.y, x: 0, y: 0, active: true };
+        this.stick = { id: p.id, ox: p.x, oy: p.y, x: 0, y: 0, active: true, sprint: false };
         p.owner = 'stick';
       }
     }
@@ -217,20 +221,24 @@ export class Input {
     if (this.stick.active) {
       if (!sp || !sp.isDown || !this.stickEnabled) {
         this.stick.active = false;
+        this.stick.sprint = false;
         this.stick.x = this.stick.y = 0;
       } else {
-        let dx = (sp.x - this.stick.ox) / this.stickRadius;
-        let dy = (sp.y - this.stick.oy) / this.stickRadius;
+        let dx = sp.x - this.stick.ox;
+        let dy = sp.y - this.stick.oy;
         const l = Math.hypot(dx, dy);
-        if (l > 1) {
+        if (l > this.stickReach) {
           // Drag the base along so the thumb never runs off the stick.
-          this.stick.ox = sp.x - (dx / l) * this.stickRadius;
-          this.stick.oy = sp.y - (dy / l) * this.stickRadius;
-          dx /= l;
-          dy /= l;
+          this.stick.ox = sp.x - (dx / l) * this.stickReach;
+          this.stick.oy = sp.y - (dy / l) * this.stickReach;
+          dx = (dx / l) * this.stickReach;
+          dy = (dy / l) * this.stickReach;
         }
-        this.stick.x = dx;
-        this.stick.y = dy;
+        const d = Math.min(l, this.stickReach);
+        // A little hysteresis so the run does not flicker at the edge.
+        this.stick.sprint = this.stick.sprint ? d > this.sprintRadius - 3 : d > this.sprintRadius;
+        this.stick.x = dx / this.stickRadius;
+        this.stick.y = dy / this.stickRadius;
       }
     }
     for (const [id, p] of this.ptrs) {
