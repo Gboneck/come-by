@@ -87,9 +87,12 @@ export class Weather {
   // is rolled. The wind picks a new quarter each day.
   newDay(tier: number, r: () => number = Math.random) {
     if (!this.forced) this.set(tier < 2 ? 'clear' : this.forecast);
-    const a = r() * Math.PI * 2;
-    this.dirX = Math.cos(a);
-    this.dirY = Math.sin(a);
+    // Tier 1 is always clear and still: nothing to roll.
+    if (tier >= 2) {
+      const a = r() * Math.PI * 2;
+      this.dirX = Math.cos(a);
+      this.dirY = Math.sin(a);
+    }
     this.stormed = this.sky === 'storm';
     this.forecast = rollSky(tier, this.stormed, r);
     this.snap();

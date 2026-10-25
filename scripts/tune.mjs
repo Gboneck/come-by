@@ -9,7 +9,8 @@ import { createServer } from 'vite';
 const pos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const species = pos[0] || 'sheep';
 const count = Number(pos[1] || 12);
-const server = await createServer({ server: { port: 5197, strictPort: true }, logLevel: 'error' });
+const port = Number(process.env.TUNE_PORT || 5197); // set one when several checkouts tune at once
+const server = await createServer({ server: { port, strictPort: true }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
@@ -31,7 +32,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 const skyArg = process.argv.find((x) => x.startsWith('--weather='));
-await page.goto(`http://localhost:5197/?debug${skyArg ? `&weather=${skyArg.slice(10)}` : ''}`);
+await page.goto(`http://localhost:${port}/?debug${skyArg ? `&weather=${skyArg.slice(10)}` : ''}`);
 await page.waitForFunction(() => window.sim);
 const helpArg = process.argv.find((x) => x.startsWith('--helpers='));
 const tierArg = process.argv.find((x) => x.startsWith('--tier='));
