@@ -58,6 +58,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     ents.push(...buildingDrawables(g, b, game.t, night, near));
   }
   const tierName = tierOf(game.tier).name;
+  ents.push(...game.extraDrawables(g));
   for (const d of DECOR) {
     if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, (d.x + (d.w ?? 1)) * TS, (d.y + (d.h ?? 1)) * TS, 40)) continue;
     if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && b.overlapsTiles(d.x, d.y, d.w ?? 1, d.h ?? 1))) continue;

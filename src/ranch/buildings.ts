@@ -76,6 +76,8 @@ export class Pen extends Building implements Enclosure {
   goodsFrac = 0;
   hasTrough = false;
   sheltered = false; // within a barn's protection
+  letOut = false; // gate held open so the stock can be driven out
+  letOutQuiet = 0; // time with the dog gone and the gateway clear
 
   constructor(tx: number, ty: number, rot: Rot = 0) {
     super('pen', tx, ty, rot % 2 === 0 ? PEN_W : PEN_H, rot % 2 === 0 ? PEN_H : PEN_W, rot);
@@ -90,6 +92,7 @@ export class Pen extends Building implements Enclosure {
   }
 
   hasRoomFor(a: Animal) {
+    if (a.trial) return false;
     return this.used + a.sp.space <= this.capacity && (this.species === null || this.species === a.sp.id);
   }
 
@@ -147,7 +150,12 @@ export class Pen extends Building implements Enclosure {
   }
 
   accepts(a: Animal) {
-    return !a.pen && this.hasRoomFor(a);
+    return !a.pen && !this.letOut && this.hasRoomFor(a);
+  }
+
+  // Whether a point is anywhere on the pen's footprint, fences included.
+  covers(x: number, y: number, m = 0) {
+    return x > this.x0 - m && x < this.x1 + m && y > this.y0 - m && y < this.y1 + m;
   }
 }
 

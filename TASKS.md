@@ -89,6 +89,34 @@
       and splashes at the ford, dust that suits each species
 - [x] Screenshot + console check, commit
 
+## M9 Trials, orders and the legacy (gameplay expansion)
+- [x] Show Ground: a new clearing south of the Home Meadow (tier 2, behind a
+      region gate), with bunting over the way in
+- [x] Trial course: fetch gate, handler's post (a planted crook), drive gate,
+      cross-drive gate and a small trial pen; the next gate's flags flap
+- [x] Trial runs: E at the post; outrun + lift, fetch, round the post, drive,
+      cross-drive, pen; scored on gates and calm, bolts and grips are faults
+- [x] Classes: NOVICE (5 ducks), OPEN (5 sheep), CATTLE (4 cows), VALLEY CUP
+      (7 sheep); win one to open the next. Every 3rd day is a trial day
+      against three rival handlers for prizes and ribbons; other runs are
+      practice
+- [x] Buyers' yards with carts and name boards: the mill (Home Meadow), the
+      drover (a nook off the crossroads road), the sale yard (Show Ground)
+- [x] Orders each morning from tier 2 (two from tier 4): a species, a head
+      count and a time; paid per head, scaled by how calm each one arrives
+- [x] Letting stock out: E at a pen gate holds it open so you can drive the
+      stock out; your own stock coming home pays nothing
+- [x] Job card at the top centre, arrows to the yard / next gate / trial,
+      the judge's result card, Ledger lines, contextual hints and tips
+- [x] Goals: tier 3 "fill an order", tier 4 "place in a trial"; past tier 5 a
+      legacy ladder of eight goals (40$ each) in the tracker and Ledger
+- [x] Helper dogs wait by the post during a run
+- [x] Saves keep orders, the trial record and let-out stock; old saves load
+- [x] Bot drives the course (`trialGoal`, `runTrial`); `scripts/trialtest.mjs`
+      and `scripts/ordertest.mjs`; savetest covers the new state and an old
+      save; tune.mjs before/after for every species
+- [x] Screenshot + console check, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -269,3 +297,43 @@
   several worktrees running can screenshot another checkout: `SHOT_PORT`
   picks a different port. `scripts/regions.mjs` screenshots every region
   (and a built-up ranch) at real scale.
+- Trials and orders (M9) were built in a parallel session; graphics, sound
+  and UI sessions own the other files. New UI is in `src/ui/jobs.ts`, new
+  art in `src/art/course.ts`; the hooks into `render/world.ts` and
+  `ui/ledger.ts` are one line each.
+- The Show Ground is reached through the Home Meadow, not from the ranch,
+  so no player layout can block the way in. `RegionId` gained `show`.
+- A trial run pauses the day clock (as build mode does), so a run never
+  costs the day, and no goods are made while it is paused. The dog must
+  stay on the field: walking off for 2.5s retires the run.
+- Trial scoring out of 100: outrun + lift 10 (a quiet lift heading for the
+  fetch gate), each gate 15 (share of the flock through it, judged once the
+  flock is past its line; skipping a gate scores 0), round the post 10,
+  pen 20 (half credit for a pen unfinished at time), calm 15 (mean stress
+  over the run). Bolts -2 each (up to -10); a nip on a sheep or duck is a
+  grip, -3. Cattle may be heeled.
+- Gates are 28px wide. The bot scores: novice calm ~95, bark-every-2s ~39;
+  open calm ~99, bark ~23, crowding ~27; cup calm ~100, bark 0 (retired),
+  crowding ~62; cattle need close work or nips (crowding ~69, nips ~41,
+  a hands-off calm bot ~20), as in the pastures. Rival ranges are set
+  below a clean run: novice 44-66, open 54-74, cattle 50-70, cup 64-82,
+  the cup's rising 3 a win (to +12).
+- One prize run per trial day; it is used up when it starts. Prizes:
+  novice 30/18/10, open 50/30/15, cattle 80/45/20, cup 140/70/35.
+- Orders pay species value x 2.5 per head x the calm multiplier on arrival
+  (x1.5 calm, down to x0.35 frantic), against x3 for selling at the market
+  stall. A buyer leaves at the stated hour, paying for what has come.
+  Wild animals count too: driving a hill flock straight to the drover is
+  allowed and quick.
+- Let-out stock feels the full flight zone (penned stock feel half) and is
+  drawn towards the gateway when pushed; once out of the pen's footprint it
+  is loose and marked as home stock. The gate shuts again once the dog has
+  gone and the gateway is clear. Measured: six sheep out of the starter pen
+  in ~20s; four of them to the drover in ~30s, all calm (76$). Barking every
+  2s on the same drive panics them and misses the order.
+- The trial flock only flocks with itself, so stray stock on the Show
+  Ground cannot join it. Trial animals cannot be penned on the ranch and
+  are never saved.
+- tune.mjs before and after: the same within run-to-run noise for every
+  species (the wild herding code path is unchanged; the before/after logs
+  are in the PR).

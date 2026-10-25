@@ -5,6 +5,7 @@ import { makeCanvas } from '../gfx/screen';
 import type { Game } from '../game';
 import { MH, MW, REGIONS, TS, Ter, type WorldMap } from '../world/map';
 import { TIERS, goalDone, tierOf } from '../systems/progression';
+import { jobsLedger } from './jobs';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -81,6 +82,7 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
     add(`${done ? '#' : '-'} ${goal.label}`, done ? C.butter : C.wool);
     if (goal.target > 1) add(`${v}/${goal.target}`, done ? C.butter : C.sage, 8);
   }
+  for (const l of jobsLedger(game, colW - 12)) add(l.s, l.c, l.x);
   add('');
   if (next) {
     add(`NEXT: ${next.name}`, C.butter);

@@ -6,14 +6,16 @@ import { defOfKind } from '../ranch/catalog';
 import { makeBuilding } from '../ui/build';
 import { Helper, type HelperMode } from '../entities/helper';
 import type { SpeciesId } from '../world/map';
-import type { Totals } from './progression';
+import { newTotals, type Totals } from './progression';
 import type { UpKey } from './economy';
+import { morningOrders, type Order } from './orders';
+import type { ClassId } from './trials';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
 const KEY = 'comeby-save-v1';
 
-interface SavedAnimal { id: SpeciesId; coat: Coat; stress: number; x?: number; y?: number; wanderer?: boolean; produceT?: number }
+interface SavedAnimal { id: SpeciesId; coat: Coat; stress: number; x?: number; y?: number; wanderer?: boolean; produceT?: number; home?: boolean }
 
 interface SaveData {
   v: 1;
@@ -29,6 +31,10 @@ interface SaveData {
   buildings: { kind: BuildingKind; tx: number; ty: number; rot: Rot; level: number; trough?: boolean; goods?: number; animals?: SavedAnimal[] }[];
   wild: SavedAnimal[];
   helpers: { name: string; mode: HelperMode }[];
+  // Added with orders and trials; older saves lack them.
+  orders?: Order[];
+  nextOrder?: number;
+  trials?: { won: ClassId[]; cups: number; last: number };
 }
 
 function store(): Storage | null {
@@ -64,9 +70,12 @@ export function saveGame(game: Game) {
         return out;
       }),
     wild: game.animals
-      .filter((a) => !a.pen && !a.gone)
-      .map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), x: Math.round(a.x), y: Math.round(a.y), wanderer: a.wanderer })),
+      .filter((a) => !a.pen && !a.gone && !a.trial)
+      .map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), x: Math.round(a.x), y: Math.round(a.y), wanderer: a.wanderer, ...(a.home ? { home: true } : {}) })),
     helpers: game.helpers.map((h) => ({ name: h.name, mode: h.mode })),
+    orders: game.orders.list,
+    nextOrder: game.orders.nextId,
+    trials: { won: game.trials.won, cups: game.trials.cups, last: game.trials.lastPrizeDay },
   };
   try {
     store()?.setItem(KEY, JSON.stringify(data));
@@ -103,7 +112,7 @@ export function loadInto(game: Game): boolean {
   game.won = d.won;
   game.tut = d.tut;
   game.tipsSeen = new Set(d.tips);
-  game.totals = { ...game.totals, ...d.totals };
+  game.totals = { ...newTotals(), ...d.totals };
   game.upgrades = { ...game.upgrades, ...d.upgrades };
   game.applyUpgrades();
   game.owned = new Set(d.owned);
@@ -137,12 +146,24 @@ export function loadInto(game: Game): boolean {
     const a = new Animal(sa.id, sa.x ?? 0, sa.y ?? 0, sa.coat);
     a.stress = sa.stress;
     if (sa.wanderer !== undefined) a.wanderer = sa.wanderer;
+    a.home = !!sa.home;
     game.animals.push(a);
+  }
+  if (d.trials) {
+    game.trials.won = [...d.trials.won];
+    game.trials.cups = d.trials.cups;
+    game.trials.lastPrizeDay = d.trials.last;
   }
   game.setTier(d.tier, false);
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));
   game.startDay(true, false);
+  // The morning's orders as they were; an older save gets fresh ones.
+  if (d.orders) {
+    game.orders.list = d.orders.map((o) => ({ ...o }));
+    game.orders.nextId = d.nextOrder ?? game.orders.list.length + 1;
+  } else morningOrders(game);
+  saveGame(game);
   return true;
 }

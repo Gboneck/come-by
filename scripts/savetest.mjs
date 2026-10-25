@@ -31,6 +31,16 @@ await page.evaluate(async () => {
   const c = await import('/src/ranch/catalog.ts');
   g.ranch.add(m.makeBuilding(c.defOf('kennel'), 90, 108, 0));
   g.hireHelper();
+  // Orders, trials and a sheep let out of a pen.
+  g.trials.won = ['novice'];
+  g.trials.lastPrizeDay = 3;
+  g.totals.orders = 2;
+  g.totals.ribbons = [1, 0, 1];
+  g.orders.list = [{ id: 7, yard: 'drover', species: 'duck', n: 4, due: 150, got: 1, paid: 7, state: 'open' }];
+  g.orders.nextId = 8;
+  const loose = new (g.animals[0].constructor)('sheep', 700, 860);
+  loose.home = true;
+  g.animals.push(loose);
 });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(100);
@@ -46,7 +56,27 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
 await step('continued', () => {
   const g = window.game;
-  return { mode: g.mode, demo: g.demo, coins: g.coins, tier: g.tier, speed: g.upgrades.speed, walk: g.dog.stats.walk, kennel: g.ranch.buildings.some((b) => b.kind === 'kennel'), penned: g.ranch.pens[0].animals.length, helpers: g.helpers.map((h) => h.name), gatesOpen: g.ranch.regionGates.filter((x) => x.unlocked).length, farmLevel: g.ranch.farmhouse.level };
+  return { mode: g.mode, demo: g.demo, coins: g.coins, tier: g.tier, speed: g.upgrades.speed, walk: g.dog.stats.walk, kennel: g.ranch.buildings.some((b) => b.kind === 'kennel'), penned: g.ranch.pens[0].animals.length, helpers: g.helpers.map((h) => h.name), gatesOpen: g.ranch.regionGates.filter((x) => x.unlocked).length, farmLevel: g.ranch.farmhouse.level,
+    won: g.trials.won, lastPrize: g.trials.lastPrizeDay, orders: g.orders.list.map((o) => `${o.id}:${o.yard}:${o.species}:${o.got}/${o.n}`), nextOrder: g.orders.nextId, filled: g.totals.orders, ribbons: g.totals.ribbons, home: g.animals.filter((a) => a.home).length };
+});
+
+// A save from before orders and trials: strip the new fields and continue.
+await page.evaluate(() => {
+  window.game.loading = true; // no save on the way out
+  const k = 'comeby-save-v1';
+  const d = JSON.parse(localStorage.getItem(k));
+  delete d.orders; delete d.nextOrder; delete d.trials;
+  for (const f of ['orders', 'calmOrders', 'ribbons', 'bestTrial', 'trialRuns', 'legacy']) delete d.totals[f];
+  for (const a of d.wild) delete a.home;
+  localStorage.setItem(k, JSON.stringify(d));
+});
+await page.goto('http://localhost:5190/?debug&title');
+await page.waitForFunction(() => window.game);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(400);
+await step('old save', () => {
+  const g = window.game;
+  return { mode: g.mode, tier: g.tier, coins: g.coins, won: g.trials.won, orders: g.orders.list.length, ribbons: g.totals.ribbons, filled: g.totals.orders, legacy: g.totals.legacy, showGate: g.ranch.regionGates.find((x) => x.region === 'show').unlocked };
 });
 if (errors.length) console.log('ERRORS', errors);
 await browser.close();

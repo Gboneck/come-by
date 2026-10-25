@@ -31,6 +31,12 @@ import { saveGame } from './systems/save';
 import { drawPause, drawTitle, titleKeys, type MenuState } from './ui/title';
 import { botStep } from './bot';
 import { clamp, damp } from './util';
+import { Orders } from './systems/orders';
+import { Trials, closeResult, trialNip } from './systems/trials';
+import { jobGates, jobsAction, jobsHint, jobsMorning, jobsUpdate } from './systems/jobs';
+import { drawJobs } from './ui/jobs';
+import { courseDrawables } from './art/course';
+import type { Drawable } from './art/buildings';
 
 export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause';
 export type Request = 'new' | 'continue' | 'title' | null;
@@ -57,6 +63,7 @@ const REGION_TIPS: Partial<Record<string, string>> = {
   rocky: 'GOATS SPLIT UP AND CLIMB ROCKS YOU CANNOT. LIE DOWN, LET THEM COME DOWN.',
   ford: 'CATTLE ONLY MOVE FOR CLOSE PRESSURE OR A NIP (E). THEY BALK AT WATER.',
   high: 'PONIES SPOOK FROM FAR OFF. WORK WIDE, SLOW AND QUIET.',
+  show: 'SHEEPDOG TRIALS EVERY 3RD DAY. STAND BY THE CROOK AND NIP (E) TO START A RUN.',
 };
 
 const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0, built: 0, sold: 0 });
@@ -118,6 +125,8 @@ export class Game {
   tut = 0; // tutorial step
   tutT = 0;
   private tierCheckT = 0;
+  orders = new Orders();
+  trials = new Trials();
 
   constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null } = {}) {
     this.demo = !!opts.demo;
@@ -309,6 +318,7 @@ export class Game {
     this.mode = 'play';
     this.summary = null;
     this.showBanner(`DAY ${this.day.day}`, 'BRING THEM HOME BEFORE DUSK', 2.6);
+    jobsMorning(this, spawn);
     saveGame(this);
   }
 
@@ -389,6 +399,12 @@ export class Game {
       this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
       return;
     }
+    if (this.trials.result) {
+      // Trial result card: everything waits until it is closed.
+      this.fx.update(dt);
+      if (this.input.pressed('confirm') || this.input.pressed('bark') || this.input.pressed('cancel')) closeResult(this);
+      return;
+    }
     if (this.input.pressed('ledger')) {
       this.mode = 'ledger';
       this.ledgerNew = false;
@@ -413,7 +429,7 @@ export class Game {
       }
       this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
-    const dayEv = this.day.update(dt);
+    const dayEv = this.trials.run ? null : this.day.update(dt); // the clock waits for a trial run
     if (dayEv === 'dusk') {
       this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);
       this.audio?.play('dusk');
@@ -440,7 +456,8 @@ export class Game {
     updateHerd(this.animals, this.herdCtx(), dt);
     const night = this.day.phase === 'night';
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
-    if (!night) updateProduce(this, dt);
+    jobsUpdate(this, dt);
+    if (!night && !this.trials.run) updateProduce(this, dt);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
       this.groupT = 0.25;
@@ -561,6 +578,7 @@ export class Game {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
+    gates.push(...jobGates(this));
     return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates };
   }
 
@@ -580,6 +598,7 @@ export class Game {
         if (dd < d.stats.barkRange * 1.15) p.scare((p.kind === 'wolf' ? 0.55 : 1.05) * (1 - (dd / (d.stats.barkRange * 1.15)) * 0.4));
       }
     } else {
+      if (jobsAction(this)) return; // E at the trial post or a pen gate
       for (const p of this.predators) {
         const dx = p.x - d.x, dy = p.y - d.y, dd = Math.hypot(dx, dy);
         if (p.active && dd < 12 && (dx * d.hx + dy * d.hy) / (dd || 1) > 0) p.scare(1.5 * d.stats.nipPower);
@@ -587,6 +606,7 @@ export class Game {
       const hit = nipFrom(this.animals, d.x + d.hx * 4, d.y + d.hy * 4, d.hx, d.hy, d.stats.nipPower);
       this.audio?.play('nip', { x: d.x, y: d.y });
       if (hit) setTimeout(() => this.audio?.play(CALLS[hit.sp.id], { x: hit.x, y: hit.y }), 60);
+      if (hit) trialNip(this, hit);
       const nx = d.x + d.hx * 7, ny = d.y + d.hy * 7 - 2;
       for (let i = 0; i < 4; i++)
         this.fx.add({ kind: 'spark', x: nx, y: ny, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, max: 0.18, color: hit ? C.butter : C.wool });
@@ -596,6 +616,12 @@ export class Game {
   private onRanchEvent(ev: RanchEvent) {
     if (ev.kind === 'penned') {
       const a = ev.animal;
+      if (a.home) {
+        // Your own stock coming back: no delivery pay.
+        a.deliveryValue = 0;
+        this.fx.float(a.x, a.y - 10, 'HOME', C.wool, 0.9);
+        return;
+      }
       const { mult } = calmRating(a.peakStress);
       const value = Math.max(1, Math.round(a.sp.value * mult));
       a.deliveryValue = value;
@@ -616,7 +642,7 @@ export class Game {
       if (label === 'CALM') this.totals.calmBatches++;
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
-      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}  +${value}$`, 2.8);
+      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}`, 2.8);
       const gp = ev.pen.gatePoint(0);
       for (let i = 0; i < 10; i++)
         this.fx.add({ kind: 'spark', x: gp.x, y: gp.y - 4, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, max: 0.5, color: C.butter });
@@ -697,6 +723,8 @@ export class Game {
 
   hint(): string | null {
     if (this.tip) return this.tip.text;
+    const jh = jobsHint(this);
+    if (jh) return jh;
     const touch = this.input.touchMode;
     switch (this.tut) {
       case 0: return 'YOUR DUCKS ARE OUT IN THE HOME MEADOW. HEAD EAST!';
@@ -725,8 +753,9 @@ export class Game {
     const d = this.dog;
     let tx = d.x + d.vx * 0.35;
     let ty = d.y + d.vy * 0.35;
-    // Lean towards the flock you are working so you can see both.
-    const gr = this.nearestGroup(110);
+    // Lean towards the flock you are working so you can see both (on a
+    // trial outrun, from the post).
+    const gr = this.nearestGroup(this.trials.run ? 200 : 110);
     if (gr) {
       tx += (gr.x - d.x) * 0.3;
       ty += (gr.y - d.y) * 0.3;
@@ -742,6 +771,11 @@ export class Game {
   view() {
     const { W, H } = this.screen;
     return { ox: Math.round(this.cam.x - W / 2), oy: Math.round(this.cam.y - H / 2), W, H };
+  }
+
+  // Trial course, buyers' yards and carts, for the y-sorted world layer.
+  extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
+    return courseDrawables(this, g);
   }
 
   // Debug: the whole world as one image.
@@ -775,7 +809,8 @@ export class Game {
     }
     if (this.mode === 'play') {
       drawHud(this, g, v.W, v.H);
-      drawTouchControls(g, this.ui, this.input, v.W, v.H);
+      if (drawJobs(this, g, v.W, v.H)) this.input.push('confirm');
+      if (!this.trials.result) drawTouchControls(g, this.ui, this.input, v.W, v.H);
     } else if (this.mode === 'summary' && this.summary) {
       const r = drawSummary(g, this.ui, this.summary, v.W, v.H, this.t);
       if (r === 'next') this.input.push('confirm');

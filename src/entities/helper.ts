@@ -101,6 +101,16 @@ export class Helper {
         ty = home.y;
         lie = Math.hypot(tx - this.x, ty - this.y) < 4;
       }
+    } else if (game.trials.run) {
+      // A trial is one dog's work: wait by the handler's post.
+      const p = game.ranch.course.post;
+      tx = p.x + (index ? 14 : -14);
+      ty = p.y + 12;
+      if (Math.hypot(tx - this.x, ty - this.y) > 30) {
+        this.x = tx;
+        this.y = ty;
+      }
+      lie = Math.hypot(tx - this.x, ty - this.y) < 4;
     } else if (this.mode === 'stay') {
       lie = true;
     } else if (this.mode === 'home') {
