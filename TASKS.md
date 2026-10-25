@@ -162,6 +162,16 @@ Round two:
 - [x] One-time tip about resting for players past the tutorial
 - [x] `scripts/resttest.mjs`
 
+## M13 Townsfolk
+- [x] People sprites (`src/art/people.ts`): plum-outlined 3/4 figures, recoloured per person; stand, walk, carry, hammer, crouch, sit and wave
+- [x] The rancher (`src/entities/folk.ts`): out of the farmhouse each morning with a word, chores between jobs (eggs and wool, hay to the troughs, the garden, the woodpile, the well), the bench at dusk and while the dog rests, a lantern round the yard at night
+- [x] Herding: when you drive a flock to an open pen, the rancher stands beside the gate on the far side from the dog, a mild pressure the flock turns from into the gateway
+- [x] Building: whatever you buy goes up with a scaffold and hammering (the rancher, or a carpenter for the big jobs from tier 3); it works at once and anything left is finished by morning
+- [x] The valley fills: the miller, the drover and the auctioneer at their yards (paying for orders, shrugging at missed ones), the judge at the Show Ground, a shepherd in the High Range
+- [x] Speech bubbles in the pixel font (`src/ui/speech.ts`) reacting to calm and rattled pens, tier-ups, losses, orders, trial results; morning requests
+- [x] Voices as pitched blips per person, footsteps, hammering and chopping
+- [x] `scripts/folktest.mjs`; tune.mjs before and after for every species
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -519,3 +529,38 @@ Round two:
   few percent and favour phrases that open on a minor chord (twice as often
   in rain); fog hushes the tune and wets the reverb; wind lifts the drone; a
   storm adds a little tension.
+- Townsfolk. The people only read game state and change nothing in the sim
+  except one thing: when the dog drives a flock to an open pen, the rancher
+  walks to the gate and stands beside it, on the far side from the dog, as
+  a mild pressure source (helper kind, strength 0.4, 0.55 of the flock's
+  flight zone). How far along the fence they stand scales with the flock's
+  flight zone, so their pressure ends at the edge of the gateway: it guards
+  the side the flock would slip past without blocking the way in. Ponies,
+  who spook from far off, get a wide berth.
+- Building is cosmetic: a bought building works at once. A scaffold (big
+  buildings) or a timber pile (pens, fences, gates, troughs) stands while
+  the builder hammers for 1-14 s of work; anything bought from the summary,
+  or left at nightfall, is done by morning. From tier 3 a carpenter walks
+  in from the east road for the big jobs and walks off again after.
+- The cast grows with the ranch: the rancher from day one; at tier 2 the
+  buyers at their yards (miller, drover, auctioneer, once their region is
+  open) and the judge at the Show Ground; at tier 5 a shepherd in the High
+  Range. Buyers walk to their yard gate to pay for a filled order and shrug
+  at a missed one; the judge speaks at the start and the end of a run; the
+  rancher stands at the handler's post during trials (no pressure there).
+- Speech bubbles only appear for someone on screen, at most one every 2.5 s
+  and one per person every 9 s; important lines (the morning word, a
+  tier-up) wait until the speaker comes into view. Voices are a babble of
+  blips in each person's register.
+- Measured with a seeded A/B (same build, the live loop stubbed, 5 seeds,
+  rancher pressure on and off): ducks and sheep identical (sheep penned in
+  14.1 s against 14.2 s); goats helped (driven and penned in 1 of 5 runs
+  against 0, 2.6 penned against 0.2); cattle unchanged; ponies neutral
+  (8.0 penned against 8.2, mean stress 0.001 both, no panics) once the
+  rancher stands back and eases off for wide flight zones (strength
+  0.4 x 44 / flight, at most 0.4). The first version stood 18 px from every
+  gate: it covered the gateway for ponies and penned fewer of them.
+  With the bot barking every 2 s the rancher helps more: sheep driven and
+  penned in 4 of 5 runs against 1 of 5 (26 s against 79 s, a third of the
+  panics); goats reach the tune goal in 25 s against 49 s. Plain tune.mjs
+  before and after (unseeded, 3 runs) moves within its usual noise.

@@ -35,6 +35,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   game.dog.drawShadow(g);
   for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
   for (const h of game.helpers) if (inView(h.x, h.y)) h.drawShadow(g);
+  game.folk.drawShadows(g);
   game.fx.drawLow(g);
   game.life.drawGround(g);
 
@@ -70,6 +71,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   ents.push({ y: game.dog.y, draw: () => game.dog.draw(g) });
   for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
   for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => h.draw(g) });
+  ents.push(...game.folk.drawables(g, (x, y) => inView(x, y)));
   ents.sort((p, q) => p.y - q.y);
   for (const e of ents) e.draw();
   if (game.mode === 'build') game.build.drawWorld(game, g);
@@ -90,6 +92,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     const fl = (i: number) => Math.sin(game.t * 7.3 + i * 2.1) * 0.8 + Math.sin(game.t * 13.1 + i) * 0.6;
     const lights: Light[] = [{ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 }];
     for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
+    lights.push(...game.folk.lights(ox, oy));
     const f = game.ranch.farmhouse;
     if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
     decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1) }));

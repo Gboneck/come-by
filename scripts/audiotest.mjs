@@ -277,7 +277,7 @@ for (const name of cases) {
   }
   if (name === 'sfx') {
     // Each sound effect alone, 3 s apart: peak and loudness, next to a bark.
-    const SFX = ['bark', 'coin', 'gate', 'thatlldo', 'judge', 'judge2', 'cart', 'creak', 'applause:0.15', 'applause:0.5', 'applause:0.95', 'crack', 'thunder:near', 'thunder:far', 'sold', 'missed', 'gate:1', 'sour'];
+    const SFX = ['bark', 'coin', 'gate', 'thatlldo', 'judge', 'judge2', 'cart', 'creak', 'applause:0.15', 'applause:0.5', 'applause:0.95', 'crack', 'thunder:near', 'thunder:far', 'sold', 'missed', 'gate:1', 'sour', 'hammer', 'chop', 'voice', 'footstep'];
     const rows = await page.evaluate(async (SFX) => {
       localStorage.clear();
       const { Sound } = await import('/src/systems/audio.ts');
@@ -293,6 +293,8 @@ for (const name of cases) {
           else if (n === 'thunder') s.sample('thunder', arg === 'near' ? 0.32 : 0.12, 0, 1, undefined, arg === 'near' ? 3450 : 300);
           else if (n === 'gate' && arg) s.stinger('gate', { amt: Number(arg) });
           else if (['sold', 'missed', 'sour'].includes(n)) s.stinger(n);
+          else if (n === 'voice') s.voice(330, "THAT'LL DO! LOVELY WORK, THAT.", 40, 0);
+          else if (n === 'footstep') for (let k = 0; k < 4; k++) setTimeout(() => s.footstep(30, 0), 0), s.footstep(30, 0);
           else s.play(n, { x: 40, y: 0, force: true });
           ctx.resume();
         });
