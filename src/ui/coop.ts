@@ -255,7 +255,8 @@ export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer
   // other; so do pings out of sight.
   if (together && net) {
     const top = TL ? TL.top : H - 12 - S.bottom;
-    const M = { top: S.top + 24, bottom: H - top + 10, left: S.left, right: S.right };
+    // Clear of the HUD's cards down the top left.
+    const M = { top: S.top + 34, bottom: H - top + 10, left: S.left, right: S.right };
     for (const d of net.dogs) if (d.tag) edgeArrow(g, game, d.x, d.y, C.wool, d.tag, M);
     pingArrows(game, net, g, M);
   }

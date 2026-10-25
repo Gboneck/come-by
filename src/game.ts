@@ -612,7 +612,7 @@ export class Game {
     if (reg && reg !== this.lastRegion) {
       this.place = { text: reg.name.toUpperCase(), t: 2.4 };
       this.lastRegion = reg;
-      const tip = REGION_TIPS[reg.id];
+      const tip = (this.net?.role === 'guest' ? this.net.regionTip(reg.id) : undefined) ?? REGION_TIPS[reg.id];
       if (tip && !this.tipsSeen.has(reg.id) && reg.tier <= this.tier) {
         this.tipsSeen.add(reg.id);
         this.tip = { text: this.input.touchMode ? tip.replace(' (E)', '') : tip, t: 8 };

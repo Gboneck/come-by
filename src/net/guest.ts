@@ -196,7 +196,6 @@ export class GuestNet implements PingNet {
       this.status = this.game ? (m.host ? 'playing' : 'away') : 'joining';
       this.link?.send(jsonFrame(0, { t: 'hello', name: this.look.name, look: { dog: this.look.dog } }));
     } else if (m.t === 'host-away') this.status = 'away';
-    else if (m.t === 'bg') this.hostBg = !!m.on;
     else if (m.t === 'host-back') {
       this.status = 'playing';
       this.hostBg = false;
@@ -234,7 +233,8 @@ export class GuestNet implements PingNet {
           d.tag = p.name;
         }
       }
-    } else if (m.t === 'home') {
+    } else if (m.t === 'bg') this.hostBg = !!m.on;
+    else if (m.t === 'home') {
       this.home = { x: m.x as number, y: m.y as number };
       if (this.game) this.goHome(this.game);
     }
@@ -759,6 +759,12 @@ export class GuestNet implements PingNet {
       return h && at(h.x, h.y) ? `${host} PRESSES ${game.input.touchMode ? 'NIP' : 'E'} TO START THE BRACE: TEN SHEEP, BOTH OF YOU.` : `A BRACE RUN NEEDS ${host} AT THE POST TOO. PING THEM OVER.`;
     }
     return null;
+  }
+
+  // A region's first-visit tip, where a guest's is different.
+  regionTip(id: string): string | undefined {
+    if (id === 'show') return `THE TRIALS ARE ${this.hostName}'S TO RUN. STAND AT THE CROOK WITH THEM FOR A BRACE: TWO DOGS, TEN SHEEP.`;
+    return undefined;
   }
 
   nameOf(slot: number): string {

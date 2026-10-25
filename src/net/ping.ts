@@ -95,9 +95,9 @@ export function drawPings(game: Game, net: PingNet, g: CanvasRenderingContext2D,
 // Arrows to pings off screen.
 export function pingArrows(game: Game, net: PingNet, g: CanvasRenderingContext2D, M: Margins) {
   for (const p of net.pings.list) {
-    if (p.slot === net.slot) continue;
+    if (p.slot === net.slot || p.t > 3) continue;
     const d = p.kind === 'here' ? null : net.dogOf(p.slot);
-    edgeArrow(g, game, d ? d.x : p.x, d ? d.y : p.y, C.butter, p.kind === 'here' ? `${p.name}!` : PING_WORD[p.kind], M);
+    edgeArrow(g, game, d ? d.x : p.x, d ? d.y : p.y, C.butter, `${p.name}: ${PING_WORD[p.kind].replace('OVER ', '').replace('!', '')}`, M);
   }
 }
 
