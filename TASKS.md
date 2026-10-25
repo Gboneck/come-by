@@ -65,6 +65,30 @@
 - [x] Title screen
 - [x] Screenshot + console check, commit
 
+## M8 Graphics detail
+- [x] Regions with their own look: rolling mounds in the Hills, faceted
+      outcrops with a front face and scree in Rocky Rise, banks, reeds and
+      stepping stones at the Ford, pines and alpine flowers in the High
+      Range, lily pads on the Home Meadow pond, ferns under the trees
+- [x] Tree crowns along forest edges and as the small groves
+- [x] Animated water (river flow, foam, ripples round the stones, glints)
+- [x] Grass, flowers and reeds sway as wind gusts cross the valley
+- [x] Butterflies and birds with shadows by day, fireflies at night,
+      chimney smoke, bees at the hives
+- [x] Animals: run, graze, idle look, alert and lying poses per species;
+      stress shows on the sprite; wading legs go under water
+- [x] Buildings: hipped roofs, clapboard, shutters; the farmhouse grows a
+      door hood, a storey with dormers, a porch, lamps and a weathervane;
+      barn hayloft, lean-to and weathervane when upgraded; worn and sturdy
+      fences; trodden pen floors
+- [x] Ranch decor grows with the tiers (woodpile, garden, cart, barrels,
+      washing line, beehives, stepping stones)
+- [x] Night: flickering elliptical lantern pools, lamp glow, a dawn from the
+      east, dusk gathering in the east
+- [x] Effects: footprints in soft ground (and on grass at a run), ripples
+      and splashes at the ford, dust that suits each species
+- [x] Screenshot + console check, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -208,4 +232,40 @@
 - The title screen runs the game in attract mode (the heeler driving a
   flock round the ranch). `?debug` skips the title unless `&title` is
   added; `?play` skips it too.
-
+- Graphics detail comes from shape, dither, animation and variety only: the
+  palette is unchanged. Everything added is decoration; collision, the map
+  layout and the herding sim are untouched (tune.mjs sheep matches main).
+- The world bake is cached per map (the map is seeded), so going from the
+  title screen into a game no longer bakes twice. A full bake is ~0.3s on a
+  desktop.
+- Pines stand up a little (three tiers, 3/4 view) like the buildings,
+  instead of being drawn flat from above: flat star shapes read as noise at
+  this size. They fill the forest north of a line ~37 tiles down, with a
+  ragged edge, so going north the woods turn to conifers. Broadleaf crowns
+  are round, drawn like the reference's bushes.
+- Rolling Hills are overlapping mounds whose shaded rims are moss crescents
+  (back to front, each hides the ones behind). A shaded height field read
+  as camouflage blotches.
+- Grass, flowers and reeds are no longer baked: they sit in a grid and are
+  drawn each frame so a gust (`src/render/wind.ts`) can lean their tips one
+  pixel downwind. Smoke, flags, washing and butterflies use the same wind.
+- Water is a baked base plus a 16-frame loop of wool highlights per body of
+  water (`src/art/water.ts`), cropped to its bounding box.
+- Animal drawing moved to `src/render/animals.ts`; the old draw functions in
+  `src/entities/animal.ts` are left in place for now (unused). Poses are
+  read from public sim state only. "Lying down" is a pose: calm, still
+  animals settle after a while (penned ones quickly at night) and get up the
+  moment anything moves them. A goat on a rock is drawn 2px up, on its top.
+- `src/render/life.ts` is the living-world layer (butterflies, birds,
+  fireflies, smoke, footprints, ripples, species dust). It has its own
+  particle list and never touches the sim; hooked into `game.ts` with one
+  update call per mode.
+- Building ground shadows are their own drawables sorted before everything,
+  so a shadow never lands on an animal standing in front of the building.
+- Dawn is render-only (`src/render/sky.ts`): the first 14s of every morning
+  after a night, darkest in the west. Day 1 starts in full light so a new
+  game (and `npm run shot`) never opens in the dark.
+- `scripts/shot.mjs` reuses any server already on its port, which with
+  several worktrees running can screenshot another checkout: `SHOT_PORT`
+  picks a different port. `scripts/regions.mjs` screenshots every region
+  (and a built-up ranch) at real scale.

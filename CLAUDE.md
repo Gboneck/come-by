@@ -27,7 +27,10 @@ original and drawn in code. No external art files, ever.
   bot herding scenarios per species and prints stress/time/splits,
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
-  `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end.
+  `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end,
+  `scripts/regions.mjs` screenshots every region at real scale (`--night`,
+  `--dusk`, `--tier=N`). `SHOT_PORT=52xx` gives `shot.mjs` / `regions.mjs`
+  their own port when other checkouts are running servers too.
 
 ## Rendering rules
 
@@ -108,7 +111,9 @@ stays unique.
 - `src/systems/` day cycle, economy, progression, save, audio, particles,
   spawner.
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
-- `src/render/` world drawing and the night dither.
+- `src/render/` world drawing and the night dither; `animals.ts` animal
+  poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
+  wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
   the model for helper dogs.
 

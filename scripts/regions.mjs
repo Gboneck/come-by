@@ -1,5 +1,5 @@
 // Screenshot each region at real scale (tier 5, its herd grazing nearby):
-//   node scripts/regions.mjs [--out=shots/regions] [--only=ford,ranch] [--night] [--dusk] [--t=seconds] [--tier=5]
+//   node scripts/regions.mjs [--out=shots/regions] [--only=ford,ranch] [--night] [--dusk] [--t=seconds] [--tier=5] [--day=1]
 // Writes <out>/<spot>.png at 1280x720 (3x pixels) for every spot.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
@@ -26,7 +26,7 @@ const SPOTS = [
   { name: 'yard', x: 800, y: 860, herd: ['sheep', 900, 850, 6], yard: true },
 ];
 
-const PORT = Number(process.env.SHOT_PORT || 5197);
+const PORT = Number(process.env.SHOT_PORT || 5189);
 const server = await createServer({ server: { port: PORT, strictPort: true }, logLevel: 'error' });
 await server.listen();
 mkdirSync(out, { recursive: true });
@@ -39,7 +39,7 @@ await page.goto(`http://localhost:${PORT}/?debug`);
 await page.waitForFunction(() => window.game);
 for (const s of SPOTS) {
   if (only && !only.includes(s.name)) continue;
-  await page.evaluate(({ s, night, dusk, t, tier }) => {
+  await page.evaluate(({ s, night, dusk, t, tier, day }) => {
     const g = window.game;
     g.setTier(tier);
     g.tut = 99;
@@ -51,6 +51,7 @@ for (const s of SPOTS) {
     g.predators.length = 0;
     g.day.phase = 'day';
     g.day.t = t;
+    g.day.day = Number(day);
     if (dusk) { g.day.t = 290; g.day.phase = 'dusk'; }
     if (night) { g.day.startNight(); g.quietT = -1e9; g.banner = null; }
     g.spawnFlock(...s.herd);
@@ -75,7 +76,7 @@ for (const s of SPOTS) {
     g.dog.y = s.y + 20;
     g.cam.x = s.x;
     g.cam.y = s.y;
-  }, { s, night: flag('night'), dusk: flag('dusk'), t: Number(opt('t', '60')), tier: Number(opt('tier', '5')) });
+  }, { s, night: flag('night'), dusk: flag('dusk'), t: Number(opt('t', '60')), tier: Number(opt('tier', '5')), day: opt('day', '1') });
   await page.waitForTimeout(Number(opt('wait', '700')));
   await page.evaluate(({ x, y }) => { const g = window.game; g.cam.x = x; g.cam.y = y; g.banner = null; }, s);
   await page.waitForTimeout(60);
