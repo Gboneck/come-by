@@ -8,6 +8,10 @@ import { wrap } from '../gfx/font';
 import { touchLayout } from './touch';
 import { safeArea } from './safe';
 import { coachHint, drawCoach } from './coach';
+import { jobCard } from './jobs';
+import { skyIcon } from './icons';
+import { CALM_MAX } from '../systems/trials';
+import { clamp } from '../util';
 
 // Rasterised triangle arrow pointing along `ang`.
 export function arrow(g: CanvasRenderingContext2D, cx: number, cy: number, ang: number, size: number, color: string) {
@@ -90,12 +94,14 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
 
   // ---- Clock (top-left) ----
   const d = game.day;
-  panel(g, L, T, 52, 18);
+  panel(g, L, T, 62, 18);
   text(g, `DAY ${d.day}`, L + 4, T + 3, C.wool);
   const resting = game.rest > 1.5;
   text(g, d.clock(), L + 49, T + 3, d.phase === 'dusk' || resting ? C.butter : C.wool, { align: 'right' });
+  // Today's sky, at the end of the clock.
+  skyIcon(g, game.weather.sky, L + 52, T + 2, d.phase === 'night');
   // Resting: the clock runs fast.
-  if (resting && Math.floor(game.t * 4) % 2 === 0) text(g, '>>', L + 55, T + 3, C.butter, { shadow: C.plum });
+  if (resting && Math.floor(game.t * 4) % 2 === 0) text(g, '>>', L + 65, T + 3, C.butter, { shadow: C.plum });
   // Sun track: day in sage, dusk in teal; a sun dot travels along it.
   const tx = L + 4, tky = T + 12, tw = 44;
   rect(g, tx, tky, tw, 2, C.sage);
@@ -172,15 +178,25 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     cardY += bh + 2;
   }
 
+  // ---- Orders and trials: the day's jobs, under the goal ----
+  cardY += jobCard(game, g, L, cardY, W);
+
   // ---- Flock card: how they feel now, and what they will pay ----
   if (gr) {
     const sp = gr.members[0].sp;
     const n = gr.members.length;
     const peak = gr.members.reduce((s, a) => s + a.peakStress, 0) / n;
     const pay = calmRating(peak);
-    const col = pay.mult > 1 ? C.butter : C.wool;
+    let col: string = pay.mult > 1 ? C.butter : C.wool;
     const label = `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}`;
-    const mood = `${pay.label} X${pay.mult}`;
+    let mood = `${pay.label} X${pay.mult}`;
+    const run = game.trials.run;
+    if (run && gr.members[0].trial) {
+      // On the course the flock earns calm points, not pay.
+      const calm = Math.round(CALM_MAX * clamp(1 - (run.t > 0 ? run.stressT / run.t : 0) / 0.45, 0, 1));
+      mood = `CALM ${calm}/${CALM_MAX}`;
+      col = calm >= CALM_MAX * 0.7 ? C.butter : C.wool;
+    }
     const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8;
     panel(g, L, cardY, w, 19);
     text(g, label, L + 4, cardY + 3, C.wool);
@@ -233,11 +249,10 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
     const sc = textWidth(b.big, 2) <= W - 8 ? 2 : 1;
     // Big moments land with a stamp: one size up for a few frames.
-    const stamp = b.big === "THAT'LL DO!" && age < 0.09 && textWidth(b.big, sc + 1) <= W - 8 ? 1 : 0;
+    const stamp = b.big.endsWith('!') && age < 0.09 && textWidth(b.big, sc + 1) <= W - 8 ? 1 : 0;
     text(g, b.big, W / 2, y - stamp * 3, C.butter, { align: 'center', scale: sc + stamp, shadow: C.plum });
     if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, y + 7 * sc + 4 + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
   }
-  f.drawTop(g);
 }
 
 // Tier-up: what you reached and everything it brings, for a few seconds.

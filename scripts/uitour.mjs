@@ -126,6 +126,100 @@ const STATES = {
       return 240;
     },
   },
+  order: {
+    fn: async () => {
+      const g = window.game;
+      const o = await import('/src/systems/orders.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.orders.list = [{ id: 1, yard: 'mill', species: 'sheep', n: 4, due: o.hourToT(12), got: 1, paid: 9, state: 'open' }];
+      g.animals = g.animals.filter((a) => a.pen);
+      g.spawnFlock('sheep', g.dog.x + 30, g.dog.y + 20, 5);
+      g.place = null;
+      return 30;
+    },
+  },
+  orderpen: {
+    fn: async () => {
+      const g = window.game;
+      const o = await import('/src/systems/orders.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      const pen = g.ranch.pens[0];
+      g.animals = [];
+      g.spawnFlock('sheep', pen.cx, pen.cy, 5);
+      for (let i = 0; i < 60; i++) g.update(1 / 60);
+      g.orders.list = [{ id: 1, yard: 'drover', species: 'sheep', n: 3, due: o.hourToT(13), got: 0, paid: 0, state: 'open' }];
+      const gp = pen.gatePoint(30);
+      g.dog.x = gp.x; g.dog.y = gp.y; g.cam.x = gp.x; g.cam.y = gp.y;
+      g.place = null; g.banner = null;
+      return 30;
+    },
+  },
+  trialday: {
+    fn: () => {
+      const g = window.game;
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      g.animals = g.animals.filter((a) => a.pen);
+      g.place = null; g.banner = null;
+      return 30;
+    },
+  },
+  atpost: {
+    fn: () => {
+      const g = window.game;
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      const p = g.ranch.course.post;
+      g.dog.x = p.x; g.dog.y = p.y + 6; g.cam.x = p.x; g.cam.y = p.y;
+      return 60;
+    },
+  },
+  trialrun: {
+    fn: async () => {
+      const g = window.game;
+      const tr = await import('/src/systems/trials.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      const p = g.ranch.course.post;
+      g.dog.x = p.x; g.dog.y = p.y + 6; g.cam.x = p.x; g.cam.y = p.y;
+      tr.startRun(g);
+      for (let i = 0; i < 90; i++) g.update(1 / 60);
+      g.banner = null;
+      return 30;
+    },
+  },
+  trialresult: {
+    fn: async () => {
+      const g = window.game;
+      const tr = await import('/src/systems/trials.ts');
+      g.setTier(2, false);
+      g.tut = 9; g.tip = null;
+      g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
+      const p = g.ranch.course.post;
+      g.dog.x = p.x; g.dog.y = p.y + 6; g.cam.x = p.x; g.cam.y = p.y;
+      tr.startRun(g);
+      const r = g.trials.run;
+      r.scores = [8, 15, 10, 10, 15, 20]; r.penned = true; r.t = 95;
+      tr.endRun(g, false);
+      return 60;
+    },
+  },
+  rest: {
+    fn: () => {
+      const g = window.game;
+      g.tut = 9; g.tip = null;
+      g.animals = g.animals.filter((a) => a.pen);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ' }));
+      return 200;
+    },
+  },
+  rain: { query: 'debug&weather=rain', fn: () => { window.game.tut = 9; window.game.tip = null; return 30; } },
+  fog: { query: 'debug&weather=fog', fn: () => { const g = window.game; g.tut = 9; g.tip = null; g.weather.forecast = 'storm'; g.endDay(); return 120; } },
   tierup: {
     fn: () => {
       const g = window.game;

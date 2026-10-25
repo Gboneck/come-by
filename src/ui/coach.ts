@@ -4,24 +4,53 @@ import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import type { Group } from '../entities/animal';
 import { arrow } from './hud';
+import { buzz } from './settings';
+import { orderFor, penGateAt, yardOf } from '../systems/orders';
+import { PARTS, atPost, currentClass } from '../systems/trials';
 
-// In-the-moment coaching: a marker showing where to stand to drive the
-// flock, key caps and pulsing buttons for the move a hint asks for, and
+// In-the-moment coaching: markers showing where to stand or where the flock
+// goes next, key caps and pulsing buttons for the move a hint asks for, and
 // one-time tips when the player does the thing the tip is about.
+
+interface Target { x: number; y: number; label: string; ang?: number } // ang: point in along it
+
+// The next thing on the trial course, while a run is on.
+export function trialTarget(game: Game): Target | null {
+  const r = game.trials.run;
+  const part = r && PARTS[r.step];
+  if (!r || !part || r.endT > 0) return null;
+  const c = game.ranch.course;
+  if (part.id === 'post') return { x: c.post.x, y: c.post.y, label: 'POST' };
+  if (part.id === 'pen') {
+    const gp = c.pen.gatePoint(8);
+    return { x: gp.x, y: gp.y, label: 'PEN', ang: Math.atan2(c.pen.cy - gp.y, c.pen.cx - gp.x) };
+  }
+  const gt = c.gates.find((x) => x.id === (part.id === 'lift' ? 'fetch' : part.id))!;
+  return { x: gt.x, y: gt.y, label: part.id === 'lift' ? 'FETCH GATE' : part.short, ang: Math.atan2(gt.dy, gt.dx) };
+}
+
+// Where this flock should be heading: the course, a buyer's yard, or home.
+function flockTarget(game: Game, gr: Group): { x: number; y: number } | null {
+  const a = gr.members[0];
+  if (a.trial) return trialTarget(game);
+  const o = orderFor(game, a.sp.id);
+  if (o) return yardOf(game, o.yard).pen.gatePoint(10);
+  const pen = game.ranch.pens.find((p) => p.hasRoomFor(a));
+  return pen ? pen.gatePoint(10) : null;
+}
 
 interface Drive {
   gr: Group;
-  spot: { x: number; y: number }; // where to stand to push them home
-  behind: number; // cos of the dog's angle from the "push home" side
+  spot: { x: number; y: number }; // where to stand to push them on
+  behind: number; // cos of the dog's angle from the "push on" side
   gate: { x: number; y: number };
 }
 
 function driveInfo(game: Game): Drive | null {
   const gr = game.nearestGroup(150);
   if (!gr) return null;
-  const pen = game.ranch.pens.find((p) => p.hasRoomFor(gr.members[0]));
-  if (!pen) return null;
-  const gate = pen.gatePoint(10);
+  const gate = flockTarget(game, gr);
+  if (!gate) return null;
   let bx = gr.x - gate.x, by = gr.y - gate.y;
   const bl = Math.hypot(bx, by) || 1;
   bx /= bl;
@@ -34,12 +63,50 @@ function driveInfo(game: Game): Drive | null {
   return { gr, spot: { x: gr.x + bx * back, y: gr.y + by * back }, behind: (dx * bx + dy * by) / dl, gate };
 }
 
+// A ranch pen holding stock that an open order wants, gate still shut.
+function orderPen(game: Game) {
+  for (const o of game.orders.open) {
+    const p = game.ranch.pens.find((x) => x.species === o.species && x.animals.length && !x.letOut);
+    if (p) return p;
+  }
+  return null;
+}
+
 let frontT = 0;
 let stressT = 0;
+let lastRun: unknown = null;
+let penned = false;
+let sold = -1;
+
+// The big moments of the jobs get the same kick and buzz as a pen gate.
+function watchJobs(game: Game) {
+  const r = game.trials.run;
+  if (r !== lastRun) {
+    lastRun = r;
+    penned = false;
+  }
+  // The run's own coaching takes the hint line from any tip on the way in.
+  if (r && r.t < 1) game.tip = null;
+  if (r?.penned && !penned) {
+    penned = true;
+    game.feel.kick(0, 2, 0.16);
+    game.feel.moment = 1.6;
+    buzz(game.input.touchMode, [18, 50, 36]);
+  }
+  const n = game.totals.orders ?? 0;
+  if (sold >= 0 && n > sold) {
+    game.feel.kick(0, 2, 0.16);
+    buzz(game.input.touchMode, [18, 50, 36]);
+  }
+  sold = n;
+  if (game.ranch.pens.some((p) => p.letOut)) game.tipsSeen.add('c-letout');
+}
 
 // One-time tips, shown through the hint line when they apply.
 export function updateCoach(game: Game, dt: number) {
-  if (game.tip || game.demo) return;
+  if (game.demo) return;
+  watchJobs(game);
+  if (game.tip) return;
   const seen = game.tipsSeen;
   const touch = game.input.touchMode;
   const dr = driveInfo(game);
@@ -51,9 +118,11 @@ export function updateCoach(game: Game, dt: number) {
     frontT = stressT = 0;
     return;
   }
+  const trial = !!dr.gr.members[0].trial;
   const near = Math.hypot(game.dog.x - dr.gr.x, game.dog.y - dr.gr.y) < dr.gr.members[0].sp.flight * 1.6 + 10;
-  // Standing between the flock and home pushes them the wrong way.
-  frontT = near && dr.behind < -0.3 && game.tut >= 2 ? frontT + dt : 0;
+  // Standing between the flock and where it is going pushes it back. (A
+  // trial outrun starts in front by design, so not there.)
+  frontT = near && dr.behind < -0.3 && game.tut >= 2 && !trial ? frontT + dt : 0;
   if (frontT > 2.5 && !seen.has('c-front') && game.tier <= 2)
     tip('c-front', 'YOU ARE IN FRONT, SO THEY TURN BACK. GO ROUND TO THE FAR SIDE.');
   stressT = dr.gr.stress > 0.55 ? stressT + dt : 0;
@@ -79,6 +148,12 @@ export function coachButton(game: Game): 'bark' | 'nip' | 'lie' | null {
   if (game.tut === 2 || game.tip?.text.includes('HOLD DOWN')) return 'lie';
   if (game.tut === 6 && game.coins < 20 && game.inRanch() && game.rest === 1) return 'lie';
   if (game.tip?.text.includes('NIP')) return 'nip';
+  if (game.day.phase !== 'night') {
+    // At the crook, or at the gate of a pen whose stock a buyer wants.
+    if (!game.trials.run && atPost(game) && currentClass(game)) return 'nip';
+    const p = penGateAt(game);
+    if (p && p === orderPen(game)) return 'nip';
+  }
   if (game.day.phase === 'night' && game.tier <= 3) {
     const d = game.dog;
     if (game.predators.some((p) => p.active && p.state !== 'flee' && Math.hypot(p.x - d.x, p.y - d.y) < d.stats.barkRange)) return 'bark';
@@ -93,33 +168,82 @@ function coachKey(game: Game): string | null {
   return b === 'lie' ? 'HOLD Q' : b === 'nip' ? 'E' : b === 'bark' ? 'SPACE' : null;
 }
 
+// A bobbing arrow down onto a spot, with a ring and a label.
+function marker(g: CanvasRenderingContext2D, W: number, x: number, y: number, label: string, t: number, ringed = true) {
+  if (ringed) ring(g, x, y, 4 + (Math.floor(t * 3) % 2), C.butter, 4);
+  const bob = Math.floor(t * 4) % 2;
+  arrow(g, x + 1, y - 9 - bob + 1, Math.PI / 2, 4, C.plum);
+  arrow(g, x, y - 9 - bob, Math.PI / 2, 4, C.butter);
+  if (label) {
+    const hw = textWidth(label) / 2;
+    text(g, label, Math.max(hw + 2, Math.min(W - hw - 2, x)), y - 20 - bob, C.wool, { align: 'center', shadow: C.plum });
+  }
+}
+
+// A chevron leading in through a gateway along `ang`. The label goes on
+// the near side, out beyond the chevron, so it never sits on the stock.
+function pointer(g: CanvasRenderingContext2D, W: number, x: number, y: number, ang: number, label: string, t: number) {
+  const bob = Math.floor(t * 4) % 2;
+  const cx = Math.cos(ang), cy = Math.sin(ang);
+  const ax = Math.round(x - cx * (9 + bob)), ay = Math.round(y - cy * (9 + bob));
+  arrow(g, ax + 1, ay + 1, ang, 4, C.plum);
+  arrow(g, ax, ay, ang, 4, C.butter);
+  if (label) {
+    const hw = textWidth(label) / 2;
+    const lx = x - cx * 20, ly = y - cy * 20 + (cy < -0.5 ? 2 : cy > 0.5 ? -8 : -3);
+    text(g, label, Math.max(hw + 2, Math.min(W - hw - 2, lx)), ly, C.wool, { align: 'center', shadow: C.plum });
+  }
+}
+
 // World-anchored markers, drawn with the HUD.
 export function drawCoach(game: Game, g: CanvasRenderingContext2D) {
-  if (game.mode !== 'play') return;
-  const { ox, oy } = game.view();
+  if (game.mode !== 'play' || game.trials.result) return;
+  const { ox, oy, W, H } = game.view();
   const t = game.t;
+  const on = (x: number, y: number) => x > -20 && x < W + 20 && y > -20 && y < H + 20;
   if (game.tut === 1) {
     const dr = driveInfo(game);
-    if (dr && dr.behind <= 0.7) {
-      const x = Math.round(dr.spot.x - ox), y = Math.round(dr.spot.y - oy);
-      ring(g, x, y, 4 + (Math.floor(t * 3) % 2), C.butter, 4);
-      const bob = Math.floor(t * 4) % 2;
-      arrow(g, x + 1, y - 9 - bob + 1, Math.PI / 2, 4, C.plum);
-      arrow(g, x, y - 9 - bob, Math.PI / 2, 4, C.butter);
-      text(g, 'HERE', x, y - 20 - bob, C.wool, { align: 'center', shadow: C.plum });
-    }
+    if (dr && dr.behind <= 0.7) marker(g, W, Math.round(dr.spot.x - ox), Math.round(dr.spot.y - oy), 'HERE', t);
   }
   if (game.tut === 3) {
     const dr = driveInfo(game);
     if (dr) {
-      const gx = Math.round(dr.gate.x - ox), gy = Math.round(dr.gate.y - oy);
-      const bob = Math.floor(t * 4) % 2;
-      // Chevron pointing in through the open gate.
-      const pen = game.ranch.pens.find((p) => p.hasRoomFor(dr.gr.members[0]))!;
-      const ang = Math.atan2(pen.cy - dr.gate.y, pen.cx - dr.gate.x);
-      const ax = Math.round(gx - Math.cos(ang) * (8 + bob)), ay = Math.round(gy - Math.sin(ang) * (8 + bob));
-      arrow(g, ax + 1, ay + 1, ang, 4, C.plum);
-      arrow(g, ax, ay, ang, 4, C.butter);
+      const pen = game.ranch.pens.find((p) => p.hasRoomFor(dr.gr.members[0]));
+      if (pen) pointer(g, W, Math.round(dr.gate.x - ox), Math.round(dr.gate.y - oy), Math.atan2(pen.cy - dr.gate.y, pen.cx - dr.gate.x), '', t);
+    }
+  }
+  const night = game.day.phase === 'night';
+  // A run: the next gate, the post or the pen.
+  const tt = trialTarget(game);
+  if (tt) {
+    const x = Math.round(tt.x - ox), y = Math.round(tt.y - oy);
+    if (on(x, y)) {
+      if (tt.ang !== undefined) pointer(g, W, x, y, tt.ang, tt.label, t);
+      else marker(g, W, x, y - 6, tt.label, t, false);
+    }
+  } else if (!game.trials.run && !night && currentClass(game) && game.map.regionAt(game.dog.x, game.dog.y)?.id === 'show' && !atPost(game)) {
+    // At the Show Ground: stand here, by the crook, to start a run.
+    const p = game.ranch.course.post;
+    const x = Math.round(p.x - ox), y = Math.round(p.y + 4 - oy);
+    if (on(x, y)) marker(g, W, x, y, 'HERE', t);
+  }
+  if (!night && !game.trials.run) {
+    // A buyer wants what is in this pen: show how to let them out (until
+    // the player has done it once).
+    const p = orderPen(game);
+    if (p && !game.tipsSeen.has('c-letout') && penGateAt(game) !== p) {
+      const gp = p.gatePoint(2);
+      const x = Math.round(gp.x - ox), y = Math.round(gp.y - oy);
+      if (on(x, y)) pointer(g, W, x, y, Math.atan2(p.cy - gp.y, p.cx - gp.x), `${game.input.touchMode ? 'NIP' : 'E'} HOLDS THE GATE OPEN`, t);
+    }
+    // Driving a buyer's stock: in through the yard gate.
+    const gr = game.nearestGroup(90);
+    const o = gr && !gr.members[0].trial ? orderFor(game, gr.species) : undefined;
+    if (o) {
+      const pen = yardOf(game, o.yard).pen;
+      const gp = pen.gatePoint(8);
+      const x = Math.round(gp.x - ox), y = Math.round(gp.y - oy);
+      if (on(x, y)) pointer(g, W, x, y, Math.atan2(pen.cy - gp.y, pen.cx - gp.x), yardOf(game, o.yard).site.name, t);
     }
   }
   const key = coachKey(game);

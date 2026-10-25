@@ -93,14 +93,14 @@ export class Feel {
   // ---- Coins ----
 
   // A coin flies from a screen point to the purse; the counter waits for it.
-  flyCoins(sx: number, sy: number, value: number, pieces = 1) {
+  flyCoins(sx: number, sy: number, value: number, pieces = 1, delay = 0) {
     const n = Math.max(1, Math.min(pieces, value, 6));
     let left = value;
     for (let i = 0; i < n; i++) {
       const v = i === n - 1 ? left : Math.floor(value / n);
       left -= v;
       this.pending += v;
-      this.flying.push({ x0: sx + (Math.random() - 0.5) * 6, y0: sy, t: -i * 0.07, max: 0.55 + Math.random() * 0.1, value: v, arc: 14 + Math.random() * 10 });
+      this.flying.push({ x0: sx + (Math.random() - 0.5) * 6, y0: sy, t: -delay - i * 0.07, max: 0.55 + Math.random() * 0.1, value: v, arc: 14 + Math.random() * 10 });
     }
   }
 

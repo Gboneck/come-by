@@ -1,10 +1,11 @@
 import { C } from '../palette';
 import { panel, rect } from '../gfx/draw';
-import { text } from '../gfx/font';
+import { text, textWidth } from '../gfx/font';
 import type { DayStats, Game } from '../game';
 import { SPECIES, SPECIES_ORDER } from '../entities/species';
 import { nextGoal } from '../systems/progression';
 import { drawCover } from './feel';
+import { SKY_WORD, skyIcon } from './icons';
 
 export interface Summary {
   day: number;
@@ -50,7 +51,7 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   const goal = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : null;
   const build = s.buildable ?? [];
   const bh = touch ? 15 : 13;
-  const ph = 30 + lines.length * 8 + (goal ? 12 : 0) + (build.length ? 12 + Math.ceil(build.length / 2) * 8 : 0) + bh + 9;
+  const ph = 30 + lines.length * 8 + 5 + (goal ? 7 : 0) + 9 + (build.length ? 12 + Math.ceil(build.length / 2) * 8 : 0) + bh + 9;
   const px0 = Math.round(W / 2 - pw / 2);
   // The card drops in as the fade clears.
   const drop = Math.round(Math.max(0, 1 - age / 0.25) * -16);
@@ -68,15 +69,23 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
     y += 8;
   });
   const late = age >= (lines.length + 2) * ROW_STEP;
+  // What comes next: the goal, and tomorrow's sky.
+  rect(g, px0 + 6, y + 1, pw - 12, 1, C.sage);
+  y += 5;
   if (goal) {
-    rect(g, px0 + 6, y + 1, pw - 12, 1, C.sage);
-    y += 5;
     if (late) {
       text(g, 'NEXT GOAL', px0 + 8, y, C.sage);
       text(g, goal, px0 + pw - 8, y, C.wool, { align: 'right', iconColor: C.butter });
     }
     y += 7;
   }
+  if (late) {
+    const sky = game.weather.forecast, word = SKY_WORD[sky];
+    text(g, 'TOMORROW', px0 + 8, y + 1, C.sage);
+    text(g, word, px0 + pw - 8, y + 1, C.wool, { align: 'right' });
+    skyIcon(g, sky, px0 + pw - 8 - textWidth(word) - 10, y);
+  }
+  y += 9;
   if (build.length) {
     rect(g, px0 + 6, y + 1, pw - 12, 1, C.sage);
     y += 5;

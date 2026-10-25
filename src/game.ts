@@ -38,7 +38,7 @@ import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsUpdate } from './systems/jobs';
-import { drawJobs } from './ui/jobs';
+import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
 import { courseDrawables } from './art/course';
 import type { Drawable } from './art/buildings';
 
@@ -446,7 +446,10 @@ export class Game {
     if (this.trials.result) {
       // Trial result card: everything waits until it is closed.
       this.fx.update(dt);
-      if (this.input.pressed('confirm') || this.input.pressed('bark') || this.input.pressed('cancel')) closeResult(this);
+      // A beat before it takes input, so a press at the end of the run
+      // does not skip the judge's card.
+      if (resultAge(this, dt) < RESULT_READY) this.input.clearQueue();
+      else if (this.input.pressed('confirm') || this.input.pressed('bark') || this.input.pressed('cancel')) closeResult(this);
       return;
     }
     if (this.input.pressed('ledger')) {
