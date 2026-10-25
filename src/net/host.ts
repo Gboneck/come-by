@@ -194,7 +194,7 @@ export class HostNet {
     if (kind === K_JSON) {
       const m = JSON.parse(r.str()) as { t: string; name?: string; look?: Partial<Look> };
       if (m.t === 'hello') {
-        s.name = String(m.name ?? s.name).slice(0, 10);
+        s.name = this.uniqueName(String(m.name ?? s.name).slice(0, 10) || 'DOG', slot);
         s.look = readLook({ name: s.name, dog: m.look?.dog });
         if (!s.dog) {
           const d = new Dog(0, 0);
@@ -227,6 +227,13 @@ export class HostNet {
         this.guestEvent(s, e);
       }
     }
+  }
+
+  // Two dogs called BLUE would be one too many: the second is BLUE 2.
+  private uniqueName(name: string, slot: number): string {
+    const taken = new Set([this.name, ...[...this.seats.values()].filter((s) => s.slot !== slot && s.dog).map((s) => s.name)]);
+    if (!taken.has(name)) return name;
+    for (let n = 2; ; n++) if (!taken.has(`${name.slice(0, 8)} ${n}`)) return `${name.slice(0, 8)} ${n}`;
   }
 
   // Where a guest's dog stands at the farmhouse door.
@@ -444,7 +451,19 @@ export class HostNet {
     const game = this.game;
     if (!this.dogs.length) return;
     const b = game.banner;
-    if (b && b !== this.banner && !LOCAL_BANNER.test(b.big)) this.events.push(['b', b.big, b.small ?? '', b.max]);
+    if (b && b !== this.banner && !LOCAL_BANNER.test(b.big)) {
+      // A pen shut: the dog nearest its gate gets the "that'll do".
+      if (b.big === "THAT'LL DO!") {
+        const pen = [...game.ranch.pens].sort((p, q) => q.shutFlash - p.shutFlash)[0];
+        if (pen) {
+          const gp = pen.gatePoint(0);
+          const near = (d: Dog) => Math.hypot(d.x - gp.x, d.y - gp.y);
+          const best = this.dogs.reduce<Dog>((m, d) => (near(d) < near(m) ? d : m), game.dog);
+          b.big = `THAT'LL DO, ${best === game.dog ? this.name : best.tag}!`;
+        }
+      }
+      this.events.push(['b', b.big, b.small ?? '', b.max]);
+    }
     this.banner = b;
     game.folk.people.forEach((p, i) => {
       if (p.bubble && this.bubbles.get(p) !== p.bubble) this.events.push(['say', i, p.bubble.text, +p.bubble.max.toFixed(2)]);

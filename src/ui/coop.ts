@@ -262,6 +262,7 @@ export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer
   if (net.status === 'reconnecting') return card(game, g, W, H, 'RECONNECTING...', ['THE LINE TO YOUR FRIEND DROPPED. HANG ON.'], false);
   if (net.status === 'away') return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR CONNECTION DROPPED. THE RANCH WAITS A LITTLE FOR THEM.']);
   if (!net.ready) return card(game, g, W, H, 'WALKING OVER...', [`TO ${host}'S RANCH`]);
+  if (net.stale) return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR GAME HAS STOPPED FOR A MOMENT. MAYBE THEIR SCREEN WENT TO SLEEP.']);
   const m = net.hostMode;
   if (m === 'summary') summaryCard(game, g, W, H, host);
   else if (m === 'build') card(game, g, W, H, `${host} IS BUILDING`, [`${tierOf(game.tier).name}: ${game.coins}$ IN THE PURSE`, 'THE HERD WAITS TILL THEY ARE DONE.']);

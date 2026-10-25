@@ -163,6 +163,12 @@ await guest.evaluate(({ f }) => {
   g.dog.y = f.y + 60;
 }, { f: setup.flock });
 const sample = () => host.evaluate(() => ({ x: window.game.animals.reduce((s, a) => s + a.x, 0) / window.game.animals.length, y: window.game.animals.reduce((s, a) => s + a.y, 0) / window.game.animals.length, guest: { x: window.game.coop[0]?.x, y: window.game.coop[0]?.y }, src: window.game.coop.length }));
+// What the guest hears (the host's sounds come across with the snapshots).
+await guest.evaluate(() => {
+  const a = window.game.audio, play = a.play.bind(a);
+  window.__heard = [];
+  a.play = (n, o) => { window.__heard.push(n); return play(n, o); };
+});
 const before = await sample();
 const driving = drive(guest, setup.pen, 90);
 await wait(4000);
@@ -179,7 +185,47 @@ check('the pay lands on the host', after.coins > setup.coins, `${setup.coins}$ -
 const guestAfter = await guest.evaluate(() => ({ penned: window.game.animals.filter((a) => a.pen).length, coins: window.game.coins, save: localStorage.getItem('comeby-save-v1') }));
 check('the guest sees them penned and the purse', guestAfter.penned === 6 && guestAfter.coins === after.coins, JSON.stringify({ penned: guestAfter.penned, coins: guestAfter.coins }));
 check("the guest's own save is untouched", guestAfter.save === guestSave);
+const heard = await guest.evaluate(() => [...new Set(window.__heard)]);
+check("the guest hears the pen fill (coins, the whistle)", heard.includes('coin') && heard.includes('thatlldo'), heard.join(','));
+if (SHOTS) {
+  await guest.keyboard.press('KeyG');
+  await wait(400);
+  await guest.screenshot({ path: `${root}shots/coop/guest-ledger.png` });
+  await guest.keyboard.press('KeyG');
+  await wait(200);
+  await guest.keyboard.press('Escape');
+  await wait(400);
+  await guest.screenshot({ path: `${root}shots/coop/guest-pause.png` });
+  await guest.keyboard.press('Escape');
+  await wait(200);
+  check('the guest can open and close the Ledger and pause', await guest.evaluate(() => window.game.mode === 'play'));
+}
 if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-penned.png` });
+const credit = await host.evaluate(() => window.game.banner?.big ?? '');
+check("the that'll do goes to the dog that drove them", credit === "THAT'LL DO, ZIGGY!", credit);
+
+// ---- The host ends the day: the guest waits on the card, then a new morning ----
+await host.evaluate(() => window.game.endDay());
+await guest.waitForFunction(() => window.game.net.hostMode === 'summary' && window.game.summary, null, { timeout: 5000 }).catch(() => {});
+const sum = await guest.evaluate(() => ({ mode: window.game.net.hostMode, day: window.game.summary?.day, free: window.game.net.waiting }));
+check('host at the summary: the guest sees the card and waits', sum.mode === 'summary' && sum.day === 1 && sum.free, JSON.stringify(sum));
+if (SHOTS) {
+  await wait(500);
+  await guest.screenshot({ path: `${root}shots/coop/guest-summary.png` });
+}
+await host.evaluate(() => window.game.startDay());
+await guest.waitForFunction(() => window.game.day.day === 2 && window.game.net.hostMode === 'play', null, { timeout: 5000 }).catch(() => {});
+const morning = await guest.evaluate(() => { const g = window.game, d = g.doorPoint(); return { day: g.day.day, fromDoor: Math.round(Math.hypot(g.dog.x - d.x, g.dog.y - d.y)) }; });
+check('a new morning: day 2, and the guest dog is back at the door', morning.day === 2 && morning.fromDoor < 40, JSON.stringify(morning));
+await host.evaluate(() => window.game.enterBuild());
+await guest.waitForFunction(() => window.game.net.hostMode === 'build', null, { timeout: 5000 }).catch(() => {});
+check('host building: the guest is told to wait', await guest.evaluate(() => window.game.net.hostMode === 'build' && window.game.net.waiting));
+if (SHOTS) {
+  await wait(400);
+  await guest.screenshot({ path: `${root}shots/coop/guest-host-building.png` });
+}
+await host.evaluate(() => window.game.exitBuild());
+await host.evaluate(() => { window.game.day.t = 20; });
 
 // ---- Snapshot size and rate ----
 const rate = await host.evaluate(async () => {
@@ -289,6 +335,9 @@ await host.evaluate(async () => {
   for (let i = 0; i < 6; i++) g.animals.push(new Animal('sheep', gp.x - 60 + (i % 3) * 9 - 9, gp.y + 80 + Math.floor(i / 3) * 9 - 4));
 });
 guest = await joinGuest(`&lag=${LAG}`);
+// The host pauses: with a friend here, the world goes on.
+await host.keyboard.press('Escape');
+await host.waitForFunction(() => window.game.mode === 'pause');
 await guest.evaluate(({ f }) => {
   const g = window.game;
   g.dog.x = f.x - 20;
@@ -297,7 +346,7 @@ await guest.evaluate(({ f }) => {
 const lagRes = await drive(guest, setup.pen, 120);
 await wait(1500);
 const lagPenned = await host.evaluate(() => window.game.ranch.pens[0].animals.length);
-check(`with ${LAG}ms each way on the guest's line, the drive still pens them`, lagPenned === 6, `${lagPenned}/6 in ${lagRes.t}s`);
+check(`with ${LAG}ms each way on the guest's line (host paused), the drive still pens them`, lagPenned === 6, `${lagPenned}/6 in ${lagRes.t}s`);
 
 // ---- The host closes the ranch: the guest is told, and goes home ----
 await host.evaluate(() => window.game.net.close());

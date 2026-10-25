@@ -13,7 +13,7 @@ import { SKIES } from '../systems/weather';
 import { CLASSES, type Run } from '../systems/trials';
 import { tierOf } from '../systems/progression';
 import type { StingerKind } from '../systems/music';
-import { readLook, type Look } from '../ui/look';
+import { DOG_NAMES, pickName, readLook, type Look } from '../ui/look';
 import { pauseKeys } from '../ui/title';
 import { resultAge } from '../ui/jobs';
 import { buzz } from '../ui/settings';
@@ -104,12 +104,16 @@ export class GuestNet {
   private groupT = 0;
   private home: { x: number; y: number } | null = null;
   private lastTier = 0;
+  private lastSnap = 0;
   private id = playerId();
   readonly look: Look; // our own dog, from our own save
   readonly base_: string | null = relayBase();
 
   constructor(public code: string) {
-    this.look = readLook(saveInfo()?.look);
+    const saved = saveInfo()?.look;
+    this.look = readLook(saved);
+    // No dog of our own yet: not BLUE as well (the host's most likely is).
+    if (!saved?.name) this.look.name = pickName(DOG_NAMES, 'BLUE');
     joining = this;
     this.connect();
   }
@@ -214,6 +218,7 @@ export class GuestNet {
       this.base = next;
     }
     const now = performance.now();
+    this.lastSnap = now;
     const off = now - s.t;
     if (this.offset === null || off < this.offset) this.offset = off;
     else this.offset += (off - this.offset) * 0.01; // creep up if the line slows
@@ -224,6 +229,12 @@ export class GuestNet {
 
   get ready(): boolean {
     return !!this.world && !!this.base && this.frames.length > 0;
+  }
+
+  // Connected, but the host's game has stopped sending (their phone went
+  // to sleep, or their tab is in the background).
+  get stale(): boolean {
+    return this.status === 'playing' && this.ready && performance.now() - this.lastSnap > 1500;
   }
 
   // ---- Into the game ----
@@ -344,7 +355,7 @@ export class GuestNet {
     } else game.mode = 'play';
 
     // Our own dog, moved here. Not while everyone waits on the host.
-    const free = game.mode === 'play' && this.status === 'playing' && this.ready && !this.waiting;
+    const free = game.mode === 'play' && this.status === 'playing' && this.ready && !this.waiting && !this.stale;
     if (!free) input.clearQueue();
     const d = game.dog;
     d.update(dt, input, game.map, game.fx, free);

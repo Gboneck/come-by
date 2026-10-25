@@ -179,7 +179,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   }
 
   // ---- Build button (on the ranch) ----
-  if (game.inRanch()) {
+  if (game.inRanch() && game.net?.role !== 'guest') {
     const label = touch ? 'BUILD' : 'B: BUILD';
     const w = textWidth(label) + 8;
     bx -= w;
