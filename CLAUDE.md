@@ -18,7 +18,8 @@ original and drawn in code. No external art files, ever.
   Playwright screenshot + console-error check (writes to `shots/`).
 - URL switches: `?debug` exposes `window.game`, `window.sim` and
   `window.resetFlock` (see `src/debug.ts`) and skips the title (add
-  `&title` to keep it); `?play` skips the title; `?sprites=N` shows the
+  `&title` to keep it), and `&weather=rain|fog|wind|storm` holds a sky;
+  `?play` skips the title; `?sprites=N` shows the
   sprite sheet from row N; `?safe=top,right,bottom,left` fakes safe-area
   insets (CSS px) to check notched phones.
 - Scripts (all Playwright, all start their own Vite server):
@@ -120,7 +121,8 @@ stays unique.
 - `src/systems/` day cycle, economy, progression, save, audio (mixer and
   sound effects), music (generative score), soundscape, synth (sample bank),
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
-  orders), `jobs.ts` (where the game hooks into both).
+  orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
+  weather state everything else reads: `game.weather`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`

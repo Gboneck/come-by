@@ -35,6 +35,7 @@ import { updateCoach } from './ui/coach';
 import { botStep } from './bot';
 import { clamp, damp } from './util';
 import { Orders } from './systems/orders';
+import { Weather } from './systems/weather';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsUpdate } from './systems/jobs';
 import { drawJobs } from './ui/jobs';
@@ -133,6 +134,7 @@ export class Game {
   orders = new Orders();
   trials = new Trials();
   feel = new Feel();
+  weather = new Weather();
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
   private idleT = 0;
@@ -474,6 +476,7 @@ export class Game {
       this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
     this.updateRest(dt);
+    this.weather.update(dt);
     const dayEv = this.trials.run ? null : this.day.update(dt * this.rest); // the clock waits for a trial run
     if (dayEv === 'dusk') {
       this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);

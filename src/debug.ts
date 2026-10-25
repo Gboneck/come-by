@@ -8,6 +8,7 @@ import { SPECIES_ORDER, SPECIES } from './entities/species';
 import type { Game } from './game';
 import { runSim, type BotOpts } from './bot';
 import type { SpeciesId } from './world/map';
+import { SKIES, type Sky } from './systems/weather';
 
 declare global {
   interface Window {
@@ -21,6 +22,9 @@ export function installDebug(game: Game) {
   game.debug = true;
   window.game = game;
   window.sim = (o, seconds) => runSim(game, o, seconds);
+  // ?debug&weather=rain (fog, wind, storm) holds that sky.
+  const sky = new URLSearchParams(location.search).get('weather') as Sky | null;
+  if (sky && SKIES.includes(sky)) game.weather.force(sky);
   window.resetFlock = (species, x, y, n, dogX, dogY) => {
     game.animals.length = 0;
     game.mode = 'play';
