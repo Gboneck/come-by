@@ -4,6 +4,7 @@ import { text } from '../gfx/font';
 import { hash2 } from '../rng';
 import type { Drawable } from '../art/buildings';
 import { gust } from '../render/wind';
+import { seasonLook, snowCap } from '../art/seasonlook';
 import { TS } from '../world/map';
 
 // Little touches that make the ranch visibly grow with each tier. They do
@@ -70,6 +71,7 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       text(g, label, x + 1, y - 14, C.plum);
       px(g, x - 2, y - 15, C.butter);
       px(g, x + w - 3, y - 15, C.butter);
+      snowCap(g, x - 3, y - 17, w + 2, y - 7);
       break;
     }
     case 'mailbox':
@@ -89,10 +91,12 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       if (!night) px(g, x + 1, y - 13, C.sage);
       rect(g, x - 2, y - 14, 5, 1, C.plum);
       px(g, x, y - 15, C.plum);
+      snowCap(g, x - 2, y - 15, 5);
       break;
     }
     case 'flowers':
-      for (let i = 0; i < 7; i++) {
+      if (seasonLook.snow > 0.5) break;
+      for (let i = 0; i < (seasonLook.bloom > 0.5 ? 11 : 7); i++) {
         const fx = x - 5 + ((i * 5) % 11), fy = y - (i % 3);
         px(g, fx, fy, C.sage);
         // Heads nod as a gust goes by.
@@ -114,6 +118,7 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       px(g, x - 6, y + 1, C.butter);
       px(g, x + 6, y, C.butter);
       px(g, x + 2, y + 2, C.butter);
+      snowCap(g, x - 4, y - 5, 8);
       break;
     case 'well':
       rect(g, x - 6, y + 1, 11, 1, C.sage);
@@ -128,6 +133,7 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       rect(g, x - 6, y - 14, 12, 1, C.plum);
       rect(g, x - 5, y - 15, 10, 1, C.teal);
       rect(g, x - 3, y - 16, 6, 1, C.plum);
+      snowCap(g, x - 5, y - 16, 10, y - 13);
       rect(g, x - 4, y - 11, 8, 1, C.plum);
       rect(g, x, y - 10, 1, 4, C.wool);
       rect(g, x - 1, y - 7, 3, 2, C.teal);
@@ -142,6 +148,7 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       rect(g, x - 4, y - 6, 9, 1, C.plum);
       rect(g, x - 4, y - 5, 1, 2, C.plum);
       rect(g, x + 4, y - 5, 1, 2, C.plum);
+      snowCap(g, x - 4, y - 4, 9);
       break;
     case 'flag': {
       rect(g, x - 1, y + 1, 3, 1, C.sage);
@@ -198,6 +205,7 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       rect(g, x0, y0 + h - 2, w, 1, C.plum);
       rect(g, x0, y0 + 1, 1, h - 1, C.plum);
       rect(g, x0 + w - 1, y0 + 1, 1, h - 1, C.plum);
+      if (seasonLook.snow > 0.4) for (let yy = y0 + 1; yy < y0 + h - 2; yy++) for (let xx = x0 + 1; xx < x0 + w - 1; xx++) if (hash2(xx, yy, 9) < seasonLook.snow * 0.9) px(g, xx, yy, C.wool);
       break;
     }
     case 'barrels':
@@ -212,6 +220,8 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
       rect(g, x - 2, y - 11, 5, 5, C.plum);
       rect(g, x - 2, y - 11, 5, 1, C.wool);
       rect(g, x - 2, y - 8, 5, 1, C.wool);
+      snowCap(g, x - 5, y - 7, 10);
+      snowCap(g, x - 2, y - 12, 5);
       break;
     case 'cart': {
       // A hay cart resting on its shafts.
@@ -259,8 +269,9 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
         rect(g, hx - 3, y - 2, 7, 1, C.moss);
         rect(g, hx - 2, y - 4, 5, 1, C.moss);
         px(g, hx, y, C.plum);
+        snowCap(g, hx - 1, y - 7, 3);
       }
-      if (!night)
+      if (!night && seasonLook.snow < 0.3)
         for (let k = 0; k < 5; k++) {
           const bx = x + 6 + Math.round(Math.sin(t * (3 + k) + k * 2) * 10);
           const by = y - 6 + Math.round(Math.cos(t * (2.3 + k * 0.7) + k) * 4);

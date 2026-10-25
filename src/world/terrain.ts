@@ -43,6 +43,11 @@ export interface Baked {
   // Low spots on paths and banks where puddles gather in the rain.
   puddles: { x: number; y: number; r: number }[];
   groundPx: Uint32Array; // the baked ground's pixels (for the wet look)
+  // For the seasons (render/seasons.ts): the canopy's pixels and what owns
+  // each (1 forest, 2 broadleaf crown, 3 pine), and water depth from the bank.
+  canopyPx: Uint32Array;
+  canopyKind: Uint8Array;
+  waterDist: Uint8Array;
 }
 
 function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32Array {
@@ -695,7 +700,7 @@ function bakeWorld(map: WorldMap): Baked {
     waterAnims.push(makeWaterAnim(src, x0, y0, x1 - x0, y1 - y0, flowing, flowing ? stones : []));
   });
 
-  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp };
+  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist };
 }
 
 function makeSwayGrid(W: number, H: number): SwayGrid {

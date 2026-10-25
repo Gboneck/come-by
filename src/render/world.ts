@@ -11,6 +11,7 @@ import { skyDarkness, skySlope } from './sky';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
+import { setSeasonLook } from '../art/seasonlook';
 import { yardFire } from '../art/course';
 import { drawSleepingDog, drawSnores } from '../art/dog';
 
@@ -34,7 +35,11 @@ export interface View {
 export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   const { ox, oy, W, H } = v;
   const night = skyDarkness(game.day) > 0.3;
-  g.drawImage(game.baked.ground, ox, oy, W, H, 0, 0, W, H);
+  // The season: recoloured layers (rebuilt only when a step changes) and
+  // the look that roofs, fences and decor read as they draw.
+  setSeasonLook(game.season);
+  game.life.seasons.sync(game.baked, game.season);
+  g.drawImage(game.life.seasons.ground ?? game.baked.ground, ox, oy, W, H, 0, 0, W, H);
   game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
   drawWater(g, game.baked.water, ox, oy, W, H, game.life.vt);
 
@@ -94,7 +99,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   if (game.mode === 'build') game.build.drawWorld(game, g);
   g.restore();
 
-  g.drawImage(game.baked.canopy, ox, oy, W, H, 0, 0, W, H);
+  g.drawImage(game.life.seasons.canopy ?? game.baked.canopy, ox, oy, W, H, 0, 0, W, H);
 
   g.save();
   g.translate(-ox, -oy);

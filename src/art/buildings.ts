@@ -3,6 +3,7 @@ import { ROOFS, TRIMS, farmLook } from './ranchstyle';
 import { line, rect, px } from '../gfx/draw';
 import { text } from '../gfx/font';
 import { hash2 } from '../rng';
+import { seasonLook, snowCap } from './seasonlook';
 import type { Building, Pen, RegionGate } from '../ranch/buildings';
 import type { FieldGate, Fence, Barn, Kennel, Market, Windmill } from '../ranch/structures';
 import { CS } from '../world/map';
@@ -25,7 +26,7 @@ const shadowFirst = (b: Building, draw: () => void): Drawable => ({ y: -1e8 + b.
 // on stone footings and a third rail.
 
 const postH = (x: number, y: number) => (hash2(x, y, 401) < 0.22 ? 5 : 6);
-const postCap = (x: number, y: number) => (hash2(x, y, 402) < 0.3 ? C.sage : C.moss);
+const postCap = (x: number, y: number) => (seasonLook.snow > 0.4 ? C.wool : hash2(x, y, 402) < 0.3 ? C.sage : C.moss);
 
 function post(g: CanvasRenderingContext2D, x: number, base: number, sturdy: boolean) {
   if (sturdy) {
@@ -251,6 +252,22 @@ function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top: numbe
     if (hash2(a, y, 422) < 0.35) px(g, a + 1, y, C.moss);
     if (hash2(xa, y, 423) < 0.03) px(g, xa + 4 + Math.floor(hash2(y, xa, 424) * (xb - xa - 8)), y, C.plum);
   }
+  // Winter: snow lies on the upper roof, the shingle courses showing
+  // through as sage, its lower edge lumpy; icicles hang from the eaves.
+  const sn = seasonLook.snow;
+  if (sn > 0.2) {
+    const depth = Math.round(rh * (0.2 + sn * 0.6));
+    for (let y = top; y < Math.min(eave - 1, top + depth + 1); y++) {
+      const k = y - top;
+      const a = xa + Math.round(hip * (1 - k / Math.max(1, rh - 1))), b = xb - Math.round(hip * (1 - k / Math.max(1, rh - 1)));
+      const c = eave - 1 - y;
+      for (let x = a; x < b; x++) {
+        if (k === depth && hash2(x, y, 425) < 0.5) continue;
+        px(g, x, y, c > 0 && c % 3 === 0 && (x + (c / 3) * 2) % 5 !== 0 && k > 1 ? C.sage : C.wool);
+      }
+    }
+    snowCap(g, xa, eave - 1, xb - xa, eave);
+  }
 }
 
 // A window with a plum frame, mullions, sage shutters and a glint on the
@@ -272,6 +289,7 @@ function chimney(g: CanvasRenderingContext2D, x: number, top: number, h: number)
   rect(g, x, top, 4, h, C.plum);
   for (let y = top + 2; y < top + h - 1; y += 2) px(g, x + ((y >> 1) & 1 ? 1 : 2), y, C.sage);
   rect(g, x - 1, top, 6, 1, C.sage);
+  snowCap(g, x - 1, top - 1, 6);
 }
 
 // ---- Farmhouse: a whitewashed cabin that grows with the ranch. ----
@@ -597,6 +615,8 @@ export function kennelDrawable(g: CanvasRenderingContext2D, k: Kennel): Drawable
           px(g, cx + 10 - i, y1 - 10 - i, C.sage);
         }
         rect(g, cx - 10, y1 - 10, 21, 1, C.plum);
+        if (seasonLook.snow > 0.25) for (let i = 3; i < 9; i++) rect(g, cx - 10 + i, y1 - 10 - i, 21 - i * 2, 1, C.wool);
+        snowCap(g, cx - 10, y1 - 10, 21, y1 - 9);
         // Arched door and a name board.
         rect(g, cx - 3, y1 - 7, 6, 7, C.plum);
         rect(g, cx - 2, y1 - 8, 4, 1, C.plum);
@@ -657,6 +677,7 @@ export function marketDrawable(g: CanvasRenderingContext2D, m: Market): Drawable
           if ((x - x0) % 3 === 1) px(g, x, y1 - 16, col);
         }
         rect(g, x0 - 1, y1 - 25, w + 2, 1, C.plum);
+        snowCap(g, x0 - 1, y1 - 26, w + 2, y1 - 16);
         rect(g, x0 - 1, y1 - 24, 1, 7, C.sage);
         // Price board with a coin.
         rect(g, x1 - 2, y1 - 31, 7, 6, C.plum);
@@ -687,6 +708,7 @@ export function windmillDrawable(g: CanvasRenderingContext2D, wm: Windmill, t: n
         rect(g, cx - 1, y1 - 12, 3, 3, C.plum);
         px(g, cx, y1 - 11, C.teal);
         rect(g, cx - 5, y1 - 26, 11, 4, C.plum);
+        snowCap(g, cx - 5, y1 - 27, 11);
         rect(g, cx - 5, y1 - 26, 11, 1, C.sage);
         const hx = cx, hy = y1 - 24;
         const a0 = t * 1.1;
