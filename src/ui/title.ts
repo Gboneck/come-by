@@ -143,7 +143,7 @@ const toggle = (key: 'shake' | 'haptics') => () => {
 
 export const PAUSE_ITEMS: PauseItem[] = [
   { id: 'resume', label: () => 'RESUME', act: (g, dir) => { if (dir === 0) g.mode = 'play'; } },
-  { id: 'sound', label: (g) => `SOUND: ${onOff(!g.audio?.muted)}`, act: (g) => g.audio?.setMuted(!g.audio.muted) },
+  { id: 'mute', label: (g) => `MUTE: ${onOff(!!g.audio?.muted)}`, act: (g) => g.audio?.setMuted(!g.audio.muted) },
   { id: 'shake', label: () => `SCREEN SHAKE: ${onOff(settings.shake)}`, act: toggle('shake') },
   {
     id: 'zones',
@@ -154,6 +154,9 @@ export const PAUSE_ITEMS: PauseItem[] = [
     },
   },
   { id: 'haptics', label: () => `VIBRATION: ${onOff(settings.haptics)}`, act: toggle('haptics'), show: (g) => g.input.touchMode && canVibrate },
+  // Volumes, 0-10: left/right or the < > ends step them, confirm steps round.
+  { id: 'music', label: () => 'MUSIC', act: (g, dir) => g.audio?.stepMusic(dir), level: (g) => g.audio?.musicVol ?? 0, steps: 10, show: (g) => !!g.audio },
+  { id: 'sfx', label: () => 'SOUND', act: (g, dir) => g.audio?.stepSound(dir), level: (g) => g.audio?.soundVol ?? 0, steps: 10, show: (g) => !!g.audio },
   { id: 'quit', label: () => 'SAVE AND QUIT', act: (g, dir) => { if (dir === 0) g.quitToTitle(); } },
 ];
 

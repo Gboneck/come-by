@@ -33,7 +33,9 @@ original and drawn in code. No external art files, ever.
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`), `scripts/uitour.mjs` screenshots every screen at
   phone, notched-phone, landscape and desktop sizes onto contact sheets
-  (`shots/ui/`). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
+  (`shots/ui/`), `scripts/audiotest.mjs` renders the music, stingers and
+  soundscape offline and prints levels, peaks, tuning, theory checks and
+  CPU (we cannot listen, so we measure). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
   `regions.mjs` their own port when other checkouts are running servers too.
 
 ## Rendering rules
@@ -78,7 +80,8 @@ stays unique.
 | Ranch Ledger    | Tab / G                          | LEDGER button                 |
 | Helper command  | H                                | HELP button                   |
 | Pause           | Esc / P                          | pause button                  |
-| Mute            | M                                | in pause menu                 |
+| Mute            | M                                | sliders to 0 in pause menu    |
+| Volume          | pause menu, left/right           | pause menu, - and +           |
 
 ## Design laws
 
@@ -112,9 +115,10 @@ stays unique.
 - `src/world/` tile map, regions, terrain/canopy baking.
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
-- `src/systems/` day cycle, economy, progression, save, audio, particles,
-  spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers' orders),
-  `jobs.ts` (where the game hooks into both).
+- `src/systems/` day cycle, economy, progression, save, audio (mixer and
+  sound effects), music (generative score), soundscape, synth (sample bank),
+  particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
+  orders), `jobs.ts` (where the game hooks into both).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
@@ -132,7 +136,9 @@ The game is live at https://gboneck.github.io/come-by/ and deploys from
 - Work on a branch. Before shipping: `npm run typecheck`, `npm run build`,
   and `npm run shot` (desktop + phone screenshots in `shots/`, fails on
   console errors). Look at the screenshots. For anything touching herding,
-  run `node scripts/tune.mjs <species>` before and after and compare.
+  run `node scripts/tune.mjs <species>` before and after and compare. For
+  anything touching sound, run `node scripts/audiotest.mjs` (fails on
+  clipping, detuning or console errors).
 - Ship by opening a pull request into `main`; merging it redeploys the
   site in about a minute. When the user says to ship or merge, merge it
   yourself (`gh pr merge --squash --delete-branch`) and say when the

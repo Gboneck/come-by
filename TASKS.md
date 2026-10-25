@@ -133,6 +133,20 @@
       pulsing buttons, one-time tips for standing in front, rattled and split flocks
 - [x] Typecheck, build, shot (desktop + phone), commit
 
+## M11 Sound and music
+- [x] Mixer: music, sound and stinger buses, ducking under stingers, a limiter at the end
+- [x] Music and sound volumes in the pause menu (rows in the feel/UI menu), remembered; M still mutes everything
+- [x] Audio starts on the first tap or key (iOS unlock), sleeps in a background tab
+- [x] Sample bank computed in code (plucked strings, bells, bodhran, hooves, river, murmur, reverb), built a few per frame
+- [x] Music engine: whistle and fiddle on persistent voices, harp, bass, string pad, reed drone, scheduled ahead on the audio clock
+- [x] Title theme ("Come By", G major 6/8), a day theme per region, dusk, night
+- [x] Music reacts: a calm drive fills the band out; a panic thins the tune and brings tremolo and a heartbeat; predators close by at night do the same
+- [x] Stingers: that'll do (by calm rating), tier-up, end of day
+- [x] Soundscape: wind, river and ford, flock murmur, grazing, hooves per species, the dog's paws, gate creaks, menu sounds, birds, crickets, frogs, an owl
+- [x] Rain hook for weather
+- [x] `scripts/audiotest.mjs`: offline renders with levels, peaks, tuning, music-theory checks, layer balance and CPU
+- [x] Typecheck, build, shot, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -395,3 +409,59 @@
 - Pause menu rows are data (`PAUSE_ITEMS` in `src/ui/title.ts`); a level
   row (volume) is one entry with `level()`. Settings are saved under
   `comeby-settings`.
+- Music (`src/systems/music.ts`) is generative, never a loop. Each piece is
+  a key, mode, meter and tempo: title and ranch G major 6/8 (54/58 bpm),
+  Home Meadow D major 6/8, Rolling Hills E dorian 3/4, Rocky Rise A dorian
+  4/4 over a strong drone, River Ford C major 4/4 with flowing harp, High
+  Range D mixolydian 3/4 with two-bar chords, dusk A minor 3/4 (fiddle
+  lead), night D minor 3/4 with a music box. Day is in sharp keys and the
+  evening moves flatwards, so the light going sounds like it.
+- A section is eight chords: an "open" four-chord phrase and a "close" one,
+  from folk-idiomatic templates per mode. The tune is built like a folk air:
+  a one-bar motif, an answer, the motif sequenced to the third chord, a
+  half cadence; then the opening returns and it closes on the tonic (often
+  2 to 1). Chord tones on strong beats (graded: downbeat, mid-bar beat,
+  other beats), mostly stepwise, leaps filled in, no ping-pong; whistle
+  cuts, rolls, slides and slurs. The lead rotates (whistle, fiddle, harp),
+  some sections have no tune at all (room to breathe), a fiddle sometimes
+  holds guide tones underneath, the ranch quotes the main theme and other
+  regions borrow its opening gesture (5-1-2).
+- The music reads the game every frame (`Sound.tick`): energy is working a
+  flock (dog moving near the nearest group); tension is that group's stress
+  and panics, and at night predators by state and distance from the camera.
+  Tension above 0.6 turns to tense progressions at the next bar and only
+  turns back below 0.35; the tune fades from 0.45 and stops at 0.7;
+  tremolo strings from 0.3, a heartbeat from 0.42; tempo creeps up a few
+  percent. Calm play always gets the full, consonant band.
+- Walking into another region changes the piece on the bar line; scene
+  changes (dusk, night, title, summary) on the next beat. Forest corridors
+  keep the last region's tune. Paused music is muffled, not stopped.
+- Stingers play in the key the bed is heading for and always end on a major
+  chord (a Picardy third in the minor regions); the bed ducks to 30% under
+  them. With music at zero they still play, at the sound volume. A shut
+  pen plays the shepherd's whistle, then a stinger by the batch's rating:
+  CALM a full cadence with the whistle, STEADY a harp roll and bells,
+  RATTLED or worse two quiet notes. `play('tierup')` is now the tier-up
+  stinger (the build screen also uses it for hiring a helper).
+- Levels, measured offline at the default volumes (music 7, sound 8): the
+  music bed sits at -25 to -28 dBFS RMS with peaks around -10 to -15,
+  barks peak around -5; nothing clips and the limiter only catches bursts.
+  Within the band the tune leads, harp and bass about 6 dB under, then pad
+  and drum, the drone faintest. Sliders use a (level/10)^2 curve.
+- CPU: the persistent voices (two mono leads, a four-voice pad, drone,
+  tremolo) are automated, never rebuilt; a pluck or footfall is one buffer
+  source and one gain. The reverb is one mono convolver (1.5 s), widened by
+  delaying its right side 13 ms: half the cost of a stereo one. The whole
+  band renders at about 30-45x real time on a laptop. The sample bank is
+  about 60 ms of work in all, at most 7 ms per buffer, spread over the first
+  second.
+- Audio starts only on input that counts as a gesture (Escape does not),
+  checked with `navigator.userActivation`; it suspends in a background tab
+  and resumes on return or on the next tap (iOS can interrupt it).
+- Weather hook: `game.audio?.setRain(0..1)` (cheap every frame) fades in a
+  rain hiss and drips and quiets the birds.
+- Footsteps: the dog's paws follow its run cycle (every other trot frame,
+  every gallop landing, splashes in the ford). Other animals' hooves are a
+  random patter whose rate follows their speed over stride near the camera
+  (capped at 16 a second per species), so a running herd drums and a
+  grazing flock is near silent except for its munching.

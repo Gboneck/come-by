@@ -379,6 +379,7 @@ export class Game {
   // ---- Update ----
 
   update(dt: number) {
+    this.audio?.tick(this, dt); // keeps the music scheduled through fades and hit-pause
     this.feel.update(dt, this.coins, this.screen.H);
     if (this.feel.fading) return;
     // A beat of hit-pause when a nip lands (never under the tuning bot).
@@ -388,11 +389,6 @@ export class Game {
       return;
     }
     this.t += dt;
-    if (this.audio) {
-      this.audio.lx = this.cam.x;
-      this.audio.ly = this.cam.y;
-      if (this.mode === 'play' || this.mode === 'title') this.audio.ambient(dt, this.day.phase === 'night');
-    }
     if (this.input.pressed('mute') && this.audio) this.audio.setMuted(!this.audio.muted);
     if (this.mode === 'title') {
       this.updateDemo(dt);
@@ -688,10 +684,10 @@ export class Game {
       this.feel.flyCoins(a.x - v.ox, a.y - v.oy - 10, value, 2);
     } else if (ev.kind === 'shut') {
       this.audio?.play('gate', { x: ev.pen.cx, y: ev.pen.cy });
-      setTimeout(() => this.audio?.play('thatlldo'), 180);
       const n = ev.batch.length;
       const avg = ev.batch.reduce((s, a) => s + a.peakStress, 0) / Math.max(1, n);
       const { label } = calmRating(avg);
+      this.audio?.thatllDo(label);
       if (label === 'CALM') this.totals.calmBatches++;
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
