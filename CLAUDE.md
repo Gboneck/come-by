@@ -27,7 +27,8 @@ original and drawn in code. No external art files, ever.
   bot herding scenarios per species and prints stress/time/splits,
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
-  `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end.
+  `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`
+  and `scripts/tour.mjs` check the loops end to end.
 
 ## Rendering rules
 
@@ -65,7 +66,7 @@ stays unique.
 | Move            | WASD / arrow keys                | virtual stick (left thumb)    |
 | Sprint          | Shift (hold, uses stamina)       | push stick to the rim         |
 | Bark            | Space / K                        | BARK button                   |
-| Nip             | E / J                            | NIP button                    |
+| Nip             | E / J (also: open a pen gate, start a trial at the post) | NIP button  |
 | Lie down        | Q / L (hold)                     | DOWN button (hold)            |
 | Build mode      | B (on the ranch)                 | BUILD button                  |
 | Ranch Ledger    | Tab / G                          | LEDGER button                 |
@@ -106,7 +107,8 @@ stays unique.
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
 - `src/systems/` day cycle, economy, progression, save, audio, particles,
-  spawner.
+  spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers' orders),
+  `jobs.ts` (where the game hooks into both).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
 - `src/render/` world drawing and the night dither.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as

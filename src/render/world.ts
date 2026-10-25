@@ -53,6 +53,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     ents.push(...buildingDrawables(g, b, game.t, night, near));
   }
   const tierName = tierOf(game.tier).name;
+  ents.push(...game.extraDrawables(g));
   for (const d of DECOR) {
     if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, d.x * TS + 8, d.y * TS + 8, 40)) continue;
     if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && d.x >= b.tx && d.x < b.tx + b.w && d.y >= b.ty && d.y < b.ty + b.h)) continue;

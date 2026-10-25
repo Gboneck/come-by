@@ -23,6 +23,9 @@ export interface PressureSource {
 export interface Enclosure {
   id: number;
   contains(x: number, y: number): boolean;
+  // Gate held open to let the stock out: penned animals may leave.
+  letOut?: boolean;
+  gatePoint?(out: number): { x: number; y: number };
 }
 
 let nextId = 1;
@@ -64,6 +67,8 @@ export class Animal {
   inWater = false;
   gone = false; // taken by a predator / sold
   carried = false; // being dragged off
+  trial = false; // the Show Ground's own flock, only for a trial run
+  home = false; // has been penned before: bringing it back pays nothing
   // Goats: nearest rock to scramble up, and how long they have sat on one.
   rockX = 0;
   rockY = 0;
@@ -172,7 +177,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
       a.x -= (dx / d) * push;
       a.y -= (dy / d) * push;
     }
-    if (b.sp !== sp || b.pen !== a.pen || d2 > sp.nbr * sp.nbr) continue;
+    if (b.sp !== sp || b.pen !== a.pen || b.trial !== a.trial || d2 > sp.nbr * sp.nbr) continue;
     const d = Math.sqrt(d2);
     cx += b.x; cy += b.y; avx += b.vx; avy += b.vy; n++;
     if (d < sepR && d > 1e-3) {
@@ -207,7 +212,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   let mainX = 0, mainY = 0, mainI = 0;
   for (const s of ctx.sources) {
     if (s.lying) continue;
-    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen ? 0.5 : 1) * safety;
+    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen && !a.pen.letOut ? 0.5 : 1) * safety;
     const dx = a.x - s.x, dy = a.y - s.y;
     const d = Math.hypot(dx, dy);
     if (d >= R || d < 1e-3) continue;
@@ -251,7 +256,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
 
   // ---- Obstacles ----
   let mask = sp.climbs ? BLOCK_CLIMBER : BLOCK_ANIMAL;
-  if (a.pen) mask |= GATE;
+  if (a.pen && !a.pen.letOut) mask |= GATE;
   const here = ctx.map.flagsAtPx(a.x, a.y);
   a.inWater = (here & SHALLOW) !== 0;
   if (sp.balksWater && a.commitT <= 0 && !a.inWater) mask |= SHALLOW;
@@ -285,6 +290,20 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
         const w = 1.5 * Math.min(1, P + 0.2);
         dirX += (rx / rd) * w;
         dirY += (ry / rd) * w;
+      }
+    }
+    // Penned stock with the gate held open file out when pushed: to the
+    // gateway first, then on out through it.
+    const pen = a.pen;
+    if (pen?.letOut && pen.gatePoint) {
+      const inner = pen.gatePoint(-7);
+      const atGate = Math.hypot(inner.x - a.x, inner.y - a.y) < 9;
+      const to = atGate ? pen.gatePoint(16) : inner;
+      const gx = to.x - a.x, gy = to.y - a.y, gd = Math.hypot(gx, gy);
+      if (gd > 1) {
+        const w = 1.6 * Math.min(1, P + 0.3);
+        dirX += (gx / gd) * w;
+        dirY += (gy / gd) * w;
       }
     }
     // Pressured animals near an open pen gate drift through it.

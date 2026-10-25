@@ -1,5 +1,6 @@
 import type { Game } from './game';
 import type { Animal } from './entities/animal';
+import { PARTS, type TrialResult } from './systems/trials';
 
 // A simple herding controller (collect strays, then drive from behind),
 // after Strömbom et al. 2014. Used for tuning runs and, later, helper dogs.
@@ -16,7 +17,8 @@ export interface BotOpts {
 
 export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: number; sprint: boolean; lie: boolean; bark: boolean; nip?: boolean } {
   const d = game.dog;
-  const flock: Animal[] = game.animals.filter((a) => !a.pen && !a.gone);
+  const trial = !!game.trials.run;
+  const flock: Animal[] = game.animals.filter((a) => !a.pen && !a.gone && a.trial === trial);
   if (!flock.length) return { x: 0, y: 0, sprint: false, lie: false, bark: false };
   let cx = 0, cy = 0;
   for (const a of flock) { cx += a.x; cy += a.y; }
@@ -88,6 +90,46 @@ export function botStep(game: Game, o: BotOpts, t: number): { x: number; y: numb
   const k = ml > 0 ? Math.min(1, dist / 6) / ml : 0;
   const bark = !!o.bark && Math.floor(t / o.bark) !== Math.floor((t - 1 / 60) / o.bark);
   return { x: mx * k, y: my * k, sprint: !!o.sprint || dist > 120, lie: false, bark };
+}
+
+// Where a trial flock should go next: just past the next gate, the post, or
+// up to the pen gate and then in.
+export function trialGoal(game: Game): { x: number; y: number } | null {
+  const r = game.trials.run;
+  if (!r) return null;
+  const c = game.ranch.course;
+  const id = PARTS[r.step]?.id;
+  if (!id) return null;
+  if (id === 'post') return c.post;
+  if (id === 'pen') {
+    const flock = r.flock.filter((a) => !a.pen && !a.gone);
+    let cx = 0, cy = 0;
+    for (const a of flock) { cx += a.x; cy += a.y; }
+    cx /= Math.max(1, flock.length);
+    cy /= Math.max(1, flock.length);
+    const front = c.pen.gatePoint(18);
+    return Math.hypot(cx - front.x, cy - front.y) < 22 ? c.pen.gatePoint(-14) : front;
+  }
+  const g = c.gates.find((x) => x.id === (id === 'lift' ? 'fetch' : id))!;
+  return { x: g.x + g.dx * 30, y: g.y + g.dy * 30 };
+}
+
+// Run a whole trial under bot control (the run must have been started).
+export function runTrial(game: Game, o: Omit<BotOpts, 'goalX' | 'goalY'>, maxSeconds = 260): TrialResult | null {
+  const dt = 1 / 60;
+  let t = 0;
+  while (t < maxSeconds && game.trials.run && !game.trials.result) {
+    const goal = trialGoal(game) ?? game.ranch.course.post;
+    const c = botStep(game, { ...o, goalX: goal.x, goalY: goal.y }, t);
+    game.input.override = { x: c.x, y: c.y, sprint: c.sprint, lie: c.lie };
+    if (c.bark) game.input.push('bark');
+    if (c.nip) game.input.push('nip');
+    game.update(dt);
+    game.input.clearQueue();
+    t += dt;
+  }
+  game.input.override = null;
+  return game.trials.result;
 }
 
 export interface SimResult {
