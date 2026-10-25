@@ -321,6 +321,34 @@ await host.evaluate(async () => {
 await guest.waitForFunction(() => window.game.season.season === 'winter' && window.game.season.snow > 0.9 && window.game.__cooptest?.hay === 3, null, { timeout: 5000 }).catch(() => {});
 const seas = await guest.evaluate(() => ({ season: window.game.season.season, snow: +window.game.season.snow.toFixed(2), shared: window.game.__cooptest }));
 check('the season (and shared ranch state) reaches the guest', seas.season === 'winter' && seas.snow > 0.9 && seas.shared?.hay === 3, JSON.stringify(seas));
+// Lambs, winter hay and the fair (gameplay's shared fields) reach the guest.
+const r3 = await host.evaluate(async () => {
+  const g = window.game;
+  const Z = await import('/src/systems/seasonal.ts');
+  const A = await import('/src/entities/animal.ts');
+  const B = await import('/src/ui/build.ts');
+  const K = await import('/src/ranch/catalog.ts');
+  const ewe = new A.Animal('sheep', g.dog.x + 30, g.dog.y + 20);
+  const lamb = Z.lambFor(ewe);
+  g.animals.push(ewe, lamb);
+  const h = B.makeBuilding(K.defOf('hay'), 81, 104, 0);
+  g.ranch.add(h);
+  h.bales = 13;
+  g.seasonal.loft = 4;
+  g.seasonal.fair = [{ species: 'sheep', score: 70, place: 2, prize: 20, rivals: [], rare: false }];
+  return { lamb: lamb.id, ewe: ewe.id };
+});
+await guest.waitForFunction((ids) => {
+  const g = window.game;
+  const l = g.animals.find((a) => a.id === ids.lamb), e = g.animals.find((a) => a.id === ids.ewe);
+  return l?.young && e && !e.young && g.seasonal.loft === 4 && g.ranch.buildings.some((b) => b.kind === 'haystack' && b.bales === 13);
+}, r3, { timeout: 6000 }).catch(() => {});
+const r3g = await guest.evaluate((ids) => {
+  const g = window.game;
+  const l = g.animals.find((a) => a.id === ids.lamb), e = g.animals.find((a) => a.id === ids.ewe);
+  return { lamb: !!l?.young, ewe: !!e && !e.young, loft: g.seasonal.loft, bales: g.ranch.buildings.filter((b) => b.kind === 'haystack').map((b) => b.bales), fair: g.seasonal.fair.length, dusk: g.day.duskAt, year: g.season.year, drag: +g.dog.drag.toFixed(2) };
+}, r3);
+check('lambs, hay, the fair and the winter day reach the guest', r3g.lamb && r3g.ewe && r3g.loft === 4 && r3g.bales.includes(13) && r3g.fair === 1 && r3g.dusk < 0.75 && r3g.year >= 1 && r3g.drag > 0.05, JSON.stringify(r3g));
 await host.evaluate(() => { window.game.season.forced = false; window.game.season.set('summer'); window.game.season.snap(); });
 
 // ---- Pings, both ways ----

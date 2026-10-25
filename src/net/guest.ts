@@ -11,7 +11,7 @@ import type { Coat } from '../art/animals';
 import { loadWorld, ownDiscovery, saveInfo, type SaveData } from '../systems/save';
 import { Travels } from './travels';
 import { SKIES } from '../systems/weather';
-import { SEASON_LIST } from '../systems/season';
+import { DAY_PACE, SEASON_LIST, calendar } from '../systems/season';
 import { sharedIn } from './shared';
 import { PING_KINDS, Pings, pingHelp, type PingKind, type PingNet } from './ping';
 import { BRACE, CLASSES, type Run } from '../systems/trials';
@@ -505,6 +505,11 @@ export class GuestNet implements PingNet {
     se.bloom = lerp(A.s.bloom, B.s.bloom) / 255;
     se.leaves = lerp(A.s.leaves, B.s.leaves) / 255;
     se.snow = lerp(A.s.snow, B.s.snow) / 255;
+    const cal = calendar(day.day);
+    se.year = cal.year;
+    se.dayOf = cal.dayOf;
+    Object.assign(day, DAY_PACE[se.season]); // winter's early dusk
+    game.dog.drag = 0.08 * se.snow; // snow slows our own dog here too
 
     // Everyone else's dogs.
     const seenDogs = new Set<number>();
