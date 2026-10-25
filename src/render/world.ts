@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { ring } from '../gfx/draw';
 import type { Game } from '../game';
-import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from '../entities/animal';
+import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from './animals';
 import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
 import { Barn, FieldGate, Fence, Kennel, Market, Windmill } from '../ranch/structures';
 import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
@@ -62,7 +62,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && d.x >= b.tx && d.x < b.tx + b.w && d.y >= b.ty && d.y < b.ty + b.h)) continue;
     ents.push(decorDrawable(g, d, game.t, tierName, night));
   }
-  for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t) });
+  for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t, night) });
   ents.push({ y: game.dog.y, draw: () => game.dog.draw(g) });
   for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
   for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => h.draw(g) });

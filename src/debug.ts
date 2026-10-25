@@ -49,7 +49,7 @@ function buildSheet() {
     ...SPECIES_ORDER.flatMap((id) =>
       Array.from({ length: SPECIES[id].coats }, (_, c) => {
         const s = animalSprites(id, c as Coat);
-        return { label: `${id.toUpperCase()} ${c}`, sprites: [...s.side, s.graze, ...s.down, ...s.up] };
+        return { label: `${id.toUpperCase()} ${c}`, sprites: [...s.side, ...s.run, ...s.grazing, ...s.stand, s.alert, s.lie, ...s.down, s.downAlert, ...s.up] };
       }),
     ),
   ];
