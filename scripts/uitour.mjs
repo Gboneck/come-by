@@ -287,6 +287,49 @@ const STATES = {
       return 40;
     },
   },
+  // Co-op (no relay needed): the guest's JOIN A FRIEND on the title, the
+  // host's invite card, and a friend's dog with its name tag in the field.
+  join: {
+    query: 'debug&title&join=KRB',
+    fn: () => 30,
+  },
+  invite: {
+    fn: async () => {
+      const g = window.game;
+      window.fetch = () => new Promise(() => {}); // no relay here: the room never opens by itself
+      const coop = await import('/src/ui/coop.ts');
+      coop.openCoop(g, 'invite');
+      await new Promise((r) => setTimeout(r, 100));
+      const n = g.net;
+      n.status = 'open';
+      n.code = 'KRBT';
+      n.error = '';
+      return 20;
+    },
+  },
+  friend: {
+    fn: async () => {
+      const g = window.game;
+      window.fetch = () => new Promise(() => {});
+      const { HostNet } = await import('/src/net/host.ts');
+      const { Dog } = await import('/src/entities/dog.ts');
+      const { friendDogSprites } = await import('/src/art/dogstyle.ts');
+      const n = new HostNet(g);
+      const mk = (tag, x, y, look) => {
+        const d = new Dog(x, y);
+        d.skin = friendDogSprites({ speckle: 'heavy', mask: 'one', saddle: true, tailTip: false, neck: 'bandana', ...look });
+        d.tag = tag;
+        n.dogs.push(d);
+        return d;
+      };
+      const gr = g.groups[0];
+      g.dog.x = gr.x - 44; g.dog.y = gr.y + 4; g.cam.x = g.dog.x + 10; g.cam.y = g.dog.y;
+      g.tut = 9;
+      mk('ZIGGY', gr.x + 2, gr.y - 40, {});
+      mk('PIP', gr.x + 900, gr.y + 300, { neck: 'collar', mask: 'none' });
+      return 30;
+    },
+  },
 };
 
 const sizeNames = opt('sizes', 'desk,phone,land,se').split(',');

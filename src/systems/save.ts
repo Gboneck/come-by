@@ -21,7 +21,7 @@ const KEY = 'comeby-save-v1';
 
 interface SavedAnimal { id: SpeciesId; coat: Coat; stress: number; x?: number; y?: number; wanderer?: boolean; produceT?: number; home?: boolean }
 
-interface SaveData {
+export interface SaveData {
   v: 1;
   day: number;
   tier: number;
@@ -56,8 +56,16 @@ function store(): Storage | null {
 }
 
 export function saveGame(game: Game) {
-  if (game.demo || game.loading) return;
-  const data: SaveData = {
+  // A co-op guest is playing on someone else's ranch: their own save is never touched.
+  if (game.demo || game.loading || game.net?.role === 'guest') return;
+  try {
+    store()?.setItem(KEY, JSON.stringify(saveData(game)));
+  } catch { /* quota or blocked: play on */ }
+}
+
+// The whole ranch as data (also what a co-op host sends a guest on joining).
+export function saveData(game: Game): SaveData {
+  return {
     v: 1,
     day: game.day.day,
     tier: game.tier,
@@ -91,9 +99,6 @@ export function saveGame(game: Game) {
     weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
     discovery: game.discovery.save(game),
   };
-  try {
-    store()?.setItem(KEY, JSON.stringify(data));
-  } catch { /* quota or blocked: play on */ }
 }
 
 function read(): SaveData | null {
@@ -131,31 +136,20 @@ export function loadInto(game: Game): boolean {
   game.applyUpgrades();
   game.owned = new Set(d.owned);
 
-  // Rebuild the ranch: keep region gates and the farmhouse, replace the rest.
-  game.ranch.buildings = game.ranch.buildings.filter((b) => b.kind === 'regiongate' || b.kind === 'farmhouse');
   game.animals = [];
-  for (const sb of d.buildings) {
-    const def = defOfKind(sb.kind);
-    if (!def) continue;
-    const b = makeBuilding(def, sb.tx, sb.ty, sb.rot);
-    b.level = sb.level;
-    game.ranch.buildings.push(b);
-    if (b instanceof Pen) {
-      b.hasTrough = !!sb.trough;
-      b.goods = sb.goods ?? 0;
-      for (const sa of sb.animals ?? []) {
-        const x = b.ix0 + 4 + Math.random() * (b.ix1 - b.ix0 - 8);
-        const y = b.iy0 + 4 + Math.random() * (b.iy1 - b.iy0 - 8);
-        const a = new Animal(sa.id, x, y, sa.coat);
-        a.stress = sa.stress;
-        a.produceT = sa.produceT ?? 0;
-        a.pen = b;
-        b.animals.push(a);
-        b.species = sa.id;
-        game.animals.push(a);
-      }
+  buildRanch(game, d, (b, sb) => {
+    for (const sa of sb.animals ?? []) {
+      const x = b.ix0 + 4 + Math.random() * (b.ix1 - b.ix0 - 8);
+      const y = b.iy0 + 4 + Math.random() * (b.iy1 - b.iy0 - 8);
+      const a = new Animal(sa.id, x, y, sa.coat);
+      a.stress = sa.stress;
+      a.produceT = sa.produceT ?? 0;
+      a.pen = b;
+      b.animals.push(a);
+      b.species = sa.id;
+      game.animals.push(a);
     }
-  }
+  });
   for (const sa of d.wild) {
     const a = new Animal(sa.id, sa.x ?? 0, sa.y ?? 0, sa.coat);
     a.stress = sa.stress;
@@ -192,4 +186,59 @@ export function loadInto(game: Game): boolean {
   } else morningOrders(game);
   saveGame(game);
   return true;
+}
+
+// Rebuild the ranch's buildings from a save: keep the region gates and the
+// farmhouse, replace the rest. `pen` fills each pen with its stock.
+function buildRanch(game: Game, d: SaveData, pen?: (b: Pen, sb: SaveData['buildings'][number]) => void) {
+  game.ranch.buildings = game.ranch.buildings.filter((b) => b.kind === 'regiongate' || b.kind === 'farmhouse');
+  for (const sb of d.buildings) {
+    const def = defOfKind(sb.kind);
+    if (!def) continue;
+    const b = makeBuilding(def, sb.tx, sb.ty, sb.rot);
+    b.level = sb.level;
+    game.ranch.buildings.push(b);
+    if (b instanceof Pen) {
+      b.hasTrough = !!sb.trough;
+      b.goods = sb.goods ?? 0;
+      pen?.(b, sb);
+    }
+  }
+}
+
+// A co-op guest's copy of the host's ranch: the buildings, the ranch's
+// looks and decor, the tier, the places found and the sky. No animals,
+// helpers or orders: those come in the host's snapshots. `dog` is the
+// guest's own dog (name and markings), which stays theirs.
+export function loadWorld(game: Game, d: SaveData, dog: Look) {
+  game.loading = true;
+  game.day.day = d.day;
+  game.coins = d.coins;
+  game.won = d.won;
+  game.totals = { ...newTotals(), ...d.totals };
+  game.upgrades = { ...game.upgrades, ...d.upgrades };
+  game.applyUpgrades();
+  game.owned = new Set(d.owned);
+  buildRanch(game, d);
+  const host = readLook(d.look);
+  game.look = { ...host, name: dog.name, dog: { ...dog.dog } };
+  applyLook(game.look);
+  game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
+  game.setTier(d.tier, false);
+  game.discovery.load(game, d.discovery ? { ...d.discovery, out: [] } : undefined);
+  game.ranch.restamp();
+  if (d.trials) {
+    game.trials.won = [...d.trials.won];
+    game.trials.cups = d.trials.cups;
+    game.trials.lastPrizeDay = d.trials.last;
+  }
+  if (d.orders) game.orders.list = d.orders.map((o) => ({ ...o }));
+  const w = d.weather;
+  if (w && SKIES.includes(w.sky)) {
+    game.weather.set(w.sky);
+    game.weather.forecast = SKIES.includes(w.forecast) ? w.forecast : 'clear';
+    [game.weather.dirX, game.weather.dirY] = w.dir;
+    game.weather.snap();
+  }
+  game.loading = false;
 }

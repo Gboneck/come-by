@@ -48,7 +48,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // east by evening (a time-lapse while resting shows them sweep round).
   const sun = sunShift(game);
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a, sun);
-  for (const d of [game.dog, ...game.helpers]) if (inView(d.x, d.y)) ellipse(g, d.x - 1 + sun, d.y + 2, d.face === 'l' || d.face === 'r' ? 5 : 3, 1, C.sage);
+  for (const d of [game.dog, ...game.helpers, ...game.coop]) if (inView(d.x, d.y)) ellipse(g, d.x - 1 + sun, d.y + 2, d.face === 'l' || d.face === 'r' ? 5 : 3, 1, C.sage);
   for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
   game.folk.drawShadows(g);
   game.fx.drawLow(g);
@@ -86,6 +86,8 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   ents.push({ y: game.dog.y, draw: () => (sleeping(game) ? drawSleepingDog(g, game.dog.x, game.dog.y, game.dog.face === 'l', game.t) : game.dog.draw(g)) });
   for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
   for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => h.draw(g) });
+  // Co-op friends' dogs, curled up too while everyone rests.
+  for (const o of game.coop) if (inView(o.x, o.y)) ents.push({ y: o.y, draw: () => (o.lying && game.rest > 1.3 ? drawSleepingDog(g, o.x, o.y, o.face === 'l', game.t, true) : o.draw(g)) });
   ents.push(...game.folk.drawables(g, (x, y) => inView(x, y)));
   ents.sort((p, q) => p.y - q.y);
   for (const e of ents) e.draw();
@@ -111,6 +113,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     const fl = (i: number) => Math.sin(game.t * 7.3 + i * 2.1) * 0.8 + Math.sin(game.t * 13.1 + i) * 0.6;
     lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 });
     for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
+    for (const o of game.coop) lights.push({ x: o.x - ox, y: o.y - oy, r: 36 });
     lights.push(...game.folk.lights(ox, oy));
     const f = game.ranch.farmhouse;
     if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });

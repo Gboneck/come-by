@@ -25,6 +25,7 @@ export interface PredCtx {
   claimed: Map<object, Predator>; // targets taken by a predator
   onLoss: (a: Animal, p: Predator) => void;
   onGrab: (a: Animal, p: Predator) => void;
+  others?: { x: number; y: number; lying: boolean }[]; // co-op players' dogs
 }
 
 const tmp = { x: 0, y: 0 };
@@ -107,6 +108,7 @@ export class Predator {
       const x = tx + Math.cos(a) * r, y = ty + Math.sin(a) * r;
       if (ctx.map.blockedPx(x, y, BLOCK_ANIMAL)) continue;
       if (Math.hypot(x - ctx.dogX, y - ctx.dogY) < 110) continue;
+      if (ctx.others?.some((o) => Math.hypot(x - o.x, y - o.y) < 110)) continue;
       // Near a tree line.
       let edge = false;
       for (let k = 0; k < 8 && !edge; k++) {
@@ -176,6 +178,10 @@ export class Predator {
     // The dog close by is frightening; a lying dog much less so.
     const dDog = Math.hypot(this.x - ctx.dogX, this.y - ctx.dogY);
     if (dDog < 34 && this.state !== 'flee') this.fear += (dt * (ctx.dogLying ? 0.3 : 1) * (this.kind === 'wolf' ? 0.7 : 1.4) * (1.3 - dDog / 34)) / this.bold;
+    for (const o of ctx.others ?? []) {
+      const d = Math.hypot(this.x - o.x, this.y - o.y);
+      if (d < 34 && this.state !== 'flee') this.fear += (dt * (o.lying ? 0.3 : 1) * (this.kind === 'wolf' ? 0.7 : 1.4) * (1.3 - d / 34)) / this.bold;
+    }
     this.fear = Math.max(0, this.fear - dt * 0.1);
     if (this.fear >= 1 && this.state !== 'flee') {
       if (this.carry) this.dropCarry();

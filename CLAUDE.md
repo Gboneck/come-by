@@ -19,7 +19,10 @@ original and drawn in code. No external art files, ever.
 - URL switches: `?debug` exposes `window.game`, `window.sim` and
   `window.resetFlock` (see `src/debug.ts`) and skips the title (add
   `&title` to keep it), and `&weather=rain|fog|wind|storm` holds a sky;
-  `?play` skips the title; `?sprites=N` shows the
+  `?play` skips the title; `?join=CODE` opens JOIN A FRIEND with the
+  code (a co-op invite link), `?relay=URL` points co-op at another relay,
+  `&lag=150` (`&jitter=40`) holds every co-op message that long each way
+  to play as if on a slow line; `?sprites=N` shows the
   sprite sheet from row N; `?safe=top,right,bottom,left` fakes safe-area
   insets (CSS px) to check notched phones.
 - Scripts (all Playwright, all start their own Vite server):
@@ -47,7 +50,9 @@ original and drawn in code. No external art files, ever.
   and logs every hint, tip, banner and card against the clock (for pacing
   and pile-ups; shots in `shots/play/`), `scripts/audiotest.mjs` renders the music, stingers and
   soundscape offline and prints levels, peaks, tuning, theory checks and
-  CPU (we cannot listen, so we measure). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
+  CPU (we cannot listen, so we measure), `scripts/cooptest.mjs` starts the
+  relay (`wrangler dev`) and two browsers, a host and a guest, and plays
+  co-op end to end (`--shots` into `shots/coop/`, `--lag=150`). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
   `regions.mjs` their own port when other checkouts are running servers too.
 
 ## Rendering rules
@@ -95,6 +100,9 @@ stays unique.
 | Pause           | Esc / P                          | pause button                  |
 | Mute            | M                                | sliders to 0 in pause menu    |
 | Volume          | pause menu, left/right           | pause menu, - and +           |
+| Invite a friend | pause menu, INVITE A FRIEND (code + link) | same, SHARE LINK      |
+| Join a friend   | title, JOIN A FRIEND, type the code (or open the link) | same     |
+| Leave a friend's ranch | pause menu, LEAVE ...'S RANCH | same                     |
 
 ## Design laws
 
@@ -145,6 +153,40 @@ stays unique.
   wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
   the model for helper dogs.
+- `src/net/` co-op: `protocol.ts` (wire format), `link.ts` (the socket,
+  relay URL, lag switch), `host.ts` (hosting: guests' dogs, snapshots),
+  `guest.ts` (playing on a friend's ranch), `snapshot.ts` (encode/decode);
+  `src/ui/coop.ts` the invite and join screens, name tags, guests' cards.
+- `server/` the co-op relay: a Cloudflare Worker with one Durable Object
+  per room code (own `package.json` and `wrangler.toml`).
+
+## Co-op (real time, up to four dogs)
+
+- **The host's browser runs the world** exactly as in single player; each
+  guest's browser runs only its own dog (same `Dog.update`, so it never
+  lags for them) and draws the rest from the host's snapshots, 100ms
+  behind. Guests send their dog at 20Hz plus barks and nips; the host adds
+  guest dogs as pressure sources and plays their barks and nips at their
+  dog. Not lockstep: the sim is not deterministic, and must not need to be.
+- **Red is you.** On every screen your own dog wears the red bandana;
+  everyone else's wears buttercup with a name tag, in their own markings.
+- **The ranch is the host's.** Pay, building, the Ledger's goals and the
+  save are the host's; a guest's own save is never written. When the host
+  is at the summary, building, or at the judge's card, guests wait on a
+  read-only card. Menus (pause, Ledger, looks, invite) do not stop the
+  world while friends are there; resting needs every dog lying down at home.
+- New shared-world features: put their state in the snapshot or the meta
+  message (`src/net/host.ts`), and keep anything that only the host's dog
+  triggers working for guest dogs too (`game.coop` lists the other dogs).
+- **Run it locally:** `cd server && npm install && npm run dev` (relay on
+  :8787), then `npm run dev`; under `npm run dev` the game finds the relay
+  on the page's own host at :8787. Same Wi-Fi: `npm run dev:lan` in
+  `server/` and open the Vite network address on both phones.
+- **Online:** `cd server && npx wrangler login && npm run deploy` prints
+  the Worker's URL; set it as the repository variable `RELAY_URL`
+  (`gh variable set RELAY_URL --body https://...workers.dev`) and redeploy
+  the site. With no relay set, the game builds with co-op switched off.
+- Before shipping co-op changes: `node scripts/cooptest.mjs`.
 
 ## Working from a cloud session (often from a phone)
 

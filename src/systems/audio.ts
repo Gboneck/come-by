@@ -24,6 +24,8 @@ const STRIDE: Record<string, number> = { duck: 3, sheep: 6, goat: 6, cow: 9, pon
 // Perceptual volume curve for the 0..10 sliders.
 const curve = (level: number) => (level / 10) ** 2;
 
+export type TapKind = 'play' | 'stinger' | 'thatllDo' | 'voice';
+
 export class Sound {
   ctx: BaseAudioContext | null = null;
   private live: AudioContext | null = null;
@@ -73,6 +75,21 @@ export class Sound {
   // performance.now() of the flash, `near` 0..1; its thunder follows.
   lightning: { at: number; near: number } | null = null;
   private moving = new WeakSet<object>();
+  // Co-op host: what the game asks to hear is passed on to the guests, but
+  // not what the mixer plays by itself (menus, creaks, trial cues) while it
+  // ticks, nor the sounds one call makes inside another.
+  tap: ((kind: TapKind, args: unknown[]) => void) | null = null;
+  private inner = 0;
+
+  private relay(kind: TapKind, args: unknown[], run: () => void) {
+    if (this.tap && !this.inner) this.tap(kind, args);
+    this.inner++;
+    try {
+      run();
+    } finally {
+      this.inner--;
+    }
+  }
 
   constructor(opts: { listen?: boolean } = {}) {
     try {
@@ -241,6 +258,10 @@ export class Sound {
 
   // A musical flourish over the bed, which ducks out of its way.
   stinger(kind: StingerKind, opts: { delay?: number; amt?: number } = {}) {
+    this.relay('stinger', [kind, opts], () => this.stingerNow(kind, opts));
+  }
+
+  private stingerNow(kind: StingerKind, opts: { delay?: number; amt?: number }) {
     if (!this.ctx || this.muted) return;
     const delay = opts.delay ?? 0;
     const len = this.music.stinger(kind, this.ctx.currentTime + 0.02 + delay, opts.amt);
@@ -252,6 +273,10 @@ export class Sound {
   // A pen just shut: the shepherd's whistle, then a stinger as good as the
   // batch was calm.
   thatllDo(label: string) {
+    this.relay('thatllDo', [label], () => this.thatllDoNow(label));
+  }
+
+  private thatllDoNow(label: string) {
     this.play('thatlldo', { delay: 0.18 });
     if (!this.ctx || this.muted) return;
     const kind: StingerKind = label === 'CALM' ? 'calm' : label === 'STEADY' ? 'steady' : 'rattled';
@@ -347,6 +372,10 @@ export class Sound {
   // Townsfolk talking: a little babble of blips in their own register, one
   // per few letters, a lift at the end of a question.
   voice(pitch: number, text: string, x: number, y: number) {
+    this.relay('voice', [pitch, text, x, y], () => this.voiceNow(pitch, text, x, y));
+  }
+
+  private voiceNow(pitch: number, text: string, x: number, y: number) {
     if (!this.ctx || this.muted) return;
     const dx = x - this.lx, dy = y - this.ly, d = Math.hypot(dx, dy);
     const vol = Math.max(0, 1 - d / 320);
@@ -441,6 +470,10 @@ export class Sound {
   // ---- Sounds ----
 
   play(name: string, opts: { x?: number; y?: number; vol?: number; delay?: number; force?: boolean } = {}) {
+    this.relay('play', [name, opts], () => this.playNow(name, opts));
+  }
+
+  private playNow(name: string, opts: { x?: number; y?: number; vol?: number; delay?: number; force?: boolean }) {
     if (!this.ctx || this.muted) return;
     // Rate-limit identical sounds a little.
     const now = this.ctx.currentTime;
@@ -634,6 +667,15 @@ export class Sound {
   // Called from Game.update in every mode: drives the music, the
   // soundscape, footsteps, gate creaks and menu sounds from game state.
   tick(g: Game, dt: number) {
+    this.inner++;
+    try {
+      this.tickNow(g, dt);
+    } finally {
+      this.inner--;
+    }
+  }
+
+  private tickNow(g: Game, dt: number) {
     if (!this.ctx) return;
     // Build a few more samples, once per frame (tick runs per substep).
     const ms = performance.now();

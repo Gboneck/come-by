@@ -119,8 +119,14 @@ export class Ranch {
     this.add(new Pen(104, 93, 0 as Rot));
   }
 
-  update(dt: number, animals: Animal[], night: boolean, dogX = -1e9, dogY = -1e9): RanchEvent[] {
+  update(dt: number, animals: Animal[], night: boolean, dogX = -1e9, dogY = -1e9, others: { x: number; y: number }[] = []): RanchEvent[] {
     const ev: RanchEvent[] = [];
+    // Co-op: the nearest dog to a gate is the one that counts.
+    const near = (x: number, y: number) => {
+      let d = Math.hypot(dogX - x, dogY - y);
+      for (const o of others) d = Math.min(d, Math.hypot(o.x - x, o.y - y));
+      return d;
+    };
     // Penning.
     for (const a of animals) {
       if (a.pen || a.gone || a.carried || a.trial) continue;
@@ -164,7 +170,7 @@ export class Ranch {
       const was = p.open;
       if (p.letOut) {
         p.open = true;
-        let busy = Math.hypot(dogX - gp.x, dogY - gp.y) < 56;
+        let busy = near(gp.x, gp.y) < 56;
         for (const a of p.animals) if (Math.hypot(a.x - gp.x, a.y - gp.y) < a.sp.r + 9) busy = true;
         if (busy || inGateway > 0) p.letOutQuiet = 0;
         else if ((p.letOutQuiet += dt) > 1.2) p.letOut = false;
@@ -193,13 +199,13 @@ export class Ranch {
     }
     // Field gates open for the dog and for animals being driven through.
     for (const gt of this.fieldGates) {
-      let want = !night && Math.hypot(dogX - gt.cx, dogY - gt.cy) < 22;
+      let want = !night && near(gt.cx, gt.cy) < 22;
       if (!night && !want)
         for (const a of animals)
           if (!a.pen && !a.gone && (a.pressure > 0.05 || a.fleeT > 0) && Math.hypot(a.x - gt.cx, a.y - gt.cy) < 30) { want = true; break; }
       if (want) gt.open = true;
       else if (gt.open) {
-        let blocked = Math.hypot(dogX - gt.cx, dogY - gt.cy) < 10;
+        let blocked = near(gt.cx, gt.cy) < 10;
         for (const a of animals) if (!a.gone && Math.hypot(a.x - gt.cx, a.y - gt.cy) < a.sp.r + 8) blocked = true;
         if (!blocked) gt.open = false;
       }

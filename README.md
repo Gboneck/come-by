@@ -32,6 +32,15 @@ Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`
 | Ranch Ledger   | Tab                    | tap your goal (top left)    |
 | Helper dogs    | H                      | HELP                        |
 | Pause / sound  | Esc / M                | pause button                |
+| Co-op          | pause, INVITE A FRIEND / title, JOIN A FRIEND | same |
+
+## Co-op
+
+A friend can join your ranch from their own browser and herd the same
+animals live as a second dog (up to four). Host: pause, INVITE A FRIEND, and
+send the code or link. Friend: JOIN A FRIEND on the title screen, or open the
+link. Co-op runs through a small relay in `server/` (a Cloudflare Worker);
+see the Co-op section of `CLAUDE.md` to run it locally or deploy it.
 
 See `CLAUDE.md` for the design laws, palette and code map, and `TASKS.md`
 for milestones and design decisions.

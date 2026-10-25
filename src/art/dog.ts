@@ -386,10 +386,13 @@ const curlRows = (back: string) => [
 const CURL = curlRows('...tttt.ttt..');
 const CURL_BREATH = curlRows('..ttttt.ttt..');
 
-let curl: Sprite[] | null = null;
+const curls = new Map<string, Sprite[]>();
 
-export function drawSleepingDog(g: CanvasRenderingContext2D, x: number, y: number, flip: boolean, t: number) {
-  curl ??= [spr(rimLight(CURL, 't', 's', false), 6, 7), spr(rimLight(CURL_BREATH, 't', 's', false), 6, 7)];
+// `friend`: a co-op friend's dog, in buttercup.
+export function drawSleepingDog(g: CanvasRenderingContext2D, x: number, y: number, flip: boolean, t: number, friend = false) {
+  const b = friend ? 'y' : 'r';
+  let curl = curls.get(b);
+  if (!curl) curls.set(b, (curl = [spr(rimLight(recolor(CURL, b), 't', 's', false), 6, 7), spr(rimLight(recolor(CURL_BREATH, b), 't', 's', false), 6, 7)]));
   drawSpr(g, curl[t % 2.4 > 1.6 ? 1 : 0], x, y + 2, flip);
 }
 

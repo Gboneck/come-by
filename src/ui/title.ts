@@ -9,6 +9,7 @@ import { tierOf } from '../systems/progression';
 import { canVibrate, saveSettings, settings } from './settings';
 import { dimView } from './feel';
 import { safeArea } from './safe';
+import { coopLeave, coopRowLabel, openCoop } from './coop';
 
 
 // Big chunky letters: the 3x5 font scaled up, with a plum outline.
@@ -24,7 +25,9 @@ export interface MenuState {
   confirmNew: boolean;
 }
 
-export type TitleAction = 'continue' | 'new' | null;
+export type TitleAction = 'continue' | 'new' | 'join' | null;
+
+const titleItems = (hasSave: boolean): Exclude<TitleAction, null>[] => (hasSave ? ['continue', 'new', 'join'] : ['new', 'join']);
 
 export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H: number, m: MenuState): TitleAction {
   // The saved dog, dressed as the player left it (the demo game read it).
@@ -34,6 +37,7 @@ export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const items: { id: TitleAction; label: string }[] = [];
   if (info) items.push({ id: 'continue', label: `CONTINUE  DAY ${info.day}  ${tierOf(info.tier).name}` });
   items.push({ id: 'new', label: info ? 'NEW RANCH' : 'START' });
+  items.push({ id: 'join', label: 'JOIN A FRIEND' });
 
   const S = safeArea(game.screen);
   const touch = game.input.touchMode;
@@ -101,7 +105,8 @@ export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H:
 // Keyboard handling for the title menu.
 export function titleKeys(game: Game, m: MenuState): TitleAction {
   const info = saveInfo();
-  const n = m.confirmNew ? 2 : info ? 2 : 1;
+  const items = titleItems(!!info);
+  const n = m.confirmNew ? 2 : items.length;
   const inp = game.input;
   if (inp.pressed('up') || inp.pressed('left')) m.sel = (m.sel + n - 1) % n;
   if (inp.pressed('down') || inp.pressed('right')) m.sel = (m.sel + 1) % n;
@@ -112,7 +117,8 @@ export function titleKeys(game: Game, m: MenuState): TitleAction {
       m.confirmNew = false;
       return null;
     }
-    if (info && m.sel === 0) return 'continue';
+    const id = items[m.sel] ?? 'new';
+    if (id !== 'new') return id;
     if (info) { m.confirmNew = true; m.sel = 1; return null; }
     return 'new';
   }
@@ -157,8 +163,12 @@ export const PAUSE_ITEMS: PauseItem[] = [
   // Volumes, 0-10: left/right or the < > ends step them, confirm steps round.
   { id: 'music', label: () => 'MUSIC', act: (g, dir) => g.audio?.stepMusic(dir), level: (g) => g.audio?.musicVol ?? 0, steps: 10, show: (g) => !!g.audio },
   { id: 'sfx', label: () => 'SOUND', act: (g, dir) => g.audio?.stepSound(dir), level: (g) => g.audio?.soundVol ?? 0, steps: 10, show: (g) => !!g.audio },
-  { id: 'dog', label: (g) => `${g.look.name}'S LOOK`, act: (g, dir) => { if (dir === 0) g.openLook('pause'); } },
-  { id: 'quit', label: () => 'SAVE AND QUIT', act: (g, dir) => { if (dir === 0) g.quitToTitle(); } },
+  { id: 'dog', label: (g) => `${g.look.name}'S LOOK`, act: (g, dir) => { if (dir === 0) g.openLook('pause'); }, show: (g) => g.net?.role !== 'guest' },
+  // Co-op: invite a friend (or see who is here), or leave a friend's ranch.
+  { id: 'coop', label: (g) => coopRowLabel(g), act: (g, dir) => { if (dir === 0) openCoop(g, 'invite'); }, show: (g) => g.net?.role !== 'guest' },
+  { id: 'leave', label: (g) => coopRowLabel(g), act: (g, dir) => { if (dir === 0) coopLeave(g); }, show: (g) => g.net?.role === 'guest' },
+  // Keep this last (savetest presses Up from RESUME to reach it).
+  { id: 'quit', label: () => 'SAVE AND QUIT', act: (g, dir) => { if (dir === 0) g.quitToTitle(); }, show: (g) => g.net?.role !== 'guest' },
 ];
 
 function pauseRows(game: Game) {

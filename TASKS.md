@@ -377,6 +377,38 @@ novice trial with a calm handler scores 99-100 with or without the change.
       (every place and its way in at real scale); tune.mjs before/after
 - [x] Typecheck, build, shot, mapshot, savetest and the loop tests, commit
 
+## M21 Co-op (real time, a friend's dog on your ranch)
+- [x] Relay in `server/`: a Cloudflare Worker, one Durable Object per room
+      code (WebSocket hibernation, so a quiet room costs nothing); 4-letter
+      codes, a host token, slots for up to three guests, a 30s grace for a
+      host whose line drops, guests keep their slot for 90s
+- [x] Host-authoritative world, guest-authoritative dog: guests send their
+      dog at 20Hz and their barks and nips; the host adds their dogs to the
+      herd as pressure (and to gates, predators, resting, catching thieves)
+- [x] Snapshots at 15Hz: animals as changes (a full one on joining), dogs,
+      helpers, townsfolk and their building sites, predators, every gate,
+      the clock, the sky; banners, speech, sounds and effects ride along.
+      Guests draw them 100ms behind; the ranch itself (the save, as data)
+      on joining and whenever it changes; the ranch's numbers as JSON
+- [x] Red is you: friends' dogs wear buttercup with their own markings and
+      a name tag; an arrow with their name when they are off screen
+- [x] INVITE A FRIEND (pause menu): the code big, COPY LINK / SHARE LINK,
+      who is here, CLOSE RANCH. JOIN A FRIEND (title) or a `?join=CODE`
+      link: type the code, walk over
+- [x] The ranch is the host's: pay, building, Ledger goals, the save.
+      Guests wait on a card while the host is at the summary, building or
+      at the judge's card; a guest's own save is never written. The host's
+      menus do not stop the world while friends are there
+- [x] Drops: a guest who drops waits 12s, then trots home; a host who drops
+      has guests wait (and carry on when they are back); a host who leaves
+      sends everyone home with "the ranch closed"; a host whose phone
+      sleeps shows guests a waiting card
+- [x] `scripts/cooptest.mjs`: relay + two browsers; the guest drives a flock
+      into the pen, bark, nip, summary, new morning, build, drops,
+      reconnects, leaving, closing, snapshot size and rate, a drive with
+      150ms each way; tune.mjs before/after; the existing loop tests
+- [ ] BRACE class at the Show Ground for two dogs (optional, not started)
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -966,3 +998,48 @@ novice trial with a calm handler scores 99-100 with or without the change.
   the decorative layer shares the random stream, so their runs differ, equal
   or better. The herding code is untouched and calm still beats barking and
   chasing everywhere.
+- Co-op is host-authoritative for the world and guest-authoritative for
+  each guest's own dog. Lockstep was ruled out: the sim uses Math.random
+  everywhere and variable substeps. Friends, so no anti-cheat.
+- The relay never reads game data. Binary frames are routed by byte 0 (from
+  the host: the guest slot, 0 = all; from a guest the relay writes in the
+  sender's slot); text frames are the relay's own JSON (welcome, join,
+  leave, host-away, host-back). Close codes: 4000 closed on purpose, 4001
+  replaced by a newer socket, 4403 bad host token, 4404 no room, 4409 full.
+- Room codes are four letters from 20 consonants (160,000 codes, never a
+  word), made by the Worker with crypto and checked free by the room.
+- Animals travel as changes against the last snapshot: a WebSocket never
+  drops or reorders, so a change list is safe; a guest arriving (or coming
+  back) gets one full snapshot of the same moment. 6 sheep and a quiet
+  ranch: ~3 KB/s; a tier-2 morning with ~20 animals ~6 KB/s, the largest
+  snapshot ~800 B.
+- Guests' clock: the offset to the host's clock follows the fastest packet
+  (and creeps up 1% a sample if the line slows); the world is drawn 100ms
+  behind that, so jitter under 100ms never shows.
+- The host eases each guest dog towards where it was sent, a step ahead
+  along its velocity (up to 0.25s), so its pressure on the herd is close
+  to "now". A guest's nip names the animal it saw at its nose; the host
+  takes it if that animal is still within its radius + 22px of the nose
+  (the guest's view is a little old), else nips whatever is there.
+- Kennel training is the ranch's: guest dogs run, bark and nip with the
+  host's upgrades.
+- Sounds and effects reach guests through taps on `Sound` and `Particles`:
+  what the game asks to play, not what the mixer plays by itself while it
+  ticks (menus, gate creaks, trial cues) — guests make those from their own
+  synced state. Each carries who caused it, so a guest never hears or sees
+  its own bark twice. Lightning, birds and butterflies are each screen's own.
+- "That'll do" goes to the dog nearest the gate when the pen shuts: "THAT'LL
+  DO, ZIGGY!" on every screen when the guest drove them.
+- Resting needs every dog lying down on the ranch, or a guest's afternoon
+  would fly past at x12.
+- Guests do not find hidden places or clear the Ledger's fog (discovery
+  follows the host's dog), and trials are the host's to run (a guest's E at
+  the post does nothing), though a guest's dog does push a trial flock.
+  A BRACE class for two dogs would be the place to change that.
+- Two dogs called BLUE would be one too many: a guest with the host's name
+  is "BLUE 2", and a guest with no save of their own gets a random name.
+- Single player is untouched: seeded tune.mjs runs (`--seed=7`) are
+  byte-identical to main for all five species, and the other loop tests,
+  savetest included, pass as before.
+- In headless Chromium a second Tab press never reaches the page, so
+  cooptest opens and closes the Ledger with G.
