@@ -10,6 +10,21 @@ await server.listen();
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 960, height: 600 } });
 const errors = [];
+const seedArg = process.argv.find((x) => x.startsWith('--seed='));
+if (seedArg) {
+  // Exact runs: seeded Math.random and no live frame loop.
+  await page.addInitScript((seed) => {
+    window.requestAnimationFrame = () => 0;
+    let a = seed >>> 0;
+    Math.random = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, Number(seedArg.slice(7)));
+}
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto('http://localhost:5214/?debug');
@@ -52,6 +67,14 @@ const r = await page.evaluate(async ({ style, trace }) => {
     step(1, { x: d > 2 ? dx / d * Math.min(1, d / 8) : 0, y: d > 2 ? dy / d * Math.min(1, d / 8) : 0, sprint: false, lie: false });
     t += 1 / 60;
     if (trace && Math.round(t * 60) % 60 === 0) (log.trace ??= []).push(`t${t.toFixed(0)} dog ${g.dog.x.toFixed(0)},${g.dog.y.toFixed(0)} wp${wp} swing ${pen.swing.toFixed(2)} let ${pen.letOut} sheep ${pen.animals.map((a) => `${a.x.toFixed(0)},${a.y.toFixed(0)},${a.pressure.toFixed(2)}`).join(' ')}`);
+  }
+  // And back out through the gate after them.
+  for (const to of [pen.gatePoint(-6), pen.gatePoint(14)]) {
+    for (let k = 0; k < 180 && Math.hypot(to.x - g.dog.x, to.y - g.dog.y) > 3; k++) {
+      const dx = to.x - g.dog.x, dy = to.y - g.dog.y, d = Math.hypot(dx, dy);
+      step(1, { x: dx / d * Math.min(1, d / 8), y: dy / d * Math.min(1, d / 8), sprint: false, lie: false });
+      t += 1 / 60;
+    }
   }
   log.out = { seconds: +t.toFixed(1), left: pen.animals.length, loose: g.animals.filter((a) => !a.pen).length, home: g.animals.filter((a) => a.home).length };
   // Drive them: out of the ranch, up the north road, right into the nook.

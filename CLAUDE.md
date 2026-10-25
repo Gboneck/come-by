@@ -31,7 +31,8 @@ original and drawn in code. No external art files, ever.
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
   `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
-  `scripts/resttest.mjs`, `scripts/weathertest.mjs`
+  `scripts/resttest.mjs`, `scripts/weathertest.mjs`, `scripts/transittest.mjs`
+  (an order's flock across a built-up ranch to each yard)
   and `scripts/tour.mjs` check the loops end to end,
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,

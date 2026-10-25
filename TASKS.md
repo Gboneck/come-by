@@ -244,17 +244,22 @@ controls, resting included.
 
 | tier | days | play min | earned $/day | spent $ | purse at tier end $ | where it stalled before |
 |---|---|---|---|---|---|---|
-| 1 | 2.0 → 2.0 | 3.0 → 3.7 | 137 → 109 | 190 → 158 | 84 → 61 | kennel waits on day one's eggs (resting covers it); "pen 6 ducks" with 5 out |
-| 2 | 1.0 → 1.0 | 6.3 → 6.6 | 578 → 391 | 528 → 348 | 133 → 104 | none |
-| 3 | 1.0 → 1.0 | 5.3 → 5.3 | 787 → 522 | 101 → 502 | 819 → 124 | money outruns the shop; calm strays block resting |
-| 4 | 1.4 → 1.0 | 9.3 → 6.2 | 1129 → 791 | 191 → 450 | 2281 → 465 | waits for a trial day; land runs short |
-| 5 | 15.4 → 1.0 | 99.5 → 6.9 | 2763 → 1201 | 90 → 41 | 54797 → 1625 | six ponies need 24 pen space with no land left |
-| done | 2 of 5 by day 8, 3 still at tier 5 on day 31 → all 5 on day 7 | | | | | |
+| 1 | 2.0 → 2.0 | 3.0 → 3.7 | 137 → 114 | 190 → 134 | 84 → 94 | kennel waits on day one's eggs (resting covers it); "pen 6 ducks" with 5 out |
+| 2 | 1.0 → 1.0 | 6.3 → 6.0 | 578 → 341 | 528 → 317 | 133 → 118 | none |
+| 3 | 1.0 → 1.0 | 5.3 → 5.1 | 787 → 462 | 101 → 474 | 819 → 106 | money outruns the shop; calm strays block resting |
+| 4 | 1.4 → 1.2 | 9.3 → 6.0 | 1129 → 735 | 191 → 474 | 2281 → 459 | waits for a trial day; land runs short; wild flocks lost at night spoil the no-loss night (one seed: 10 days) |
+| 5 | 15.4 → 3.2 | 99.5 → 19.6 | 2763 → 952 | 90 → 80 | 54797 → 3251 | six ponies need 24 pen space with no land left |
+| done | 2 of 5 by day 8, 3 still at tier 5 on day 31 → all 5 on days 7-11 (mean 9.4) | | | | | |
 
-Income after the pass, per day: tier 1 stock 120 / goods 99; tier 2
-stock 153 / goods 196 / orders 22 / trials 20; tier 3 stock 124 / goods
-340 / orders 58; tier 4 stock 234 / goods 444 / orders 91; tier 5 stock
-260 / goods 618 / orders 223 / trials 47. Through tier 4 the purse runs
+"After" is the final code: pacing, weather (from tier 2) and the drove
+road (M15), which keeps about a quarter of the clearing free, so tier 5's
+"50 animals penned" now takes upgrading pens or choosing what to keep
+(about 3 bot days) instead of finishing the day it opens.
+
+Income after the pass, per day: tier 1 stock 126 / goods 102; tier 2
+stock 74 / goods 181 / orders 56 / trials 30; tier 3 stock 135 / goods
+269 / orders 58; tier 4 stock 185 / goods 512 / orders 111; tier 5 stock
+541 / goods 1719 / orders 334 / trials 50. Through tier 4 the purse runs
 low most evenings, so the day-end choice is a real one. Past tier 5 money
 piles up again: see Decisions.
 
@@ -270,43 +275,79 @@ piles up again: see Decisions.
 - [x] Storm: wind and rain, and an extra, bolder coyote at night
 - [x] First-time tip per sky; the morning banner names the sky
 - [x] `scripts/weathertest.mjs`; tune.mjs `--weather` and `--seed`
-- [x] tune.mjs for every species in clear (before = after, exact) and in
-      each sky (table below)
+- [x] tune.mjs for every species in clear (before = after, exact, until
+      the drove-road steering in M15) and in each sky (table below)
 
 Seeded (`--seed=1`), 3 runs each: runs home / mean seconds / peak stress.
-Clear is identical to the old code. The steady style for each species
+Final code (drove-road steering included). The steady style for each species
 (calm walk; nip heels for goats and cattle, which need it in any sky) gets
 home calmly in every sky; barking every 2s gets worse in wind, rain and storm.
-Cattle are slowest in rain: between nips they huddle and drift for the
-trees, so a nip drive runs past the scenario's 120s cap.
 
 | species | sky | calm walk | nip heels | bark every 2s | chase (sprint) |
 |---|---|---|---|---|---|
-| duck | clear | 3/3 16s 0.00 | 3/3 12s 0.14 | 3/3 12s 0.66 | 0/3 20s 1.00 |
-| duck | wind | 3/3 20s 0.00 | 3/3 12s 0.16 | 3/3 10s 0.88 | 0/3 20s 1.00 |
-| duck | rain | 3/3 14s 0.07 | 3/3 16s 0.71 | 3/3 9s 0.97 | 0/3 20s 1.00 |
-| duck | fog | 3/3 20s 0.00 | 3/3 12s 0.46 | 3/3 13s 0.72 | 0/3 20s 1.00 |
-| duck | storm | 3/3 16s 0.10 | 3/3 11s 0.50 | 2/3 47s 1.00 | 0/3 20s 1.00 |
-| sheep | clear | 3/3 12s 0.00 | 3/3 9s 0.06 | 3/3 8s 0.71 | 0/3 20s 1.00 |
-| sheep | wind | 2/3 52s 0.01 | 3/3 9s 0.01 | 2/3 44s 0.92 | 0/3 20s 1.00 |
-| sheep | rain | 3/3 11s 0.07 | 3/3 8s 0.16 | 2/3 43s 1.00 | 1/3 17s 1.00 |
-| sheep | fog | 3/3 15s 0.01 | 3/3 9s 0.07 | 3/3 8s 0.70 | 0/3 20s 1.00 |
-| sheep | storm | 3/3 19s 0.09 | 3/3 8s 0.23 | 3/3 5s 1.00 | 0/3 20s 1.00 |
-| goat | clear | 0/3 120s 0.00 | 3/3 13s 0.00 | 1/3 95s 0.55 | 0/3 20s 1.00 |
-| goat | wind | 0/3 120s 0.01 | 3/3 14s 0.01 | 2/3 69s 0.75 | 0/3 20s 1.00 |
-| goat | rain | 1/3 94s 0.07 | 3/3 11s 0.07 | 2/3 48s 0.86 | 0/3 20s 1.00 |
-| goat | fog | 1/3 116s 0.02 | 3/3 19s 0.02 | 3/3 20s 0.56 | 0/3 20s 1.00 |
-| goat | storm | 0/3 120s 0.13 | 3/3 10s 0.08 | 1/3 100s 1.00 | 0/3 20s 1.00 |
-| cow | clear | 0/3 120s 0.00 | 2/3 114s 0.20 | 0/3 120s 0.17 | 0/3 20s 1.00 |
-| cow | wind | 0/3 120s 0.00 | 3/3 102s 0.22 | 1/3 117s 0.28 | 0/3 20s 1.00 |
-| cow | rain | 0/3 120s 0.07 | 0/3 120s 0.29 | 0/3 120s 0.16 | 0/3 20s 1.00 |
-| cow | fog | 0/3 120s 0.00 | 3/3 92s 0.22 | 1/3 119s 0.10 | 0/3 20s 1.00 |
-| cow | storm | 0/3 120s 0.12 | 1/3 99s 0.54 | 1/3 89s 0.51 | 0/3 20s 1.00 |
-| pony | clear | 3/3 7s 0.01 | 3/3 6s 0.09 | 3/3 7s 0.30 | 1/3 16s 1.00 |
-| pony | wind | 3/3 8s 0.01 | 3/3 6s 0.08 | 3/3 5s 0.59 | 1/3 16s 1.00 |
-| pony | rain | 3/3 7s 0.05 | 3/3 6s 0.22 | 3/3 6s 0.47 | 1/3 14s 1.00 |
-| pony | fog | 3/3 7s 0.02 | 3/3 6s 0.10 | 3/3 7s 0.43 | 0/3 20s 1.00 |
-| pony | storm | 3/3 7s 0.06 | 3/3 6s 0.30 | 3/3 4s 0.71 | 1/3 16s 1.00 |
+| duck | clear | 3/3 17s 0.00 | 3/3 11s 0.29 | 3/3 11s 0.67 | 0/3 20s 1.00 |
+| duck | wind | 3/3 18s 0.00 | 3/3 12s 0.28 | 3/3 10s 0.81 | 0/3 20s 1.00 |
+| duck | rain | 3/3 15s 0.07 | 3/3 11s 0.33 | 3/3 9s 0.98 | 0/3 20s 1.00 |
+| duck | fog | 3/3 24s 0.00 | 3/3 14s 0.60 | 3/3 12s 0.78 | 0/3 20s 1.00 |
+| duck | storm | 3/3 15s 0.09 | 3/3 16s 0.76 | 2/3 45s 1.00 | 0/3 20s 1.00 |
+| sheep | clear | 3/3 12s 0.00 | 3/3 9s 0.03 | 3/3 7s 0.71 | 0/3 20s 1.00 |
+| sheep | wind | 3/3 13s 0.00 | 3/3 9s 0.02 | 2/3 44s 0.91 | 0/3 20s 1.00 |
+| sheep | rain | 3/3 10s 0.07 | 3/3 8s 0.15 | 3/3 6s 0.97 | 0/3 20s 1.00 |
+| sheep | fog | 3/3 14s 0.01 | 3/3 9s 0.03 | 3/3 7s 0.81 | 0/3 20s 1.00 |
+| sheep | storm | 3/3 11s 0.07 | 3/3 8s 0.21 | 3/3 5s 1.00 | 0/3 20s 1.00 |
+| goat | clear | 0/3 120s 0.00 | 3/3 14s 0.01 | 2/3 54s 0.46 | 0/3 20s 1.00 |
+| goat | wind | 0/3 120s 0.01 | 3/3 13s 0.01 | 2/3 54s 0.63 | 0/3 20s 1.00 |
+| goat | rain | 3/3 56s 0.07 | 3/3 10s 0.07 | 2/3 47s 0.87 | 0/3 20s 1.00 |
+| goat | fog | 1/3 111s 0.01 | 3/3 12s 0.02 | 3/3 15s 0.52 | 0/3 20s 1.00 |
+| goat | storm | 1/3 91s 0.12 | 3/3 10s 0.07 | 0/3 120s 1.00 | 0/3 20s 1.00 |
+| cow | clear | 0/3 120s 0.00 | 3/3 116s 0.18 | 0/3 120s 0.11 | 0/3 20s 1.00 |
+| cow | wind | 0/3 120s 0.00 | 3/3 69s 0.21 | 2/3 102s 0.15 | 0/3 20s 1.00 |
+| cow | rain | 0/3 120s 0.07 | 0/3 120s 0.32 | 0/3 120s 0.16 | 0/3 20s 1.00 |
+| cow | fog | 0/3 120s 0.00 | 2/3 95s 0.20 | 1/3 114s 0.10 | 0/3 20s 1.00 |
+| cow | storm | 0/3 120s 0.12 | 1/3 103s 0.46 | 2/3 62s 0.56 | 0/3 20s 1.00 |
+| pony | clear | 3/3 7s 0.00 | 3/3 6s 0.08 | 3/3 6s 0.33 | 0/3 20s 1.00 |
+| pony | wind | 3/3 7s 0.00 | 3/3 6s 0.06 | 3/3 5s 0.61 | 1/3 17s 1.00 |
+| pony | rain | 3/3 6s 0.04 | 3/3 6s 0.19 | 3/3 5s 0.49 | 0/3 20s 1.00 |
+| pony | fog | 3/3 7s 0.02 | 3/3 6s 0.14 | 3/3 6s 0.49 | 0/3 20s 1.00 |
+| pony | storm | 3/3 6s 0.05 | 3/3 5s 0.30 | 2/3 43s 0.65 | 1/3 15s 1.00 |
+
+Cattle are slowest in rain: between nips they huddle and drift for the
+trees, so a nip drive runs past the scenario's 120s cap.
+
+## M15 Drove road (gameplay, round two, from playtesting)
+- [x] The ranch's dirt roads are a drove road (2 tiles either side of the
+      track): no pens, buildings or fences on it, a field gate is fine;
+      build mode draws its edges while placing and says "KEEP THE DROVE
+      ROAD CLEAR". Saves keep what they already have
+- [x] A new pen's gate must open onto open ground (not trees or a wall);
+      an arrow shows the gate side while placing
+- [x] Open pen gates only draw in animals already heading in, so a flock
+      walked past a row of pens no longer peels off into them
+- [x] Driven animals feel either side of a wall, building corner or fence
+      end and slide round it
+- [x] `scripts/transittest.mjs`: six sheep let out of a pen and driven to
+      each yard across a dense ranch, before and after
+
+Five seeds each; "delivered" = all four the buyer wanted arrived.
+
+| yard | old code, cramped ranch | new code, same cramped ranch (an old save) | new code, ranch built off the road |
+|---|---|---|---|
+| mill (east) | 0/5 (sheep peel into pens, snag) | 5/5, 42s | 5/5, 31s |
+| drover (north) | 5/5, 21s | 5/5, 21s | 5/5, 21s |
+| sale yard (east, south) | 0/5 | 5/5, 36s | 5/5, 35s |
+
+A save whose east road is walled off completely (`--layout=blocked`)
+still cannot get a flock out east: that needs rebuilding.
+
+Herding tune in clear weather (seeded) before and after the two herd
+changes: calm drives are the same or a touch quicker (sheep 12.0s to
+11.6s, ponies 7.1s to 6.8s, ducks 16.5s to 16.6s; goats and cattle as
+before, nip heels for cattle 2/3 to 3/3). Barking scenarios now reach the
+goal more often, because panicked animals no longer jam against walls,
+but they still arrive frantic (peak stress 1.0, panics), so calm still
+pays best. Goat keyboard-crowding drives got slower (16s to 25-41s).
+Seeded ordertest (pen to the drover, four seeds): 17-19s each; the
+novice trial with a calm handler scores 99-100 with or without the change.
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -826,3 +867,14 @@ trees, so a nip drive runs past the scenario's 120s cap.
   only an 8% shorter flight zone and a modestly jumpier startle.
 - `forecast` is rolled each morning for tomorrow (not at day's end) so it
   means the same thing all day for the HUD, the summary and audio.
+- Drove road (M15): the rule is in `src/ranch/road.ts` and asked by build
+  mode's ghost; `build.ts` (Feel and UI's file) only gained that one check
+  and two draw calls (`src/art/road.ts`). The road is the existing worn
+  track widened two tiles each side, inside the ranch only; the ranch
+  already has three ways out (north, west, east), so no new exit. The
+  user's "hard to transit" turned out to be two things besides layout:
+  every open pen gate pulled a passing flock in (pens stand open by day),
+  and driven animals pushed straight into building corners and fence
+  ends. Both are fixed in the herd model and help old saves too.
+- Tier 4's night goal counts only your own stock (taken from a pen, or
+  let out of one); wild flocks in the far pastures do not spoil it.
