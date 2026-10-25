@@ -57,6 +57,7 @@ export class Pacer {
   rested = 0;
   spent = 0;
   assisted = 0; // drives the bot could not do, walked through at a player's pace
+  assist = true; // off for tests that want to see a drive stall
   did: string[] = [];
   stuck: string[] = [];
   private skip = new Set<Animal>(); // given up on for today
@@ -161,6 +162,7 @@ export class Pacer {
       if (inside && atDoor) left = dist(c, inside);
       if (left < best - 4) { best = left; bestT = t; }
       else if (t - bestT > 40) {
+        if (!this.assist) break;
         // Stalled (goats on the rocks, cattle at the ford): walk the rest
         // through at a decent player's pace so the clock and money stay true.
         t += this.assistDrive(list, [...path.slice(wi), door, ...(inside ? [inside] : [])], maxT - t);
@@ -479,7 +481,7 @@ export class Pacer {
   }
 
   // Let `n` (or more) out of a pen: E at the gate, walk round behind them.
-  private letOut(p: Pen, n: number): Animal[] {
+  letOut(p: Pen, n: number): Animal[] {
     const g = this.g, d = g.dog;
     if (!this.walkTo(p.gatePoint(9), 40, 3)) return [];
     const c = { x: p.cx, y: p.cy };

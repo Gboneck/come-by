@@ -179,9 +179,9 @@ controls, resting included.
 Income after the pass, per day: tier 1 stock 120 / goods 99; tier 2
 stock 153 / goods 196 / orders 22 / trials 20; tier 3 stock 124 / goods
 340 / orders 58; tier 4 stock 234 / goods 444 / orders 91; tier 5 stock
-260 / goods 618 / orders 223 / trials 47. Through tier 4 the purse is
-spent most evenings (the day-end card lists 6-8 things you can afford,
-not everything). Past tier 5 money piles up again: see Decisions.
+260 / goods 618 / orders 223 / trials 47. Through tier 4 the purse runs
+low most evenings, so the day-end choice is a real one. Past tier 5 money
+piles up again: see Decisions.
 
 ## M14 Weather (gameplay, round two)
 - [x] Skies by tier (tier 1 clear; from tier 2 about half clear, the rest
