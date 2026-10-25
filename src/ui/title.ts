@@ -6,6 +6,7 @@ import { makeDogSprites } from '../art/dog';
 import type { Game } from '../game';
 import { saveInfo } from '../systems/save';
 import { tierOf } from '../systems/progression';
+import type { VolumeAction } from '../systems/audio';
 
 let dogSpr: ReturnType<typeof makeDogSprites> | null = null;
 
@@ -111,24 +112,38 @@ export function titleKeys(game: Game, m: MenuState): TitleAction {
   return null;
 }
 
-export function drawPause(game: Game, g: CanvasRenderingContext2D, W: number, H: number, sel: number): 'resume' | 'sound' | 'quit' | null {
+export type PauseAction = 'resume' | 'quit' | VolumeAction;
+// Pause rows. The two sliders step with left/right, '-' and '+' taps, and
+// round from 10 to 0 with confirm or a tap on the middle.
+export const PAUSE_ITEMS: PauseAction[] = ['resume', 'music~', 'sound~', 'quit'];
+
+export function drawPause(game: Game, g: CanvasRenderingContext2D, W: number, H: number, sel: number): PauseAction | null {
   const ui = game.ui;
-  const items: ['resume' | 'sound' | 'quit', string][] = [
-    ['resume', 'RESUME'],
-    ['sound', `SOUND: ${game.audio && 'muted' in game.audio && (game.audio as { muted: boolean }).muted ? 'OFF' : 'ON'}`],
-    ['quit', 'SAVE AND QUIT'],
-  ];
-  const pw = 110, ph = 26 + items.length * 15;
+  const au = game.audio;
+  const pw = 120, ph = 26 + PAUSE_ITEMS.length * 15;
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
   panel(g, x0, y0, pw, ph);
-  text(g, 'PAUSED', W / 2, y0 + 6, C.butter, { align: 'center' });
-  let out: 'resume' | 'sound' | 'quit' | null = null;
-  items.forEach(([id, label], i) => {
-    const y = y0 + 18 + i * 15;
+  text(g, au?.muted ? 'PAUSED  (MUTED: M)' : 'PAUSED', W / 2, y0 + 6, C.butter, { align: 'center' });
+  let out: PauseAction | null = null;
+  PAUSE_ITEMS.forEach((id, i) => {
+    const x = x0 + 8, y = y0 + 18 + i * 15, w = pw - 16;
     const on = sel === i;
-    panel(g, x0 + 8, y, pw - 16, 12, on ? C.teal : C.plum, on ? C.butter : C.sage);
-    text(g, label, W / 2, y + 4, C.wool, { align: 'center' });
-    if (ui.click(`pause-${id}`, x0 + 8, y, pw - 16, 12)) out = id;
+    panel(g, x, y, w, 12, on ? C.teal : C.plum, on ? C.butter : C.sage);
+    if (id === 'music~' || id === 'sound~') {
+      const music = id === 'music~';
+      const lvl = au ? (music ? au.musicLevel : au.soundLevel) : 0;
+      text(g, '-', x + 5, y + 4, C.wool);
+      text(g, music ? 'MUSIC' : 'SOUND', x + 13, y + 4, C.wool);
+      for (let k = 0; k < 10; k++) rect(g, x + w - 44 + k * 3, y + 4, 2, 5, k < lvl ? C.butter : on ? C.plum : C.sage);
+      text(g, '+', x + w - 9, y + 4, C.wool);
+      const third = Math.floor(w / 3);
+      if (ui.click(`pause-${id}-`, x, y, third, 12)) out = music ? 'music-' : 'sound-';
+      if (ui.click(`pause-${id}`, x + third, y, w - 2 * third, 12)) out = id;
+      if (ui.click(`pause-${id}+`, x + w - third, y, third, 12)) out = music ? 'music+' : 'sound+';
+    } else {
+      text(g, id === 'resume' ? 'RESUME' : 'SAVE AND QUIT', W / 2, y + 4, C.wool, { align: 'center' });
+      if (ui.click(`pause-${id}`, x, y, w, 12)) out = id;
+    }
   });
   return out;
 }

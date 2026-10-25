@@ -35,7 +35,7 @@ await page.evaluate(async () => {
 await page.keyboard.press('Escape');
 await page.waitForTimeout(100);
 await step('paused', () => ({ mode: window.game.mode }));
-for (const k of ['ArrowDown', 'ArrowDown', 'Enter']) {
+for (const k of ['ArrowUp', 'Enter']) { // up wraps round to SAVE AND QUIT
   await page.keyboard.press(k);
   await page.waitForTimeout(80);
 }

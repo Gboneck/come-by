@@ -28,6 +28,9 @@ original and drawn in code. No external art files, ever.
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
   `scripts/savetest.mjs` and `scripts/tour.mjs` check the loops end to end.
+  `scripts/audiotest.mjs` renders the music, stingers and soundscape
+  offline and prints levels, peaks, tuning, theory checks and CPU (we
+  cannot listen, so we measure).
 
 ## Rendering rules
 
@@ -71,7 +74,8 @@ stays unique.
 | Ranch Ledger    | Tab / G                          | LEDGER button                 |
 | Helper command  | H                                | HELP button                   |
 | Pause           | Esc / P                          | pause button                  |
-| Mute            | M                                | in pause menu                 |
+| Mute            | M                                | sliders to 0 in pause menu    |
+| Volume          | pause menu, left/right           | pause menu, - and +           |
 
 ## Design laws
 
@@ -105,8 +109,9 @@ stays unique.
 - `src/world/` tile map, regions, terrain/canopy baking.
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
-- `src/systems/` day cycle, economy, progression, save, audio, particles,
-  spawner.
+- `src/systems/` day cycle, economy, progression, save, audio (mixer and
+  sound effects), music (generative score), soundscape, synth (sample bank),
+  particles, spawner.
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
 - `src/render/` world drawing and the night dither.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
@@ -122,7 +127,9 @@ The game is live at https://gboneck.github.io/come-by/ and deploys from
 - Work on a branch. Before shipping: `npm run typecheck`, `npm run build`,
   and `npm run shot` (desktop + phone screenshots in `shots/`, fails on
   console errors). Look at the screenshots. For anything touching herding,
-  run `node scripts/tune.mjs <species>` before and after and compare.
+  run `node scripts/tune.mjs <species>` before and after and compare. For
+  anything touching sound, run `node scripts/audiotest.mjs` (fails on
+  clipping, detuning or console errors).
 - Ship by opening a pull request into `main`; merging it redeploys the
   site in about a minute. When the user says to ship or merge, merge it
   yourself (`gh pr merge --squash --delete-branch`) and say when the

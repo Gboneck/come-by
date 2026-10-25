@@ -1,0 +1,461 @@
+// Offline audio check. Renders each music piece, the stingers and the
+// soundscape with an OfflineAudioContext in headless Chromium, through the
+// real mixer, and prints levels, peaks and clipping, plus music-theory checks
+// on the notes played (scale, chord tones, leaps, range). Spectrograms go to
+// shots/audio-<name>.png.
+//
+//   node scripts/audiotest.mjs                  all pieces + stingers + ambience
+//   node scripts/audiotest.mjs ranch night      just these
+//   node scripts/audiotest.mjs --secs=30 --seed=3 --roll   (--roll prints the tunes)
+import { chromium } from 'playwright';
+import { createServer } from 'vite';
+import { mkdirSync, writeFileSync } from 'node:fs';
+
+const args = process.argv.slice(2);
+const opt = (k, d) => {
+  const a = args.find((x) => x.startsWith(`--${k}=`));
+  return a ? a.slice(k.length + 3) : d;
+};
+const flag = (k) => args.includes(`--${k}`);
+const SECS = Number(opt('secs', '24'));
+const SEED = Number(opt('seed', '1'));
+const ALL = ['bank', 'tuning', 'live', 'drive', 'balance', 'title', 'ranch', 'meadow', 'hills', 'rocky', 'ford', 'high', 'dusk', 'night', 'panic', 'prowl', 'stingers', 'ambience', 'mix'];
+const only = args.filter((a) => !a.startsWith('--'));
+const cases = only.length ? only : ALL;
+
+const PORT = 5197;
+const server = await createServer({ server: { port: PORT, strictPort: true }, logLevel: 'error' });
+await server.listen();
+const browser = await chromium.launch();
+const page = await browser.newPage();
+const errors = [];
+page.on('pageerror', (e) => errors.push(e.message));
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+await page.goto(`http://localhost:${PORT}/?sprites=999`);
+
+const MODES = {
+  title: [7, 'ion'], ranch: [7, 'ion'], meadow: [2, 'ion'], hills: [4, 'dor'], rocky: [9, 'dor'],
+  ford: [0, 'ion'], high: [2, 'mix'], dusk: [9, 'aeo'], night: [2, 'aeo'],
+};
+const SCALES = { ion: [0, 2, 4, 5, 7, 9, 11], dor: [0, 2, 3, 5, 7, 9, 10], mix: [0, 2, 4, 5, 7, 9, 10], aeo: [0, 2, 3, 5, 7, 8, 10] };
+const NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const nm = (m) => NAMES[m % 12] + (Math.floor(m / 12) - 1);
+const db = (v) => (v > 0 ? (20 * Math.log10(v)).toFixed(1) : '-inf');
+
+mkdirSync('shots', { recursive: true });
+let fail = false;
+
+for (const name of cases) {
+  if (name === 'bank') {
+    // How long each sample takes to build (the game spreads them over frames).
+    const b = await page.evaluate(async () => {
+      const { Bank } = await import('/src/systems/synth.ts');
+      const bank = new Bank(new OfflineAudioContext(2, 44100, 44100));
+      const times = [];
+      while (bank.pending) {
+        const name = bank.queue[0][0];
+        const t0 = performance.now();
+        bank.pump(0.0001);
+        times.push([name, performance.now() - t0]);
+      }
+      times.sort((a, b) => b[1] - a[1]);
+      return { n: times.length, total: times.reduce((a, [, t]) => a + t, 0), worst: times.slice(0, 5) };
+    });
+    console.log(`\n== bank  ${b.n} buffers, ${b.total.toFixed(0)} ms in all, slowest: ${b.worst.map(([n, t]) => `${n} ${t.toFixed(1)}ms`).join(', ')}`);
+    continue;
+  }
+  if (name === 'live') {
+    // The real game with a live AudioContext: walk through every phase and
+    // check which piece the music picks, the mood it reads, and no errors.
+    const lp = await browser.newPage();
+    lp.on('pageerror', (e) => errors.push(e.message));
+    lp.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
+    await lp.goto(`http://localhost:${PORT}/?debug`);
+    await lp.waitForFunction(() => window.game);
+    await lp.keyboard.press('KeyD');
+    const steps = await lp.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = () => window.game;
+      const out = [];
+      const note = async (what) => {
+        await wait(700);
+        const m = g().audio.music;
+        out.push(`${what}: wants ${m.want}, playing ${m.piece?.id}, energy ${m.energy.toFixed(2)} tension ${m.tension.toFixed(2)}`);
+      };
+      const run = (secs) => { for (let i = 0; i < secs * 60; i++) g().update(1 / 60); };
+      await note('morning at the ranch');
+      const reg = (await import('/src/world/map.ts')).REGIONS;
+      for (const id of ['meadow', 'hills', 'rocky', 'ford', 'high']) {
+        const r = reg.find((x) => x.id === id);
+        g().setTier(5, false);
+        g().dog.x = r.cx * 8; g().dog.y = r.cy * 8;
+        run(0.1);
+        await note(id);
+      }
+      g().dog.x = reg[0].cx * 8; g().dog.y = reg[0].cy * 8;
+      g().day.t = 0.8 * 300 - 0.05;
+      run(0.2);
+      await note('dusk');
+      g().day.t = 299.99;
+      run(0.2);
+      await note('nightfall');
+      // A coyote hunting right beside the dog.
+      const pr = g().predators[0];
+      pr.state = 'hunt';
+      pr.x = g().dog.x + 50; pr.y = g().dog.y;
+      await note('coyote close by');
+      pr.state = 'gone';
+      await wait(2500);
+      await note('coyote gone');
+      g().endDay();
+      run(0.05);
+      await note('summary');
+      g().enterBuild(true);
+      run(0.05);
+      await note('build');
+      g().exitBuild();
+      run(0.05);
+      g().mode = 'pause';
+      run(0.05);
+      await note('paused');
+      g().mode = 'play';
+      g().request = 'title';
+      await wait(300);
+      await note('back to the title');
+      return out;
+    });
+    console.log('\n== live');
+    for (const s of steps) console.log('  ' + s);
+    await lp.close();
+    continue;
+  }
+  if (name === 'drive') {
+    // The herding bot drives sheep home calmly, then rudely: what does the
+    // music hear? (energy = working a flock, tension = its stress/panic)
+    const lp = await browser.newPage();
+    lp.on('pageerror', (e) => errors.push(e.message));
+    await lp.goto(`http://localhost:${PORT}/?debug`);
+    await lp.waitForFunction(() => window.sim);
+    await lp.keyboard.press('KeyD');
+    console.log('\n== drive (sheep x10, bot)');
+    for (const [label, o] of [['calm walk', {}], ['bark every 0.8s', { bark: 0.8 }], ['chase, sprinting', { chase: true, sprint: true }]]) {
+      const r = await lp.evaluate((o) => {
+        window.resetFlock('sheep', 768, 740, 10, 700, 700);
+        const m = window.game.audio.music;
+        const e = [], x = [];
+        for (let k = 0; k < 40; k++) {
+          const res = window.sim({ goalX: 880, goalY: 900, ...o }, 1);
+          e.push(m.energy);
+          x.push(m.tension);
+          if (res.reached) break;
+        }
+        const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+        return { secs: e.length, energy: mean(e), tension: mean(x), peak: Math.max(...x), tense: x.filter((v) => v > 0.6).length / x.length };
+      }, o);
+      console.log(`  ${label.padEnd(18)} ${String(r.secs).padStart(2)}s  energy ${r.energy.toFixed(2)}  tension mean ${r.tension.toFixed(2)} peak ${r.peak.toFixed(2)}  tense ${(100 * r.tense).toFixed(0)}% of the time`);
+    }
+    await lp.close();
+    continue;
+  }
+  if (name === 'balance') {
+    // Each layer of the band soloed over the same seeded passage.
+    const LAYERS = ['leadBus', 'harpBus', 'melBus', 'bassBus', 'padEnv', 'droneEnv', 'percBus', 'bellBus', 'tensEnv'];
+    const rows = [];
+    for (const [piece, energy, tension] of [['ranch', 0.85, 0], ['night', 0.2, 0.7]]) {
+      for (const solo of ['all', ...LAYERS]) {
+        const rms = await page.evaluate(async ({ piece, energy, tension, solo, LAYERS, SEED }) => {
+          localStorage.clear();
+          const { Sound } = await import('/src/systems/audio.ts');
+          const { mulberry32 } = await import('/src/rng.ts');
+          const sr = 44100, secs = 20;
+          const ctx = new OfflineAudioContext(2, sr * secs, sr);
+          const s = new Sound({ listen: false });
+          s.attach(ctx, mulberry32(SEED));
+          s.bank.generateAll();
+          if (solo !== 'all') for (const l of LAYERS) if (l !== solo) s.music[l].disconnect();
+          const st = { piece, energy, tension, rest: false, muffle: false };
+          s.music.update(st, 0.1);
+          for (let t = 0.1; t < secs - 0.1; t += 0.1) { const tt = Math.round(t * 10) / 10; ctx.suspend(tt).then(() => { s.music.update(st, 0.1); ctx.resume(); }); }
+          const b = await ctx.startRendering();
+          let e = 0;
+          for (let c = 0; c < 2; c++) for (const v of b.getChannelData(c)) e += v * v;
+          return Math.sqrt(e / (2 * b.length));
+        }, { piece, energy, tension, solo, LAYERS, SEED });
+        rows.push([piece, solo, rms]);
+      }
+    }
+    console.log('\n== balance (rms dBFS, layer soloed)');
+    for (const piece of ['ranch', 'night']) console.log(`  ${piece}: ` + rows.filter((r) => r[0] === piece && r[2] > 1e-5).map(([, l, v]) => `${l.replace(/Bus|Env/, '')} ${db(v)}`).join('  '));
+    continue;
+  }
+  if (name === 'tuning') {
+    // Pitch of the sampled instruments, by autocorrelation: cents off.
+    const t = await page.evaluate(async () => {
+      const { Bank, mtof } = await import('/src/systems/synth.ts');
+      const sr = 44100;
+      const bank = new Bank(new OfflineAudioContext(1, sr, sr));
+      bank.generateAll();
+      const out = [];
+      for (const [kind, notes] of [['pluck', [40, 45, 50, 57, 62, 66, 69, 74, 79, 86, 90]], ['bell', [62, 69, 76, 81, 88, 95]]]) {
+        for (const m of notes) {
+          const s = kind === 'pluck' ? bank.pluck(m) : bank.bell(m);
+          const ctx = new OfflineAudioContext(1, sr, sr);
+          const src = ctx.createBufferSource();
+          src.buffer = s.buf;
+          src.playbackRate.value = s.rate;
+          src.connect(ctx.destination);
+          src.start();
+          const d = (await ctx.startRendering()).getChannelData(0);
+          const f = mtof(m), w = Math.floor(sr * 0.25), a0 = Math.floor(sr * 0.05);
+          let best = 0, bl = 0;
+          const lo = Math.floor((sr / f) * 0.8), hi = Math.ceil((sr / f) * 1.25);
+          const ac = [];
+          for (let lag = lo; lag <= hi; lag++) {
+            let c = 0;
+            for (let i = a0; i < a0 + w; i++) c += d[i] * d[i + lag];
+            ac.push(c);
+            if (c > best) { best = c; bl = lag; }
+          }
+          // Parabolic interpolation around the peak.
+          const k = bl - lo, y0 = ac[k - 1] ?? best, y2 = ac[k + 1] ?? best;
+          const lag = bl + (y0 - y2) / (2 * (y0 - 2 * best + y2) || 1);
+          out.push([kind, m, 1200 * Math.log2(sr / lag / f)]);
+        }
+      }
+      return out;
+    });
+    const worst = Math.max(...t.map(([, , c]) => Math.abs(c)));
+    console.log(`\n== tuning  worst ${worst.toFixed(1)} cents`);
+    console.log('  ' + t.map(([k, m, c]) => `${k}${nm(m)} ${c >= 0 ? '+' : ''}${c.toFixed(1)}`).join('  '));
+    if (worst > 8) fail = true;
+    continue;
+  }
+  const r = await page.evaluate(async ({ name, SECS, SEED }) => {
+    localStorage.clear(); // volumes are remembered; start each case at the defaults
+    const { Sound } = await import('/src/systems/audio.ts');
+    const { mulberry32 } = await import('/src/rng.ts');
+    const sr = 44100;
+    const secs = name === 'stingers' ? 18 : SECS;
+    const ctx = new OfflineAudioContext(2, Math.floor(sr * secs), sr);
+    const rnd = mulberry32(SEED);
+    const s = new Sound({ listen: false });
+    s.attach(ctx, rnd);
+    s.bank.generateAll();
+    const log = [];
+    s.music.log = log;
+    const base = { piece: 'ranch', energy: 0.5, tension: 0, rest: false, muffle: false };
+    const amb = { region: 'ranch', phase: 'day', river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, wind: 0.3 };
+    let musicOn = true, ambOn = false;
+    let state = () => base;
+    let ambState = () => amb;
+    const events = [];
+    switch (name) {
+      case 'panic':
+        // A calm drive, then the flock panics, then settles again.
+        state = (t) => ({ ...base, piece: 'hills', energy: 0.8, tension: t < 6 ? 0.05 : t < 14 ? 0.9 : 0.05 });
+        break;
+      case 'prowl':
+        state = (t) => ({ ...base, piece: 'night', energy: 0.2, tension: t < 8 ? 0 : t < 18 ? Math.min(1, (t - 8) / 5) : 0.1 });
+        break;
+      case 'stingers':
+        state = () => ({ ...base, piece: 'ranch', energy: 0.4 });
+        events.push([2, 'calm'], [5.5, 'steady'], [8, 'rattled'], [10, 'tierup'], [14, 'summary']);
+        break;
+      case 'ambience':
+        musicOn = false;
+        ambOn = true;
+        ambState = (t) => ({
+          ...amb,
+          region: t < 8 ? 'high' : 'ford', wind: t < 8 ? 0.9 : 0.35, river: t < 8 ? 0 : 0.9, riverPan: -0.4, ford: t < 8 ? 0 : 0.8,
+          herd: [{ sp: t < 8 ? 'pony' : 'cow', rate: 6, pan: 0.2, vol: 0.8, water: 0 }],
+          murmur: 6, murmurStress: t < 16 ? 0.1 : 0.8, murmurPan: 0.1, murmurSp: t < 8 ? 'pony' : 'cow', munch: t < 16 ? 0.7 : 0,
+          phase: t < 20 ? 'day' : 'night', rain: t > 12 ? 0.8 : 0,
+        });
+        break;
+      case 'mix':
+        // Everything at once: music, ambience, barks and calls.
+        ambOn = true;
+        state = (t) => ({ ...base, piece: 'meadow', energy: 0.7, tension: t > 12 ? 0.7 : 0.1 });
+        ambState = () => ({ ...amb, region: 'meadow', wind: 0.4, herd: [{ sp: 'duck', rate: 8, pan: 0, vol: 1, water: 0 }], murmur: 7, murmurStress: 0.3, munch: 0.5 });
+        for (let t = 1; t < secs - 1; t += 1.7) events.push([t, 'sfx:bark']);
+        for (let t = 2.2; t < secs - 1; t += 3.1) events.push([t, 'sfx:quack']);
+        events.push([6, 'calm'], [9, 'sfx:coin'], [9.05, 'sfx:gate'], [15, 'tierup']);
+        break;
+      default:
+        state = (t) => ({ ...base, piece: name, energy: t < secs * 0.4 ? 0.25 : 0.8 });
+    }
+    events.sort((a, b) => a[0] - b[0]);
+    if (!musicOn) s.setMusicLevel(0);
+    const dt = 0.05;
+    let ei = 0;
+    const tick = (t) => {
+      s.lx = 0; s.ly = 0;
+      if (musicOn) s.music.update(state(t), dt);
+      if (ambOn) s.ambience.update(ambState(t), dt, 0, 0);
+      while (ei < events.length && events[ei][0] <= t + 1e-6) {
+        const ev = events[ei++][1];
+        if (ev.startsWith('sfx:')) s.play(ev.slice(4));
+        else s.stinger(ev);
+      }
+    };
+    tick(0);
+    for (let t = dt; t < secs - dt; t += dt) {
+      const tt = Math.round(t * 1000) / 1000;
+      ctx.suspend(tt).then(() => { tick(tt); ctx.resume(); });
+    }
+    const r0 = performance.now();
+    const buf = await ctx.startRendering();
+    const speed = secs / ((performance.now() - r0) / 1000);
+
+    // Levels.
+    const L = buf.getChannelData(0), R = buf.getChannelData(1);
+    let peak = 0, sum = 0, clips = 0, dc = 0;
+    const win = [];
+    let ws = 0, wn = 0;
+    for (let i = 0; i < L.length; i++) {
+      const a = Math.abs(L[i]), b = Math.abs(R[i]);
+      peak = Math.max(peak, a, b);
+      if (a >= 0.999 || b >= 0.999) clips++;
+      const m = (L[i] * L[i] + R[i] * R[i]) / 2;
+      sum += m;
+      dc += L[i] + R[i];
+      ws += m; wn++;
+      if (wn === sr) { win.push(Math.sqrt(ws / wn)); ws = 0; wn = 0; }
+    }
+    const rms = Math.sqrt(sum / L.length);
+
+    // Spectrogram (log frequency, 50 Hz..12 kHz).
+    const N = 2048, hop = 1024, H = 160;
+    const frames = Math.floor((L.length - N) / hop);
+    const cv = document.createElement('canvas');
+    cv.width = frames; cv.height = H;
+    const g = cv.getContext('2d');
+    const img = g.createImageData(frames, H);
+    const re = new Float32Array(N), im = new Float32Array(N);
+    const hann = new Float32Array(N).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+    const fft = () => {
+      for (let i = 1, j = 0; i < N; i++) {
+        let bit = N >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+      }
+      for (let len = 2; len <= N; len <<= 1) {
+        const ang = (-2 * Math.PI) / len;
+        for (let i = 0; i < N; i += len)
+          for (let k = 0; k < len / 2; k++) {
+            const wr = Math.cos(ang * k), wi = Math.sin(ang * k);
+            const ur = re[i + k], ui = im[i + k];
+            const vr = re[i + k + len / 2] * wr - im[i + k + len / 2] * wi;
+            const vi = re[i + k + len / 2] * wi + im[i + k + len / 2] * wr;
+            re[i + k] = ur + vr; im[i + k] = ui + vi;
+            re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+          }
+      }
+    };
+    const EDGES = [20, 120, 350, 1000, 3000, 8000, 20000];
+    const bands = new Float64Array(EDGES.length - 1);
+    for (let f = 0; f < frames; f++) {
+      for (let i = 0; i < N; i++) { re[i] = ((L[f * hop + i] + R[f * hop + i]) / 2) * hann[i]; im[i] = 0; }
+      fft();
+      for (let k = 1; k < N / 2; k++) {
+        const fq = (k * sr) / N;
+        const b = EDGES.findIndex((e) => e > fq) - 1;
+        if (b >= 0 && b < bands.length) bands[b] += re[k] * re[k] + im[k] * im[k];
+      }
+      for (let y = 0; y < H; y++) {
+        const freq = 50 * Math.pow(12000 / 50, 1 - y / (H - 1));
+        const bin = Math.round((freq * N) / sr);
+        const mag = Math.hypot(re[bin], im[bin]) / (N / 4);
+        const d = Math.max(0, Math.min(1, (20 * Math.log10(mag + 1e-9) + 90) / 80));
+        const o = (y * frames + f) * 4;
+        img.data[o] = 255 * Math.min(1, d * 1.6); img.data[o + 1] = 255 * Math.max(0, d * 1.6 - 0.6); img.data[o + 2] = 80 + 120 * d; img.data[o + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    const tot = bands.reduce((a, b) => a + b, 0) || 1;
+    return { peak, rms, clips, dc: dc / L.length / 2, win, log, png: cv.toDataURL('image/png'), secs, bands: [...bands].map((b) => b / tot), speed };
+  }, { name, SECS, SEED });
+
+  writeFileSync(`shots/audio-${name}.png`, Buffer.from(r.png.split(',')[1], 'base64'));
+  const wmin = Math.min(...r.win), wmax = Math.max(...r.win);
+  const bad = r.clips > 0 || r.peak > 0.98;
+  if (bad) fail = true;
+  const bandStr = ['<120', '120-350', '350-1k', '1k-3k', '3k-8k', '8k+'].map((b, i) => `${b} ${(10 * Math.log10(r.bands[i] + 1e-9)).toFixed(0)}`).join('  ');
+  console.log(`\n== ${name}  ${r.secs}s  peak ${db(r.peak)} dBFS  rms ${db(r.rms)} dBFS  1s-rms ${db(wmin)}..${db(wmax)}  clips ${r.clips}  dc ${r.dc.toExponential(1)}${bad ? '  << CLIPPING' : ''}`);
+  console.log(`  spectrum dB (share of energy): ${bandStr}   rendered at ${r.speed.toFixed(0)}x real time`);
+  if (flag("windows")) console.log("  1s rms: " + r.win.map(db).join(" "));
+
+  // Music theory checks on the notes.
+  const mk = MODES[name] ?? MODES[{ panic: 'hills', prowl: 'night', stingers: 'ranch', mix: 'meadow' }[name]];
+  if (!mk || !r.log.length) continue;
+  const [key, mode] = mk;
+  const scale = SCALES[mode].map((x) => (x + key) % 12);
+  const chords = r.log.filter((n) => n.inst === 'chord');
+  // Notes are humanised by a few ms, so look just after the onset.
+  const chordAt = (t) => { let c = null; for (const x of chords) { if (x.t <= t + 0.012) c = x; else break; } return c; };
+  const leads = r.log.filter((n) => ['whistle', 'fiddle', 'harp-mel'].includes(n.inst));
+  const by = {};
+  for (const n of r.log) by[n.inst] = (by[n.inst] ?? 0) + 1;
+  console.log('  notes:', Object.entries(by).map(([k, v]) => `${k} ${v}`).join(', '));
+  for (const s of r.log.filter((n) => n.inst === 'section')) console.log(`  @${s.t.toFixed(1)}s ${s.info}  (${s.dur.toFixed(1)}s)`);
+  if (leads.length) {
+    let inScale = 0, ct = 0;
+    const ivs = {};
+    let maxIv = 0, lo = 999, hi = 0;
+    const out = [];
+    for (let i = 0; i < leads.length; i++) {
+      const n = leads[i];
+      const c = chordAt(n.t);
+      const tones = c ? c.info.split(',').map(Number) : [];
+      if (scale.includes(n.midi % 12) || tones.includes(n.midi % 12)) inScale++;
+      else out.push(nm(n.midi));
+      if (tones.includes(n.midi % 12)) ct++;
+      lo = Math.min(lo, n.midi); hi = Math.max(hi, n.midi);
+      const p = leads[i - 1];
+      if (p && p.inst === n.inst && n.t - p.t < 2.5) {
+        const iv = Math.abs(n.midi - p.midi);
+        ivs[iv] = (ivs[iv] ?? 0) + 1;
+        maxIv = Math.max(maxIv, iv);
+      }
+    }
+    const step = Object.entries(ivs).filter(([k]) => k <= 2).reduce((a, [, v]) => a + v, 0);
+    const tot = Object.values(ivs).reduce((a, v) => a + v, 0) || 1;
+    console.log(`  tune: ${leads.length} notes, range ${nm(lo)}-${nm(hi)}, in scale/chord ${((100 * inScale) / leads.length).toFixed(0)}%, chord tones ${((100 * ct) / leads.length).toFixed(0)}%, steps ${((100 * step) / tot).toFixed(0)}%, biggest leap ${maxIv}${out.length ? '  outside: ' + out.join(' ') : ''}`);
+    if (flag('roll')) {
+      // The tune with chord changes inline: [G] G5:3 B5:3 | [C] ...
+      const ev = [...chords.map((c) => ({ t: c.t, c })), ...leads.map((n) => ({ t: n.t, n }))].sort((a, b) => a.t - b.t || (a.c ? -1 : 1));
+      const tick = r.log.find((n) => n.inst === 'section');
+      let line = '  ';
+      for (const e of ev) {
+        if (e.c) {
+          const tones = e.c.info.split(',').map(Number);
+          const minor = (tones[1] - tones[0] + 12) % 12 === 3;
+          line += `| [${NAMES[e.c.midi]}${minor ? 'm' : ''}] `;
+          if (line.length > 110) { console.log(line); line = '  '; }
+        } else {
+          const ct = chordAt(e.n.t)?.info.split(',').map(Number).includes(e.n.midi % 12);
+          line += `${nm(e.n.midi)}${ct ? '' : '*'}:${e.n.dur.toFixed(1)} `;
+        }
+      }
+      console.log(line);
+      void tick;
+    }
+  }
+  const acc = r.log.filter((n) => n.inst === 'harp' || n.inst === 'bass' || n.inst === 'bell');
+  if (acc.length) {
+    let ct = 0;
+    for (const n of acc) {
+      const c = chordAt(n.t);
+      const tones = c ? c.info.split(',').map(Number) : [];
+      if (tones.includes(n.midi % 12)) ct++;
+    }
+    console.log(`  accompaniment: ${acc.length} notes, chord tones ${((100 * ct) / acc.length).toFixed(0)}%`);
+  }
+  if (flag('chords')) console.log('  chords:', chords.map((c) => NAMES[c.midi] + (c.info.split(',')[1] - c.midi === 3 || c.info.split(',')[1] - c.midi === -9 ? 'm' : '')).join(' '));
+}
+
+await browser.close();
+await server.close();
+if (errors.length) { console.log('\nerrors:\n  ' + errors.join('\n  ')); fail = true; }
+process.exit(fail ? 1 : 0);

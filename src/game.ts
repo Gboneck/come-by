@@ -27,7 +27,7 @@ import { Barn } from './ranch/structures';
 import { Helper, HELPER_COSTS, HELPER_NAMES, type HelperMode } from './entities/helper';
 import { CALLS, type Sound } from './systems/audio';
 import { saveGame } from './systems/save';
-import { drawPause, drawTitle, titleKeys, type MenuState } from './ui/title';
+import { PAUSE_ITEMS, drawPause, drawTitle, titleKeys, type MenuState, type PauseAction } from './ui/title';
 import { botStep } from './bot';
 import { clamp, damp } from './util';
 
@@ -345,11 +345,7 @@ export class Game {
 
   update(dt: number) {
     this.t += dt;
-    if (this.audio) {
-      this.audio.lx = this.cam.x;
-      this.audio.ly = this.cam.y;
-      if (this.mode === 'play' || this.mode === 'title') this.audio.ambient(dt, this.day.phase === 'night');
-    }
+    this.audio?.tick(this, dt);
     if (this.input.pressed('mute') && this.audio) this.audio.setMuted(!this.audio.muted);
     if (this.mode === 'title') {
       this.updateDemo(dt);
@@ -358,10 +354,15 @@ export class Game {
       return;
     }
     if (this.mode === 'pause') {
-      if (this.input.pressed('up')) this.pauseSel = (this.pauseSel + 2) % 3;
-      if (this.input.pressed('down')) this.pauseSel = (this.pauseSel + 1) % 3;
+      if (this.input.pressed('up')) this.pauseSel = (this.pauseSel + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length;
+      if (this.input.pressed('down')) this.pauseSel = (this.pauseSel + 1) % PAUSE_ITEMS.length;
+      const row = PAUSE_ITEMS[this.pauseSel];
+      if (row === 'music~' || row === 'sound~') {
+        if (this.input.pressed('left')) this.pauseAction(row === 'music~' ? 'music-' : 'sound-');
+        if (this.input.pressed('right')) this.pauseAction(row === 'music~' ? 'music+' : 'sound+');
+      }
       if (this.input.pressed('pause') || this.input.pressed('cancel')) this.mode = 'play';
-      else if (this.input.pressed('confirm')) this.pauseAction(['resume', 'sound', 'quit'][this.pauseSel] as 'resume' | 'sound' | 'quit');
+      else if (this.input.pressed('confirm')) this.pauseAction(row);
       return;
     }
     if (this.mode === 'summary') {
@@ -605,10 +606,10 @@ export class Game {
       this.audio?.play('coin', { x: a.x, y: a.y, vol: 0.7 });
     } else if (ev.kind === 'shut') {
       this.audio?.play('gate', { x: ev.pen.cx, y: ev.pen.cy });
-      setTimeout(() => this.audio?.play('thatlldo'), 180);
       const n = ev.batch.length;
       const avg = ev.batch.reduce((s, a) => s + a.peakStress, 0) / Math.max(1, n);
       const { label } = calmRating(avg);
+      this.audio?.thatllDo(label);
       if (label === 'CALM') this.totals.calmBatches++;
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
@@ -619,13 +620,12 @@ export class Game {
     }
   }
 
-  pauseAction(a: 'resume' | 'sound' | 'quit') {
+  pauseAction(a: PauseAction) {
     if (a === 'resume') this.mode = 'play';
-    else if (a === 'sound') this.audio?.setMuted(!this.audio.muted);
-    else {
+    else if (a === 'quit') {
       saveGame(this);
       this.request = 'title';
-    }
+    } else this.audio?.adjust(a);
   }
 
   // Attract mode: the bot drives the demo flock back and forth.
