@@ -13,6 +13,7 @@ import type { ClassId } from './trials';
 import { applyLook, readLook, type Look } from '../ui/look';
 import { PIECES, type PlacedDecor } from '../ui/decorbuild';
 import { SKIES, type Sky } from './weather';
+import type { DiscoverySave } from './discovery';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
@@ -42,6 +43,8 @@ interface SaveData {
   look?: Partial<Look>;
   decor?: PlacedDecor[];
   weather?: { sky: Sky; forecast: Sky; dir: [number, number] };
+  // Added with exploring.
+  discovery?: DiscoverySave;
 }
 
 function store(): Storage | null {
@@ -77,7 +80,7 @@ export function saveGame(game: Game) {
         return out;
       }),
     wild: game.animals
-      .filter((a) => !a.pen && !a.gone && !a.trial)
+      .filter((a) => !a.pen && !a.gone && !a.trial && !game.discovery.tracked.has(a)) // strays and wild flocks: in `discovery`
       .map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), x: Math.round(a.x), y: Math.round(a.y), wanderer: a.wanderer, ...(a.home ? { home: true } : {}) })),
     helpers: game.helpers.map((h) => ({ name: h.name, mode: h.mode })),
     orders: game.orders.list,
@@ -86,6 +89,7 @@ export function saveGame(game: Game) {
     look: game.look,
     decor: game.decor,
     weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
+    discovery: game.discovery.save(game),
   };
   try {
     store()?.setItem(KEY, JSON.stringify(data));
@@ -168,6 +172,7 @@ export function loadInto(game: Game): boolean {
   applyLook(game.look);
   game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
+  game.discovery.load(game, d.discovery);
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));

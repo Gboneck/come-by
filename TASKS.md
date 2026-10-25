@@ -244,17 +244,22 @@ controls, resting included.
 
 | tier | days | play min | earned $/day | spent $ | purse at tier end $ | where it stalled before |
 |---|---|---|---|---|---|---|
-| 1 | 2.0 → 2.0 | 3.0 → 3.7 | 137 → 109 | 190 → 158 | 84 → 61 | kennel waits on day one's eggs (resting covers it); "pen 6 ducks" with 5 out |
-| 2 | 1.0 → 1.0 | 6.3 → 6.6 | 578 → 391 | 528 → 348 | 133 → 104 | none |
-| 3 | 1.0 → 1.0 | 5.3 → 5.3 | 787 → 522 | 101 → 502 | 819 → 124 | money outruns the shop; calm strays block resting |
-| 4 | 1.4 → 1.0 | 9.3 → 6.2 | 1129 → 791 | 191 → 450 | 2281 → 465 | waits for a trial day; land runs short |
-| 5 | 15.4 → 1.0 | 99.5 → 6.9 | 2763 → 1201 | 90 → 41 | 54797 → 1625 | six ponies need 24 pen space with no land left |
-| done | 2 of 5 by day 8, 3 still at tier 5 on day 31 → all 5 on day 7 | | | | | |
+| 1 | 2.0 → 2.0 | 3.0 → 3.7 | 137 → 114 | 190 → 134 | 84 → 94 | kennel waits on day one's eggs (resting covers it); "pen 6 ducks" with 5 out |
+| 2 | 1.0 → 1.0 | 6.3 → 6.0 | 578 → 341 | 528 → 317 | 133 → 118 | none |
+| 3 | 1.0 → 1.0 | 5.3 → 5.1 | 787 → 462 | 101 → 474 | 819 → 106 | money outruns the shop; calm strays block resting |
+| 4 | 1.4 → 1.2 | 9.3 → 6.0 | 1129 → 735 | 191 → 474 | 2281 → 459 | waits for a trial day; land runs short; wild flocks lost at night spoil the no-loss night (one seed: 10 days) |
+| 5 | 15.4 → 3.2 | 99.5 → 19.6 | 2763 → 952 | 90 → 80 | 54797 → 3251 | six ponies need 24 pen space with no land left |
+| done | 2 of 5 by day 8, 3 still at tier 5 on day 31 → all 5 on days 7-11 (mean 9.4) | | | | | |
 
-Income after the pass, per day: tier 1 stock 120 / goods 99; tier 2
-stock 153 / goods 196 / orders 22 / trials 20; tier 3 stock 124 / goods
-340 / orders 58; tier 4 stock 234 / goods 444 / orders 91; tier 5 stock
-260 / goods 618 / orders 223 / trials 47. Through tier 4 the purse runs
+"After" is the final code: pacing, weather (from tier 2) and the drove
+road (M15), which keeps about a quarter of the clearing free, so tier 5's
+"50 animals penned" now takes upgrading pens or choosing what to keep
+(about 3 bot days) instead of finishing the day it opens.
+
+Income after the pass, per day: tier 1 stock 126 / goods 102; tier 2
+stock 74 / goods 181 / orders 56 / trials 30; tier 3 stock 135 / goods
+269 / orders 58; tier 4 stock 185 / goods 512 / orders 111; tier 5 stock
+541 / goods 1719 / orders 334 / trials 50. Through tier 4 the purse runs
 low most evenings, so the day-end choice is a real one. Past tier 5 money
 piles up again: see Decisions.
 
@@ -270,43 +275,107 @@ piles up again: see Decisions.
 - [x] Storm: wind and rain, and an extra, bolder coyote at night
 - [x] First-time tip per sky; the morning banner names the sky
 - [x] `scripts/weathertest.mjs`; tune.mjs `--weather` and `--seed`
-- [x] tune.mjs for every species in clear (before = after, exact) and in
-      each sky (table below)
+- [x] tune.mjs for every species in clear (before = after, exact, until
+      the drove-road steering in M15) and in each sky (table below)
 
 Seeded (`--seed=1`), 3 runs each: runs home / mean seconds / peak stress.
-Clear is identical to the old code. The steady style for each species
+Final code (drove-road steering included). The steady style for each species
 (calm walk; nip heels for goats and cattle, which need it in any sky) gets
 home calmly in every sky; barking every 2s gets worse in wind, rain and storm.
-Cattle are slowest in rain: between nips they huddle and drift for the
-trees, so a nip drive runs past the scenario's 120s cap.
 
 | species | sky | calm walk | nip heels | bark every 2s | chase (sprint) |
 |---|---|---|---|---|---|
-| duck | clear | 3/3 16s 0.00 | 3/3 12s 0.14 | 3/3 12s 0.66 | 0/3 20s 1.00 |
-| duck | wind | 3/3 20s 0.00 | 3/3 12s 0.16 | 3/3 10s 0.88 | 0/3 20s 1.00 |
-| duck | rain | 3/3 14s 0.07 | 3/3 16s 0.71 | 3/3 9s 0.97 | 0/3 20s 1.00 |
-| duck | fog | 3/3 20s 0.00 | 3/3 12s 0.46 | 3/3 13s 0.72 | 0/3 20s 1.00 |
-| duck | storm | 3/3 16s 0.10 | 3/3 11s 0.50 | 2/3 47s 1.00 | 0/3 20s 1.00 |
-| sheep | clear | 3/3 12s 0.00 | 3/3 9s 0.06 | 3/3 8s 0.71 | 0/3 20s 1.00 |
-| sheep | wind | 2/3 52s 0.01 | 3/3 9s 0.01 | 2/3 44s 0.92 | 0/3 20s 1.00 |
-| sheep | rain | 3/3 11s 0.07 | 3/3 8s 0.16 | 2/3 43s 1.00 | 1/3 17s 1.00 |
-| sheep | fog | 3/3 15s 0.01 | 3/3 9s 0.07 | 3/3 8s 0.70 | 0/3 20s 1.00 |
-| sheep | storm | 3/3 19s 0.09 | 3/3 8s 0.23 | 3/3 5s 1.00 | 0/3 20s 1.00 |
-| goat | clear | 0/3 120s 0.00 | 3/3 13s 0.00 | 1/3 95s 0.55 | 0/3 20s 1.00 |
-| goat | wind | 0/3 120s 0.01 | 3/3 14s 0.01 | 2/3 69s 0.75 | 0/3 20s 1.00 |
-| goat | rain | 1/3 94s 0.07 | 3/3 11s 0.07 | 2/3 48s 0.86 | 0/3 20s 1.00 |
-| goat | fog | 1/3 116s 0.02 | 3/3 19s 0.02 | 3/3 20s 0.56 | 0/3 20s 1.00 |
-| goat | storm | 0/3 120s 0.13 | 3/3 10s 0.08 | 1/3 100s 1.00 | 0/3 20s 1.00 |
-| cow | clear | 0/3 120s 0.00 | 2/3 114s 0.20 | 0/3 120s 0.17 | 0/3 20s 1.00 |
-| cow | wind | 0/3 120s 0.00 | 3/3 102s 0.22 | 1/3 117s 0.28 | 0/3 20s 1.00 |
-| cow | rain | 0/3 120s 0.07 | 0/3 120s 0.29 | 0/3 120s 0.16 | 0/3 20s 1.00 |
-| cow | fog | 0/3 120s 0.00 | 3/3 92s 0.22 | 1/3 119s 0.10 | 0/3 20s 1.00 |
-| cow | storm | 0/3 120s 0.12 | 1/3 99s 0.54 | 1/3 89s 0.51 | 0/3 20s 1.00 |
-| pony | clear | 3/3 7s 0.01 | 3/3 6s 0.09 | 3/3 7s 0.30 | 1/3 16s 1.00 |
-| pony | wind | 3/3 8s 0.01 | 3/3 6s 0.08 | 3/3 5s 0.59 | 1/3 16s 1.00 |
-| pony | rain | 3/3 7s 0.05 | 3/3 6s 0.22 | 3/3 6s 0.47 | 1/3 14s 1.00 |
-| pony | fog | 3/3 7s 0.02 | 3/3 6s 0.10 | 3/3 7s 0.43 | 0/3 20s 1.00 |
-| pony | storm | 3/3 7s 0.06 | 3/3 6s 0.30 | 3/3 4s 0.71 | 1/3 16s 1.00 |
+| duck | clear | 3/3 17s 0.00 | 3/3 11s 0.29 | 3/3 11s 0.67 | 0/3 20s 1.00 |
+| duck | wind | 3/3 18s 0.00 | 3/3 12s 0.28 | 3/3 10s 0.81 | 0/3 20s 1.00 |
+| duck | rain | 3/3 15s 0.07 | 3/3 11s 0.33 | 3/3 9s 0.98 | 0/3 20s 1.00 |
+| duck | fog | 3/3 24s 0.00 | 3/3 14s 0.60 | 3/3 12s 0.78 | 0/3 20s 1.00 |
+| duck | storm | 3/3 15s 0.09 | 3/3 16s 0.76 | 2/3 45s 1.00 | 0/3 20s 1.00 |
+| sheep | clear | 3/3 12s 0.00 | 3/3 9s 0.03 | 3/3 7s 0.71 | 0/3 20s 1.00 |
+| sheep | wind | 3/3 13s 0.00 | 3/3 9s 0.02 | 2/3 44s 0.91 | 0/3 20s 1.00 |
+| sheep | rain | 3/3 10s 0.07 | 3/3 8s 0.15 | 3/3 6s 0.97 | 0/3 20s 1.00 |
+| sheep | fog | 3/3 14s 0.01 | 3/3 9s 0.03 | 3/3 7s 0.81 | 0/3 20s 1.00 |
+| sheep | storm | 3/3 11s 0.07 | 3/3 8s 0.21 | 3/3 5s 1.00 | 0/3 20s 1.00 |
+| goat | clear | 0/3 120s 0.00 | 3/3 14s 0.01 | 2/3 54s 0.46 | 0/3 20s 1.00 |
+| goat | wind | 0/3 120s 0.01 | 3/3 13s 0.01 | 2/3 54s 0.63 | 0/3 20s 1.00 |
+| goat | rain | 3/3 56s 0.07 | 3/3 10s 0.07 | 2/3 47s 0.87 | 0/3 20s 1.00 |
+| goat | fog | 1/3 111s 0.01 | 3/3 12s 0.02 | 3/3 15s 0.52 | 0/3 20s 1.00 |
+| goat | storm | 1/3 91s 0.12 | 3/3 10s 0.07 | 0/3 120s 1.00 | 0/3 20s 1.00 |
+| cow | clear | 0/3 120s 0.00 | 3/3 116s 0.18 | 0/3 120s 0.11 | 0/3 20s 1.00 |
+| cow | wind | 0/3 120s 0.00 | 3/3 69s 0.21 | 2/3 102s 0.15 | 0/3 20s 1.00 |
+| cow | rain | 0/3 120s 0.07 | 0/3 120s 0.32 | 0/3 120s 0.16 | 0/3 20s 1.00 |
+| cow | fog | 0/3 120s 0.00 | 2/3 95s 0.20 | 1/3 114s 0.10 | 0/3 20s 1.00 |
+| cow | storm | 0/3 120s 0.12 | 1/3 103s 0.46 | 2/3 62s 0.56 | 0/3 20s 1.00 |
+| pony | clear | 3/3 7s 0.00 | 3/3 6s 0.08 | 3/3 6s 0.33 | 0/3 20s 1.00 |
+| pony | wind | 3/3 7s 0.00 | 3/3 6s 0.06 | 3/3 5s 0.61 | 1/3 17s 1.00 |
+| pony | rain | 3/3 6s 0.04 | 3/3 6s 0.19 | 3/3 5s 0.49 | 0/3 20s 1.00 |
+| pony | fog | 3/3 7s 0.02 | 3/3 6s 0.14 | 3/3 6s 0.49 | 0/3 20s 1.00 |
+| pony | storm | 3/3 6s 0.05 | 3/3 5s 0.30 | 2/3 43s 0.65 | 1/3 15s 1.00 |
+
+Cattle are slowest in rain: between nips they huddle and drift for the
+trees, so a nip drive runs past the scenario's 120s cap.
+
+## M19 Drove road (gameplay, round two, from playtesting)
+- [x] The ranch's dirt roads are a drove road (2 tiles either side of the
+      track): no pens, buildings or fences on it, a field gate is fine;
+      build mode draws its edges while placing and says "KEEP THE DROVE
+      ROAD CLEAR". Saves keep what they already have
+- [x] A new pen's gate must open onto open ground (not trees or a wall);
+      an arrow shows the gate side while placing
+- [x] Open pen gates only draw in animals already heading in, so a flock
+      walked past a row of pens no longer peels off into them
+- [x] Driven animals feel either side of a wall, building corner or fence
+      end and slide round it
+- [x] `scripts/transittest.mjs`: six sheep let out of a pen and driven to
+      each yard across a dense ranch, before and after
+
+Five seeds each; "delivered" = all four the buyer wanted arrived.
+
+| yard | old code, cramped ranch | new code, same cramped ranch (an old save) | new code, ranch built off the road |
+|---|---|---|---|
+| mill (east) | 0/5 (sheep peel into pens, snag) | 5/5, 42s | 5/5, 31s |
+| drover (north) | 5/5, 21s | 5/5, 21s | 5/5, 21s |
+| sale yard (east, south) | 0/5 | 5/5, 36s | 5/5, 35s |
+
+A save whose east road is walled off completely (`--layout=blocked`)
+still cannot get a flock out east: that needs rebuilding.
+
+Herding tune in clear weather (seeded) before and after the two herd
+changes: calm drives are the same or a touch quicker (sheep 12.0s to
+11.6s, ponies 7.1s to 6.8s, ducks 16.5s to 16.6s; goats and cattle as
+before, nip heels for cattle 2/3 to 3/3). Barking scenarios now reach the
+goal more often, because panicked animals no longer jam against walls,
+but they still arrive frantic (peak stress 1.0, panics), so calm still
+pays best. Goat keyboard-crowding drives got slower (16s to 25-41s).
+Seeded ordertest (pen to the drover, four seeds): 17-19s each; the
+novice trial with a calm handler scores 99-100 with or without the change.
+
+## M20 Hidden places (world expansion)
+- [x] Twelve hidden places, one to three per region, each a small clearing off
+      its region through a narrow gap in the trees or up a stream, marked by a
+      little waymarker cairn (a flower on top once found): Willow Pool and the
+      Old Orchard (Home Meadow), the Stone Circle, Lookout Knoll and the Drove
+      Trail (Rolling Hills), the Shepherd's Hut and the Hidden Valley (Rocky
+      Rise), the Waterfall Pool and the Water Meadow (River Ford), the Hanging
+      Valley and the Old Cairn (High Range), the Showman's Wagon (Show Ground)
+- [x] Every place gives a reason to move stock: sweet grass that settles a
+      rattled flock (Willow Pool, the Stone Circle), strays to bring home for a
+      bonus (the black sheep, the lost heifer across the stream), wild flocks
+      that pay double (goats, ponies), a lookout that maps the valley, and a
+      latched shortcut home from the hills
+- [x] Five keepsakes to keep: an old bell, crook, drover's horn, carved
+      whistle and a faded rosette, glinting where they lie
+- [x] Landmarks drawn in code (`src/art/landmarks.ts`): standing stones,
+      cairns, fruit trees, a willow, the ruined hut and its fold, the wagon,
+      the falls, the hurdle; the black sheep's coat
+- [x] Fog of war on the Ledger map (walked, glimpsed from the lookout,
+      unknown), a star on each place found, found/total on each open region,
+      HIDDEN PLACES and KEEPSAKES lines; banner, reward and tip on discovery
+- [x] Saves keep places, keepsakes, the fog, strays brought home, wild flocks
+      and the hurdle; old saves load with their open regions mapped
+- [x] `scripts/discoverytest.mjs` (reachability per tier, finding, keepsakes,
+      hurdle, sweet grass, bonuses, save, old save) and `scripts/places.mjs`
+      (every place and its way in at real scale); tune.mjs before/after
+- [x] Typecheck, build, shot, mapshot, savetest and the loop tests, commit
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -826,3 +895,74 @@ trees, so a nip drive runs past the scenario's 120s cap.
   only an 8% shorter flight zone and a modestly jumpier startle.
 - `forecast` is rolled each morning for tomorrow (not at day's end) so it
   means the same thing all day for the HUD, the summary and audio.
+- Drove road (M15): the rule is in `src/ranch/road.ts` and asked by build
+  mode's ghost; `build.ts` (Feel and UI's file) only gained that one check
+  and two draw calls (`src/art/road.ts`). The road is the existing worn
+  track widened two tiles each side, inside the ranch only; the ranch
+  already has three ways out (north, west, east), so no new exit. The
+  user's "hard to transit" turned out to be two things besides layout:
+  every open pen gate pulled a passing flock in (pens stand open by day),
+  and driven animals pushed straight into building corners and fence
+  ends. Both are fixed in the herd model and help old saves too.
+- Tier 4's night goal counts only your own stock (taken from a pen, or
+  let out of one); wild flocks in the far pastures do not spoil it.
+- Hidden places (M14) are carved into forest that was already there: the map
+  stays 192x168 and no existing coordinate moves. The carving draws no random
+  numbers, so every grove, rock and spawn point elsewhere comes out as it was.
+  Pockets have region index 0, so their animals never count against a
+  region's morning spawns, and each is reached only from inside its own
+  region, behind that region's gate (`discoverytest.mjs` flood-fills the map
+  at every tier to prove there is no way round a gate).
+- Place data lives in `src/world/places.ts` (pockets, ways, props, finds);
+  the game side in `src/systems/discovery.ts`; art in `src/art/landmarks.ts`;
+  the Ledger's fog in `src/ui/discovery.ts`. Hooks: three lines in
+  `game.ts` (update, morning, drawables), a few in `save.ts`, three in
+  `ledger.ts`, one recoat case in `art/animals.ts`.
+- Finding a place pays 5$ x its region's tier, shows its name as a banner
+  with the count, and a tip saying what it is for. Waymarker cairns stand by
+  every way in; the first one you pass gets a one-time tip (not during the
+  first-day lessons).
+- Sweet grass (Willow Pool, the Stone Circle): an unpressured animal inside
+  loses 0.1 stress/s and its peak stress (which sets the calm pay) falls
+  0.07/s, so a RATTLED flock rested there for ~6s is back to CALM. Measured:
+  a sheep at 0.7 peak is at 0.08 after 8s in the ring, 0.6 outside it.
+- Strays: the black sheep (Stone Circle, tier 2) is sheep coat 1, plum
+  fleece with a pale face and socks, never spawned anywhere else; the lost
+  heifer (Waterfall Pool, tier 4) waits across a stream she will not wade
+  unless nipped. Penned, they pay their value plus 20$ / 30$ x the calm
+  multiplier. They turn up each morning until brought home (one taken by a
+  coyote comes back). A lone sheep frets (isolation stress), so the black
+  sheep is best walked to a hill flock and brought home with it.
+- Wild flocks: five sage goats in the Hidden Valley (tier 3), four bay
+  ponies in the Hanging Valley (tier 5). Penned (not let-out stock), each
+  pays its delivery value again. A flock comes back 3 days after it last
+  turned up, once none of it is left out. Orders take them at the normal rate.
+- Strays and wild flock members are tracked by the discovery system and
+  saved in `discovery.out`, not in `wild`, so they come back as themselves.
+- The Drove Trail runs from the hills' south edge to the ranch's north-east
+  corner: ~30 tiles against ~70 by the crossroads. Its hurdle sits at the
+  lowest point where the trail is still walled in (found by the map, so no
+  dead end is left below it), latched on the trail side: from the ranch it
+  will not open ("latched from the far side"), walking up to it from the
+  hills opens it for good. The trail's foot is kept east of the starter pen:
+  an earlier route beside the pen left a dead-end spur that slowed the
+  ordertest drive (25s on the base, 148s with the spur, 18s now).
+- Landmark solids (stones, walls, trunks, the wagon, the hurdle) are stamped
+  into the map's terrain flags, not the structure flags, because
+  `ranch.restamp()` clears those.
+- The lookout glimpses everything within 96 tiles of the knoll: the Ledger
+  shows that ground through a plum veil, so unwalked clearings stand out.
+- Fog cells are two tiles (one Ledger-map pixel); walking clears a radius of
+  9 cells. Saved as runs (`<value><count base 36>,`), about 1-2 KB. A new game
+  knows the ranch; an old save knows its open regions and roads but no
+  hidden place. The Ledger hides flock dots under the fog; the HUD's edge
+  arrows still point to the nearest flocks, hidden ones included, as a nudge.
+- Keepsakes are only kept for now (Ledger line, `game.discovery.keepsakes`,
+  `KEEPSAKES` in `places.ts`), ready for the customization screen.
+- tune.mjs before/after: unseeded runs are within the usual noise. Seeded
+  (fixed Math.random, a fresh page per run), sheep match the base in 8 of 11
+  scenarios (calm walk 13.13s vs 13.03s, the chase runs wobble) and cattle in
+  9 of 11; goats scatter far enough to meet the trail's new forest edge and
+  the decorative layer shares the random stream, so their runs differ, equal
+  or better. The herding code is untouched and calm still beats barking and
+  chasing everywhere.

@@ -1,4 +1,5 @@
 import { fbm, hash2, mulberry32, type Rng } from '../rng';
+import { PLACES, PROPS } from './places';
 
 // Terrain is authored on 8px tiles; collision runs on 4px cells so fences can
 // be thin.
@@ -261,6 +262,8 @@ export class WorldMap {
       this.clearRect(y.cart.tx - 1, y.cart.ty - 1, y.cart.tx + 3, y.cart.ty + 3);
     }
 
+    this.carvePlaces();
+
     // A ring of guaranteed forest at the map edge.
     for (let y = 0; y < MH; y++)
       for (let x = 0; x < MW; x++)
@@ -274,6 +277,99 @@ export class WorldMap {
         const t = this.t(x, y);
         if (t === Ter.Forest || t === Ter.Rock) this.setT(x, y, Ter.Grass);
       }
+  }
+
+  // Hidden places (src/world/places.ts): a pocket in the forest, the narrow
+  // way in, and its ponds, rocks, trees and streams. No RNG here, so the rest
+  // of the map (and its spawn points) come out as before.
+  private carvePlaces() {
+    for (const p of PLACES) {
+      if (p.rx) this.carveEllipse(p.cx, p.cy, p.rx, p.ry, 0, 0.2, 300 + p.cx);
+      this.carveWay(p.way, p.wayR, p.pathFrom);
+      for (const [x, y, rx, ry] of p.ponds ?? []) this.pond(x, y, rx, ry);
+      for (const [x, y, r] of p.rocks ?? [])
+        for (let ty = Math.floor(y - r - 1); ty <= y + r + 1; ty++)
+          for (let tx = Math.floor(x - r - 1); tx <= x + r + 1; tx++) {
+            const t = this.t(tx, ty);
+            if ((t === Ter.Grass || t === Ter.Forest) && Math.hypot(tx - x, ty - y) + (hash2(tx, ty, 13) - 0.5) * 0.9 < r) this.setT(tx, ty, Ter.Rock);
+          }
+      for (const [x, y, r] of p.trees ?? []) this.blob(x, y, r, Ter.Forest);
+      for (const [x, y] of p.stream ?? []) this.setT(x, y, Ter.Shallow);
+    }
+  }
+
+  // A narrow way through trees and rocks; a trodden path from `pathFrom` on.
+  private carveWay(pts: [number, number][], r: number, pathFrom = pts.length) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
+      const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2);
+      for (let s = 0; s <= steps; s++) {
+        const x = x0 + ((x1 - x0) * s) / steps, y = y0 + ((y1 - y0) * s) / steps;
+        for (let yy = Math.floor(y - r - 1); yy <= y + r + 1; yy++)
+          for (let xx = Math.floor(x - r - 1); xx <= x + r + 1; xx++) {
+            const d = Math.hypot(xx + 0.5 - x, yy + 0.5 - y) + (hash2(xx, yy, 6) - 0.5) * 0.7;
+            const t = this.t(xx, yy);
+            if (d < r && (t === Ter.Forest || t === Ter.Rock)) this.setT(xx, yy, Ter.Grass);
+            if (i >= pathFrom && d < 0.7 && this.t(xx, yy) === Ter.Grass) this.path[yy * MW + xx] = 1;
+          }
+      }
+    }
+  }
+
+  // Standing stones, walls, trunks and the trail's hurdle block like trees.
+  hurdleCells: number[] = [];
+  hurdleOpen = false;
+  hurdleY = 0; // px: its foot
+  private stampProps() {
+    for (const p of PROPS) {
+      if (!p.solid) continue;
+      const [dx, dy, w, h] = p.solid;
+      for (let cy = Math.floor((p.y + dy) / CS); cy < Math.ceil((p.y + dy + h) / CS); cy++)
+        for (let cx = Math.floor((p.x + dx) / CS); cx < Math.ceil((p.x + dx + w) / CS); cx++)
+          if (cx >= 0 && cy >= 0 && cx < CW && cy < CH) this.terFlags[cy * CW + cx] |= SOLID;
+    }
+    // The Drove Trail's hurdle: two rows of cells across the trail at the
+    // lowest point (nearest the ranch) where it is still walled in on both
+    // sides, so no dead end is left below it.
+    this.hurdleCells = [];
+    const trail = PLACES.find((p) => p.id === 'trail')!.way;
+    const [[ax, ay], [bx, by]] = [trail[trail.length - 2], trail[trail.length - 1]];
+    const open = (cx: number, cy: number) => !(this.terFlags[cy * CW + cx] & SOLID);
+    for (let cy = Math.floor((by * TS) / CS); cy > Math.floor((ay * TS) / CS); cy--) {
+      const mid = Math.floor(((ax + ((bx - ax) * (cy * CS - ay * TS)) / ((by - ay) * TS)) * TS) / CS);
+      const span: [number, number][] = [];
+      for (const r of [cy - 1, cy]) {
+        if (!open(mid, r)) break;
+        let a = mid, b = mid;
+        while (open(a - 1, r) && mid - a < 10) a--;
+        while (open(b + 1, r) && b - mid < 10) b++;
+        if (mid - a >= 10 || b - mid >= 10) break;
+        span.push([a, b]);
+      }
+      if (span.length < 2) continue;
+      span.forEach(([a, b], k) => { for (let x = a; x <= b; x++) this.hurdleCells.push((cy - 1 + k) * CW + x); });
+      this.hurdleY = (cy + 1) * CS;
+      break;
+    }
+    this.setHurdle(this.hurdleOpen);
+  }
+
+  setHurdle(open: boolean) {
+    this.hurdleOpen = open;
+    for (const i of this.hurdleCells) {
+      if (open) this.terFlags[i] &= ~SOLID;
+      else this.terFlags[i] |= SOLID;
+    }
+  }
+
+  // Pixel span of the hurdle (for drawing).
+  hurdleSpan(): [number, number] {
+    let x0 = 1e9, x1 = -1e9;
+    for (const i of this.hurdleCells) {
+      x0 = Math.min(x0, (i % CW) * CS);
+      x1 = Math.max(x1, (i % CW) * CS + CS);
+    }
+    return [x0, x1];
   }
 
   private pond(cx: number, cy: number, rx: number, ry: number) {
@@ -312,6 +408,7 @@ export class WorldMap {
         this.terFlags[cy * CW + cx] = f;
       }
     }
+    this.stampProps();
   }
 
   // Combined flags for a collision cell.
