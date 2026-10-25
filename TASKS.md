@@ -162,6 +162,34 @@ Round two:
 - [x] One-time tip about resting for players past the tutorial
 - [x] `scripts/resttest.mjs`
 
+## M14 Hidden places (world expansion)
+- [x] Twelve hidden places, one to three per region, each a small clearing off
+      its region through a narrow gap in the trees or up a stream, marked by a
+      little waymarker cairn (a flower on top once found): Willow Pool and the
+      Old Orchard (Home Meadow), the Stone Circle, Lookout Knoll and the Drove
+      Trail (Rolling Hills), the Shepherd's Hut and the Hidden Valley (Rocky
+      Rise), the Waterfall Pool and the Water Meadow (River Ford), the Hanging
+      Valley and the Old Cairn (High Range), the Showman's Wagon (Show Ground)
+- [x] Every place gives a reason to move stock: sweet grass that settles a
+      rattled flock (Willow Pool, the Stone Circle), strays to bring home for a
+      bonus (the black sheep, the lost heifer across the stream), wild flocks
+      that pay double (goats, ponies), a lookout that maps the valley, and a
+      latched shortcut home from the hills
+- [x] Five keepsakes to keep: an old bell, crook, drover's horn, carved
+      whistle and a faded rosette, glinting where they lie
+- [x] Landmarks drawn in code (`src/art/landmarks.ts`): standing stones,
+      cairns, fruit trees, a willow, the ruined hut and its fold, the wagon,
+      the falls, the hurdle; the black sheep's coat
+- [x] Fog of war on the Ledger map (walked, glimpsed from the lookout,
+      unknown), a star on each place found, found/total on each open region,
+      HIDDEN PLACES and KEEPSAKES lines; banner, reward and tip on discovery
+- [x] Saves keep places, keepsakes, the fog, strays brought home, wild flocks
+      and the hurdle; old saves load with their open regions mapped
+- [x] `scripts/discoverytest.mjs` (reachability per tier, finding, keepsakes,
+      hurdle, sweet grass, bonuses, save, old save) and `scripts/places.mjs`
+      (every place and its way in at real scale); tune.mjs before/after
+- [x] Typecheck, build, shot, mapshot, savetest and the loop tests, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -519,3 +547,63 @@ Round two:
   few percent and favour phrases that open on a minor chord (twice as often
   in rain); fog hushes the tune and wets the reverb; wind lifts the drone; a
   storm adds a little tension.
+- Hidden places (M14) are carved into forest that was already there: the map
+  stays 192x168 and no existing coordinate moves. The carving draws no random
+  numbers, so every grove, rock and spawn point elsewhere comes out as it was.
+  Pockets have region index 0, so their animals never count against a
+  region's morning spawns, and each is reached only from inside its own
+  region, behind that region's gate (`discoverytest.mjs` flood-fills the map
+  at every tier to prove there is no way round a gate).
+- Place data lives in `src/world/places.ts` (pockets, ways, props, finds);
+  the game side in `src/systems/discovery.ts`; art in `src/art/landmarks.ts`;
+  the Ledger's fog in `src/ui/discovery.ts`. Hooks: three lines in
+  `game.ts` (update, morning, drawables), a few in `save.ts`, three in
+  `ledger.ts`, one recoat case in `art/animals.ts`.
+- Finding a place pays 5$ x its region's tier, shows its name as a banner
+  with the count, and a tip saying what it is for. Waymarker cairns stand by
+  every way in; the first one you pass gets a one-time tip (not during the
+  first-day lessons).
+- Sweet grass (Willow Pool, the Stone Circle): an unpressured animal inside
+  loses 0.1 stress/s and its peak stress (which sets the calm pay) falls
+  0.07/s, so a RATTLED flock rested there for ~6s is back to CALM. Measured:
+  a sheep at 0.7 peak is at 0.08 after 8s in the ring, 0.6 outside it.
+- Strays: the black sheep (Stone Circle, tier 2) is sheep coat 1, plum
+  fleece with a pale face and socks, never spawned anywhere else; the lost
+  heifer (Waterfall Pool, tier 4) waits across a stream she will not wade
+  unless nipped. Penned, they pay their value plus 20$ / 30$ x the calm
+  multiplier. They turn up each morning until brought home (one taken by a
+  coyote comes back). A lone sheep frets (isolation stress), so the black
+  sheep is best walked to a hill flock and brought home with it.
+- Wild flocks: five sage goats in the Hidden Valley (tier 3), four bay
+  ponies in the Hanging Valley (tier 5). Penned (not let-out stock), each
+  pays its delivery value again. A flock comes back 3 days after it last
+  turned up, once none of it is left out. Orders take them at the normal rate.
+- Strays and wild flock members are tracked by the discovery system and
+  saved in `discovery.out`, not in `wild`, so they come back as themselves.
+- The Drove Trail runs from the hills' south edge to the ranch's north-east
+  corner: ~30 tiles against ~70 by the crossroads. Its hurdle sits at the
+  lowest point where the trail is still walled in (found by the map, so no
+  dead end is left below it), latched on the trail side: from the ranch it
+  will not open ("latched from the far side"), walking up to it from the
+  hills opens it for good. The trail's foot is kept east of the starter pen:
+  an earlier route beside the pen left a dead-end spur that slowed the
+  ordertest drive (25s on the base, 148s with the spur, 18s now).
+- Landmark solids (stones, walls, trunks, the wagon, the hurdle) are stamped
+  into the map's terrain flags, not the structure flags, because
+  `ranch.restamp()` clears those.
+- The lookout glimpses everything within 96 tiles of the knoll: the Ledger
+  shows that ground through a plum veil, so unwalked clearings stand out.
+- Fog cells are two tiles (one Ledger-map pixel); walking clears a radius of
+  9 cells. Saved as runs (`<value><count base 36>,`), about 1-2 KB. A new game
+  knows the ranch; an old save knows its open regions and roads but no
+  hidden place. The Ledger hides flock dots under the fog; the HUD's edge
+  arrows still point to the nearest flocks, hidden ones included, as a nudge.
+- Keepsakes are only kept for now (Ledger line, `game.discovery.keepsakes`,
+  `KEEPSAKES` in `places.ts`), ready for the customization screen.
+- tune.mjs before/after: unseeded runs are within the usual noise. Seeded
+  (fixed Math.random, a fresh page per run), sheep match the base in 8 of 11
+  scenarios (calm walk 13.13s vs 13.03s, the chase runs wobble) and cattle in
+  9 of 11; goats scatter far enough to meet the trail's new forest edge and
+  the decorative layer shares the random stream, so their runs differ, equal
+  or better. The herding code is untouched and calm still beats barking and
+  chasing everywhere.

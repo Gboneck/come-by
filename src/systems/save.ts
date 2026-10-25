@@ -10,6 +10,7 @@ import { newTotals, type Totals } from './progression';
 import type { UpKey } from './economy';
 import { morningOrders, type Order } from './orders';
 import type { ClassId } from './trials';
+import type { DiscoverySave } from './discovery';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
@@ -35,6 +36,8 @@ interface SaveData {
   orders?: Order[];
   nextOrder?: number;
   trials?: { won: ClassId[]; cups: number; last: number };
+  // Added with exploring.
+  discovery?: DiscoverySave;
 }
 
 function store(): Storage | null {
@@ -70,12 +73,13 @@ export function saveGame(game: Game) {
         return out;
       }),
     wild: game.animals
-      .filter((a) => !a.pen && !a.gone && !a.trial)
+      .filter((a) => !a.pen && !a.gone && !a.trial && !game.discovery.tracked.has(a)) // strays and wild flocks: in `discovery`
       .map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), x: Math.round(a.x), y: Math.round(a.y), wanderer: a.wanderer, ...(a.home ? { home: true } : {}) })),
     helpers: game.helpers.map((h) => ({ name: h.name, mode: h.mode })),
     orders: game.orders.list,
     nextOrder: game.orders.nextId,
     trials: { won: game.trials.won, cups: game.trials.cups, last: game.trials.lastPrizeDay },
+    discovery: game.discovery.save(game),
   };
   try {
     store()?.setItem(KEY, JSON.stringify(data));
@@ -155,6 +159,7 @@ export function loadInto(game: Game): boolean {
     game.trials.lastPrizeDay = d.trials.last;
   }
   game.setTier(d.tier, false);
+  game.discovery.load(game, d.discovery);
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));

@@ -30,8 +30,10 @@ original and drawn in code. No external art files, ever.
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
   `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
-  `scripts/resttest.mjs`
+  `scripts/resttest.mjs`, `scripts/discoverytest.mjs`
   and `scripts/tour.mjs` check the loops end to end,
+  `scripts/places.mjs` screenshots every hidden place and its way in
+  (`--found`, `--only=circle,hut`),
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`), `scripts/uitour.mjs` screenshots every screen at
   phone, notched-phone, landscape and desktop sizes onto contact sheets
@@ -115,14 +117,16 @@ stays unique.
 - `src/main.ts` boot + loop; `src/game.ts` state machine and orchestration.
 - `src/gfx/` screen scaling, sprites, font, pixel primitives.
 - `src/art/` sprite grids and procedural art (trees, rocks, buildings).
-- `src/world/` tile map, regions, terrain/canopy baking.
+- `src/world/` tile map, regions, terrain/canopy baking; `places.ts` the
+  hidden places (pockets, ways, landmarks, strays and wild flocks).
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
 - `src/systems/` day cycle, economy, progression, save, audio (mixer and
   sound effects), music (generative score), soundscape, synth (sample bank),
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
-  weather state everything else reads: `game.weather`).
+  weather state everything else reads: `game.weather`), `discovery.ts`
+  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
