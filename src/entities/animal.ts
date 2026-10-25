@@ -2,11 +2,12 @@ import { C } from '../palette';
 import { ellipse, rect } from '../gfx/draw';
 import { drawSpr } from '../gfx/sprite';
 import { animalSprites, type Coat } from '../art/animals';
-import { BLOCK_ANIMAL, BLOCK_CLIMBER, CS, GATE, ROCK, SHALLOW, type SpeciesId, type WorldMap } from '../world/map';
+import { BLOCK_ANIMAL, BLOCK_CLIMBER, CS, GATE, ROCK, SHALLOW, TS, Ter, type SpeciesId, type WorldMap } from '../world/map';
 import { collideCircle, wallRepulse } from '../world/collide';
 import { SPECIES, type Species } from './species';
 import { angleDiff, clamp } from '../util';
 import type { Facing } from './dog';
+import type { Weather } from '../systems/weather';
 
 export interface PressureSource {
   x: number;
@@ -74,6 +75,11 @@ export class Animal {
   rockY = 0;
   rockSeek = 0;
   hasRock = false;
+  // In rain: the nearest tree cover to shelter by.
+  coverX = 0;
+  coverY = 0;
+  coverSeek = 0;
+  hasCover = false;
   onRock = false;
   rockT = 0;
   // For the "stress at delivery" calm bonus.
@@ -106,6 +112,7 @@ export interface HerdCtx {
   dogLying: boolean;
   // Open gates pull pressured animals towards the opening.
   gates: { x: number; y: number; open: boolean; accepts(a: Animal): boolean }[];
+  weather?: Weather;
 }
 
 const tmp = { x: 0, y: 0 };
@@ -158,10 +165,16 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   a.hop = Math.max(0, a.hop - dt * 6);
   if (a.pen) a.penT += dt;
 
+  // ---- Weather (stock out in it; pens are home) ----
+  const W = ctx.weather;
+  const out = !a.pen && W;
+  const wx = out ? W.pushX : 0, wy = out ? W.pushY : 0;
+  const rain = out ? W.rain : 0, fog = out ? W.fog : 0;
+
   // ---- Flocking ----
-  const stressBunch = sp.splitter
+  const stressBunch = (sp.splitter
     ? Math.max(0.1, 1 - 1.4 * smooth01((a.stress - 0.15) / 0.45))
-    : 1 + 1.4 * smooth01((a.stress - 0.15) / 0.45) * (a.stress < 0.8 ? 1 : 0.3);
+    : 1 + 1.4 * smooth01((a.stress - 0.15) / 0.45) * (a.stress < 0.8 ? 1 : 0.3)) * (1 + 0.7 * rain); // rain huddles them
   const sepR = sp.sep * (1 - 0.25 * smooth01((a.stress - 0.2) / 0.5));
   let cx = 0, cy = 0, avx = 0, avy = 0, n = 0, sx = 0, sy = 0;
   grid.near(a.x, a.y, Math.max(sp.nbr, 16), nbrs);
@@ -212,7 +225,8 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   let mainX = 0, mainY = 0, mainI = 0;
   for (const s of ctx.sources) {
     if (s.lying) continue;
-    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen && !a.pen.letOut ? 0.5 : 1) * safety;
+    // Fog: they let you closer before they move, then start more easily.
+    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen && !a.pen.letOut ? 0.5 : 1) * safety * (1 - 0.12 * fog);
     const dx = a.x - s.x, dy = a.y - s.y;
     const d = Math.hypot(dx, dy);
     if (d >= R || d < 1e-3) continue;
@@ -241,7 +255,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     approachMax = Math.max(approachMax, approach);
     // Something rushing at you is alarming; a dog matching your pace is not.
     const rel = (s.vx - a.vx) * ax + (s.vy - a.vy) * ay;
-    if (s.kind !== 'predator') startle = Math.max(startle, pe * Math.max(0, rel - 25) / 40);
+    if (s.kind !== 'predator') startle = Math.max(startle, pe * Math.max(0, rel - 25 * (1 - 0.3 * fog)) / 40);
     if (s.kind === 'predator') threat = Math.max(threat, pe);
     if (I > mainI) { mainI = I; mainX = ax; mainY = ay; }
   }
@@ -274,8 +288,10 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     dirY = a.pdy + sy * sepW + wallY * 3;
     spd = sp.run * 1.05;
   } else if (driven) {
-    dirX = fx * 2.6 + cohX * cohW * 0.7 + aliX * sp.wAli * 1.4 + sx * sepW + wallX * 3;
-    dirY = fy * 2.6 + cohY * cohW * 0.7 + aliY * sp.wAli * 1.4 + sy * sepW + wallY * 3;
+    // Wind leans on a lightly driven flock; a firm, steady push beats it.
+    const lean = 0.35 * Math.max(0, 1 - P / 0.5);
+    dirX = fx * 2.6 + cohX * cohW * 0.7 + aliX * sp.wAli * 1.4 + sx * sepW + wallX * 3 + wx * lean;
+    dirY = fy * 2.6 + cohY * cohW * 0.7 + aliY * sp.wAli * 1.4 + sy * sepW + wallY * 3 + wy * lean;
     const drive = Math.min(P, 1.4);
     spd = drive < 0.45 ? sp.walk * (0.35 + 0.65 * smooth01(drive / 0.45)) : sp.walk + (sp.run - sp.walk) * smooth01((drive - 0.45) / 0.8);
     spd = Math.max(spd, follow * 0.9);
@@ -319,8 +335,8 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     }
   } else if (follow > sp.graze * 2.2 && n > 0) {
     // The flock is moving: go with it.
-    dirX = aliX * 2 + cohX * cohW + sx * sepW + wallX * 3;
-    dirY = aliY * 2 + cohY * cohW + sy * sepW + wallY * 3;
+    dirX = aliX * 2 + cohX * cohW + sx * sepW + wallX * 3 + wx * 0.2;
+    dirY = aliY * 2 + cohY * cohW + sy * sepW + wallY * 3 + wy * 0.2;
     spd = follow * 0.92;
   } else {
     // Calm: graze, amble, keep loosely together.
@@ -339,6 +355,18 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
         }
       }
     }
+    // Rain: drift over to the nearest trees and wait it out there.
+    if (rain > 0.2) {
+      if ((a.coverSeek -= dt) <= 0) {
+        a.coverSeek = 2.5 + Math.random();
+        findCover(ctx.map, a);
+      }
+      if (a.hasCover && a.grazeMode === 'amble') {
+        const cx2 = a.coverX - a.x, cy2 = a.coverY - a.y, cd = Math.hypot(cx2, cy2);
+        if (cd > 14) { a.gdx = cx2 / cd; a.gdy = cy2 / cd; }
+        else a.grazeMode = 'eat';
+      }
+    }
     const far = Math.hypot(cohX, cohY) > 0.45 ? 1 : 0.25;
     if (n === 0 && !a.wanderer && !a.pen) {
       // Alone: look for the others a little further off.
@@ -348,8 +376,9 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
       if (bn) { cohX = (bx / bn - a.x) / sp.nbr; cohY = (by / bn - a.y) / sp.nbr; }
     }
     if (a.grazeMode === 'amble') {
-      dirX = a.gdx + cohX * cohW * far + sx * sepW + wallX * 3;
-      dirY = a.gdy + cohY * cohW * far + sy * sepW + wallY * 3;
+      // Wind: a grazing flock wanders downwind.
+      dirX = a.gdx + cohX * cohW * far + sx * sepW + wallX * 3 + wx * 0.45;
+      dirY = a.gdy + cohY * cohW * far + sy * sepW + wallY * 3 + wy * 0.45;
       spd = sp.graze * (settling ? 0.5 : 1);
     } else {
       dirX = cohX * cohW * far * 0.6 + sx * sepW + wallX * 3;
@@ -404,13 +433,18 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   const crowd = Math.max(0, P - 0.4);
   let gain = crowd * crowd * 2.2 * sp.stressGain * (0.7 + 0.5 * Math.max(0, approachMax));
   if (threat > 0) gain += threat * sp.stressGain * 2.5;
-  gain += startle * sp.stressGain * 1.1;
+  gain += startle * sp.stressGain * 1.1 * (1 + 0.6 * fog);
+  // Left out in the rain they slowly fret.
+  gain += rain * 0.035 * sp.stressGain;
   // Being chased flat out is upsetting in itself; a steady walk is not.
   const exert = Math.max(0, (a.speed - sp.walk * 1.15) / (sp.run - sp.walk * 1.15));
   if (!a.pen) gain += Math.pow(exert, 1.5) * 0.6 * sp.stressGain;
   const iso = n === 0 && !a.pen ? sp.social : 0;
-  const decay = sp.stressDecay * (P < 0.05 ? 1 : 0.2) * (settling ? 2 : 1) * (a.pen ? 2.2 : 1) * (n > 2 ? 1.2 : 1);
+  const decay = sp.stressDecay * (P < 0.05 ? 1 : 0.2) * (settling ? 2 : 1) * (a.pen ? 2.2 : 1) * (n > 2 ? 1.2 : 1) * (1 - 0.4 * rain);
+  const was = a.stress;
   a.stress = clamp(a.stress + (gain + iso - decay) * dt, 0, 1);
+  // Out in the rain, even a quiet flock slowly frets a little.
+  if (rain > 0.2 && a.stress < 0.12 * rain) a.stress = Math.min(0.12 * rain, Math.max(a.stress, was + 0.006 * dt));
   if (!a.pen) a.peakStress = Math.max(a.peakStress * (1 - 0.02 * dt), a.stress);
   if (a.stress > 0.86 && a.panicT <= 0 && a.panicCd <= 0 && (P > 0.2 || threat > 0) && !a.pen) {
     // Bolt: away from the worst of it, off at an angle, ignoring the flock.
@@ -451,6 +485,26 @@ function findRock(map: WorldMap, a: Animal) {
     }
 }
 
+// Nearest tree cover within ~12 tiles: a point just outside the trees.
+function findCover(map: WorldMap, a: Animal) {
+  const R = 12;
+  const tx0 = Math.floor(a.x / TS), ty0 = Math.floor(a.y / TS);
+  let best = 1e9;
+  a.hasCover = false;
+  for (let dy = -R; dy <= R; dy++)
+    for (let dx = -R; dx <= R; dx++) {
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= best || d2 > R * R) continue;
+      if (map.t(tx0 + dx, ty0 + dy) !== Ter.Forest) continue;
+      best = d2;
+      const fx = (tx0 + dx) * TS + TS / 2, fy = (ty0 + dy) * TS + TS / 2;
+      const l = Math.hypot(a.x - fx, a.y - fy) || 1;
+      a.coverX = fx + ((a.x - fx) / l) * 10;
+      a.coverY = fy + ((a.y - fy) / l) * 10;
+      a.hasCover = true;
+    }
+}
+
 function pickGraze(a: Animal, cohX: number, cohY: number, n: number) {
   const r = Math.random();
   if (r < 0.55) {
@@ -473,14 +527,16 @@ function pickGraze(a: Animal, cohX: number, cohY: number, n: number) {
 
 // ---- Dog actions ----
 
-export function barkAt(list: Animal[], x: number, y: number, range: number): number {
+export function barkAt(list: Animal[], x: number, y: number, range: number, weather?: Weather): number {
   let hit = 0;
   for (const a of list) {
     if (a.gone || a.carried) continue;
     const dx = a.x - x, dy = a.y - y;
     const d = Math.hypot(dx, dy);
-    if (d > range || d < 1e-3) continue;
-    const t = 1 - d / range;
+    // Wind carries a bark further downwind.
+    const R = weather ? weather.reach(range, dx, dy) : range;
+    if (d > R || d < 1e-3) continue;
+    const t = 1 - d / R;
     const sp = a.sp;
     const ax = dx / d, ay = dy / d;
     const k = a.pen ? 0.3 : 1;

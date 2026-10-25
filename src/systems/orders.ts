@@ -5,6 +5,7 @@ import { REGIONS, type SpeciesId, type YardId } from '../world/map';
 import type { Pen } from '../ranch/buildings';
 import { admit, evict, swingGate, type Yard } from '../ranch/fixtures';
 import { DAY_LEN } from './day';
+import { tierOf } from './progression';
 import { pick, ri } from '../rng';
 
 // Buyers around the valley ask for a few head by a set hour. You can bring
@@ -58,7 +59,12 @@ export function morningOrders(game: Game) {
   const o = game.orders;
   o.list = [];
   if (game.tier < 2) return;
-  const species = SPECIES_ORDER.filter((id) => REGIONS.some((r) => r.species === id && r.tier <= game.tier));
+  // Buyers do not ask for the kind this tier's pen goal still needs: an
+  // order should not pull against the goal.
+  const goal = tierOf(game.tier).goals.find((x) => x.label.startsWith('PEN ') && x.value(game) < x.target);
+  const wanted = goal ? tierOf(game.tier).species : null;
+  let species = SPECIES_ORDER.filter((id) => REGIONS.some((r) => r.species === id && r.tier <= game.tier) && id !== wanted);
+  if (!species.length) species = SPECIES_ORDER.filter((id) => REGIONS.some((r) => r.species === id && r.tier <= game.tier));
   const yards = game.ranch.yards.filter((y) => regionOpen(game, y.site.region));
   const want = game.tier >= 4 ? 2 : 1;
   const weights = species.map((id) => 1 + 2 * Math.min(3, game.ranch.pens.filter((p) => p.species === id).length));

@@ -92,13 +92,31 @@ export class Weather {
     this.dirY = Math.sin(a);
     this.stormed = this.sky === 'storm';
     this.forecast = rollSky(tier, this.stormed, r);
+    this.snap();
+  }
+
+  // Jump straight to the sky's levels (a new day, a loaded save).
+  snap() {
+    const l = LOOK[this.sky];
+    this.rain = l.rain;
+    this.fog = l.fog;
+    this.wind = l.wind;
+  }
+
+  // The wind that moves things: nothing for a breeze, full at a gale.
+  get pushX() {
+    return this.dirX * Math.max(0, (this.wind - 0.3) / 0.7);
+  }
+
+  get pushY() {
+    return this.dirY * Math.max(0, (this.wind - 0.3) / 0.7);
   }
 
   // Bark reach towards a point at (dx, dy) from the dog: further downwind,
   // shorter upwind.
   reach(range: number, dx: number, dy: number) {
     const d = Math.hypot(dx, dy) || 1;
-    return range * (1 + 0.4 * ((dx / d) * this.windX + (dy / d) * this.windY));
+    return range * (1 + 0.4 * ((dx / d) * this.pushX + (dy / d) * this.pushY));
   }
 
   set(sky: Sky) {

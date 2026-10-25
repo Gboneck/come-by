@@ -408,7 +408,19 @@ export class Pacer {
     // only once every named one has room.
     const named = this.goalSpecies(true);
     const waiting = [...named].some((s) => s !== sp && this.roomFor(s) === 0);
-    if (named.has(sp) || (!waiting && (!g.ranch.pens.some((p) => p.species === sp) || this.goalSpecies().has(sp)))) this.buy('pen');
+    if (named.has(sp) || (!waiting && (!g.ranch.pens.some((p) => p.species === sp) || this.goalSpecies().has(sp)))) {
+      if (this.buy('pen') || !named.has(sp)) return;
+      // No land left: sell off the cheapest pen of stock to make room, as a
+      // player would at the market.
+      const spare = g.ranch.pens
+        .filter((p) => p.species && !named.has(p.species) && p.animals.length && !p.letOut)
+        .sort((a, b) => SPECIES[a.species!].value * a.animals.length - SPECIES[b.species!].value * b.animals.length)[0];
+      if (!spare || !g.ranch.buildings.some((b) => b.kind === 'market')) return;
+      const n0 = spare.animals.length, kind = SPECIES[spare.species!].plural.toUpperCase();
+      while (spare.animals.length) g.build.sellOne(g, spare);
+      spare.species = null;
+      this.did.push(`SOLD ${n0} ${kind} TO MAKE ROOM`);
+    }
   }
 
   private goalSpecies(namedOnly = false): Set<SpeciesId> {

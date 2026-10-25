@@ -37,7 +37,7 @@ import { clamp, damp } from './util';
 import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
 import { Trials, closeResult, trialNip } from './systems/trials';
-import { jobGates, jobsAction, jobsHint, jobsMorning, jobsUpdate } from './systems/jobs';
+import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
 import { drawJobs } from './ui/jobs';
 import { courseDrawables } from './art/course';
 import type { Drawable } from './art/buildings';
@@ -593,7 +593,8 @@ export class Game {
       t += 5 + Math.random() * 6;
     }
     this.quietT = 0;
-    this.showBanner('NIGHT FALLS', wolves ? 'WOLVES AND COYOTES ARE ABOUT. GUARD THE STOCK' : 'COYOTES ARE ABOUT. GUARD THE STOCK', 3);
+    jobsNight(this);
+    if (this.weather.sky !== 'storm') this.showBanner('NIGHT FALLS', wolves ? 'WOLVES AND COYOTES ARE ABOUT. GUARD THE STOCK' : 'COYOTES ARE ABOUT. GUARD THE STOCK', 3);
     if (!this.tipsSeen.has('night')) {
       this.tipsSeen.add('night');
       this.tip = { text: this.input.touchMode ? 'BARK AT A COYOTE TO SEND IT RUNNING. PENS IN A BARN\'S RING ARE SAFE.' : 'SPACE TO BARK A COYOTE AWAY (WOLVES NEED TWO). PENS IN A BARN\'S RING ARE SAFE.', t: 9 };
@@ -663,14 +664,14 @@ export class Game {
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
     gates.push(...jobGates(this));
-    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates };
+    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
     const d = this.dog;
     const [kx, ky] = { r: [1, 0], l: [-1, 0], u: [0, -1], d: [0, 1] }[d.face];
     if (ev === 'bark') {
-      barkAt(this.animals, d.x, d.y, d.stats.barkRange);
+      barkAt(this.animals, d.x, d.y, d.stats.barkRange, this.weather);
       this.audio?.play('bark', { x: d.x, y: d.y });
       this.feel.kick(kx, ky, 0.09);
       buzz(this.input.touchMode, 12);

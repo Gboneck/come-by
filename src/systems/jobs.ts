@@ -3,14 +3,36 @@ import type { Animal } from '../entities/animal';
 import { gateAction, morningOrders, orderFor, penGateAt, updateOrders } from './orders';
 import { PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, prizeToday, startRun, updateRun } from './trials';
 import { checkLegacy } from './progression';
+import { SKY_LINE, SKY_TIP } from './weather';
+import { Predator } from '../entities/predator';
 
 // The jobs around the herding: buyers' orders and the Show Ground trials.
 // Game calls in here at a handful of points; this keeps those hooks short.
 
 export function jobsMorning(game: Game, fresh: boolean) {
-  if (fresh) morningOrders(game);
+  if (fresh) {
+    morningOrders(game);
+    game.weather.newDay(game.tier);
+  }
+  const sky = game.weather.sky;
+  if (sky !== 'clear') game.showBanner(`DAY ${game.day.day}`, SKY_LINE[sky], 2.8);
   const c = currentClass(game);
   if (c && isTrialDay(game.day.day)) game.showBanner(`DAY ${game.day.day}: TRIAL DAY`, `THE ${c.name} CLASS RUNS AT THE SHOW GROUND`, 3.2);
+  // The first windy, wet, foggy or stormy day says what it does.
+  const tip = SKY_TIP[sky];
+  if (tip && !game.tipsSeen.has(`sky-${sky}`) && !game.tip) {
+    game.tipsSeen.add(`sky-${sky}`);
+    game.tip = { text: tip, t: 9 };
+  }
+}
+
+// Nightfall: a storm brings an extra coyote, and they are all bolder.
+export function jobsNight(game: Game) {
+  if (game.weather.sky !== 'storm') return;
+  const last = game.predators.reduce((t, p) => Math.max(t, p.waitT), 3);
+  game.predators.push(new Predator('coyote', last + 4));
+  for (const p of game.predators) p.bold = 1.6;
+  game.showBanner('A STORMY NIGHT', 'THE COYOTES ARE BOLD TONIGHT. GET THEM ALL HOME', 3);
 }
 
 let legacyT = 0;

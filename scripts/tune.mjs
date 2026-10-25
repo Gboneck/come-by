@@ -1,6 +1,8 @@
 // Herding tuning harness: runs bot-driven scenarios in the real game code,
 // fast-forwarded, and prints metrics. Calm driving should beat barking.
-//   node scripts/tune.mjs [species] [count]
+//   node scripts/tune.mjs [species] [count] [--weather=wind|rain|fog|storm] [--seed=N]
+// --seed makes a run exact (seeded Math.random, no live frame loop), so a
+// before/after comparison shows only what the code change did.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 
@@ -11,10 +13,25 @@ const server = await createServer({ server: { port: 5197, strictPort: true }, lo
 await server.listen();
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
+const seedArg = process.argv.find((x) => x.startsWith('--seed='));
+if (seedArg) {
+  await page.addInitScript((seed) => {
+    window.requestAnimationFrame = () => 0;
+    let a = seed >>> 0;
+    Math.random = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, Number(seedArg.slice(7)));
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-await page.goto('http://localhost:5197/?debug');
+const skyArg = process.argv.find((x) => x.startsWith('--weather='));
+await page.goto(`http://localhost:5197/?debug${skyArg ? `&weather=${skyArg.slice(10)}` : ''}`);
 await page.waitForFunction(() => window.sim);
 const helpArg = process.argv.find((x) => x.startsWith('--helpers='));
 const tierArg = process.argv.find((x) => x.startsWith('--tier='));
