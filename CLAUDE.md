@@ -57,7 +57,8 @@ original and drawn in code. No external art files, ever.
   and logs every hint, tip, banner and card against the clock (for pacing
   and pile-ups; shots in `shots/play/`), `scripts/audiotest.mjs` renders the music, stingers and
   soundscape offline and prints levels, peaks, tuning, theory checks and
-  CPU (we cannot listen, so we measure), `scripts/cooptest.mjs` starts the
+  CPU (we cannot listen, so we measure; `AUDIO_PORT` moves its server),
+  `scripts/cooptest.mjs` starts the
   relay (`wrangler dev`) and two browsers, a host and a guest, and plays
   co-op end to end (`--shots` into `shots/coop/`, `--lag=150`). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
   `regions.mjs` their own port when other checkouts are running servers too.
