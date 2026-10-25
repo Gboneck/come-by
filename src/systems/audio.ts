@@ -722,7 +722,16 @@ export class Sound {
       case 'ping-hold': {
         // Co-op "hold": the long level whistle that means stop.
         const p = whoPitch(opts.who);
-        this.tone(o, 'sine', 2050 * p, 1950 * p, t, 0.65, 0.13, { vib: 5, vibDepth: 18, attack: 0.03 });
+        this.tone(o, 'sine', 2050 * p, 1950 * p, t, 0.45, 0.15, { vib: 5, vibDepth: 18, attack: 0.03 });
+        break;
+      }
+      case 'ping-come':
+      case 'ping-away': {
+        // Co-op "come by" (go round clockwise) rises; "away to me" falls.
+        // Pings can come every second from four players: kept short.
+        const p = whoPitch(opts.who);
+        const [a, b] = name === 'ping-come' ? [1500, 2500] : [2500, 1500];
+        this.tone(o, 'sine', a * p, b * p, t, 0.34, 0.16, { vib: 7, vibDepth: 22, attack: 0.02 });
         break;
       }
       case 'friend-join':

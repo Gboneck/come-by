@@ -100,8 +100,13 @@ for (const name of cases) {
       g().day.t = 299.99;
       run(0.2);
       await note('nightfall');
-      // A coyote hunting right beside the dog.
-      const pr = g().predators[0];
+      // A coyote hunting right beside the dog (brought in if the night has none yet).
+      let pr = g().predators[0];
+      if (!pr) {
+        const { Predator } = await import('/src/entities/predator.ts');
+        pr = new Predator('coyote', 0);
+        g().predators.push(pr);
+      }
       pr.state = 'hunt';
       pr.x = g().dog.x + 50; pr.y = g().dog.y;
       await note('coyote close by');
@@ -448,7 +453,7 @@ for (const name of cases) {
   }
   if (name === 'sfx') {
     // Each sound effect alone, 3 s apart: peak and loudness, next to a bark.
-    const SFX = ['bark', 'coin', 'gate', 'thatlldo', 'judge', 'judge2', 'cart', 'creak', 'applause:0.15', 'applause:0.5', 'applause:0.95', 'crack', 'thunder:near', 'thunder:far', 'sold', 'missed', 'gate:1', 'sour', 'hammer', 'chop', 'voice', 'footstep', 'baa', 'lamb', 'ewe', 'auction', 'gavel', 'ping-here', 'ping-hold', 'friend-join', 'friend-leave', 'smp:rook:0.07', 'smp:cuckoo:0.08', 'smp:robin:0.08', 'smp:wolves:0.07', 'smp:ice:0.07', 'smp:step-snow:0.15'];
+    const SFX = ['bark', 'coin', 'gate', 'thatlldo', 'judge', 'judge2', 'cart', 'creak', 'applause:0.15', 'applause:0.5', 'applause:0.95', 'crack', 'thunder:near', 'thunder:far', 'sold', 'missed', 'gate:1', 'sour', 'hammer', 'chop', 'voice', 'footstep', 'baa', 'lamb', 'ewe', 'auction', 'gavel', 'ping-here', 'ping-hold', 'ping-come', 'ping-away', 'friend-join', 'friend-leave', 'smp:rook:0.07', 'smp:cuckoo:0.08', 'smp:robin:0.08', 'smp:wolves:0.07', 'smp:ice:0.07', 'smp:step-snow:0.15'];
     const rows = await page.evaluate(async (SFX) => {
       localStorage.clear();
       const { Sound } = await import('/src/systems/audio.ts');
@@ -684,7 +689,8 @@ for (const name of cases) {
         // The roster as the host sees it (an array), then as a guest (a map).
         events.push([0.5, (s) => s.friends({ net: { players: [{ slot: 0 }] } })], [1, (s) => s.friends({ net: { players: [{ slot: 0 }, { slot: 2 }] } })]);
         for (let k = 0; k < 4; k++) events.push([3 + k * 0.8, (s) => s.play('bark', { x: 0, y: 0, who: k, force: true })]);
-        events.push([7, (s) => s.play('ping-here', { x: 60, y: 0, who: 1, force: true })], [9, (s) => s.play('ping-hold', { x: -60, y: 0, who: 2, force: true })]);
+        events.push([7, (s) => s.play('ping-here', { x: 60, y: 0, who: 1, force: true })], [8, (s) => s.play('ping-hold', { x: -60, y: 0, who: 2, force: true })]);
+        events.push([9, (s) => s.play('ping-come', { x: 30, y: 0, who: 3, force: true })], [10, (s) => s.play('ping-away', { x: -30, y: 0, who: 1, force: true })]);
         events.push([11.5, (s) => s.friends({ net: { players: new Map([[0, {}], [2, {}]]) } })], [12, (s) => s.friends({ net: { players: new Map([[0, {}]]) } })]);
         break;
       default:
