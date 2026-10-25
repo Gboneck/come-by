@@ -11,6 +11,7 @@ import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey 
 import { SPECIES } from '../entities/species';
 import { HELPER_COSTS } from '../entities/helper';
 import { buildingDrawables } from '../render/world';
+import { safeArea } from './safe';
 
 export type Tab = 'build' | 'dog' | 'market';
 
@@ -318,26 +319,31 @@ export class BuildMode {
     const ui = game.ui;
     const inp = game.input;
     let result: 'exit' | null = null;
+    const S = safeArea(game.screen);
+    const top = 2 + S.top, R = W - 2 - S.right;
+    const touch = inp.touchMode;
+    const th = touch ? 13 : 11, tt = touch ? 4 : 3, p = touch ? 3 : 0;
 
     // Tabs and DONE.
     const tabs: [Tab, string][] = [['build', 'BUILD'], ['dog', 'DOG'], ['market', 'MARKET']];
-    let x = 2;
+    let x = 2 + S.left;
     for (const [id, label] of tabs) {
-      const w = textWidth(label) + 8;
+      const w = textWidth(label) + (touch ? 10 : 8);
       const on = this.tab === id;
-      panel(g, x, 2, w, 11, on ? C.teal : C.plum, on ? C.butter : C.sage);
-      text(g, label, x + 4, 5, on ? C.butter : C.wool);
-      if (ui.click(`tab-${id}`, x, 2, w, 11)) { this.tab = id; this.row = 0; }
-      x += w + 2;
+      panel(g, x, top, w, th, on ? C.teal : C.plum, on ? C.butter : C.sage);
+      text(g, label, x + w / 2, top + tt, on ? C.butter : C.wool, { align: 'center' });
+      if (ui.click(`tab-${id}`, x - 1, top - p, w + 2, th + p * 2)) { this.tab = id; this.row = 0; }
+      x += w + (touch ? 3 : 2);
     }
-    const dw = 30;
-    panel(g, W - dw - 2, 2, dw, 11, C.plum, C.butter);
-    text(g, 'DONE', W - dw / 2 - 2, 5, C.wool, { align: 'center' });
-    if (ui.click('done', W - dw - 2, 2, dw, 11)) result = 'exit';
+    const dw = touch ? 34 : 30;
+    panel(g, R - dw, top, dw, th, ui.isActive('done') ? C.teal : C.plum, C.butter);
+    text(g, 'DONE', R - dw / 2, top + tt, C.wool, { align: 'center' });
+    if (ui.click('done', R - dw - p, top - p, dw + p * 2, th + p * 2)) result = 'exit';
     const coinStr = `${game.coins}$`;
     const cw = textWidth(coinStr) + 8;
-    panel(g, W - cw - 2, 15, cw, 11);
-    text(g, coinStr, W - 6, 18, C.wool, { align: 'right', iconColor: C.butter });
+    panel(g, R - cw, top + th + 2, cw, 11);
+    text(g, coinStr, R - 4, top + th + 5, C.wool, { align: 'right', iconColor: C.butter });
+    const uiTop = top + th + 14; // world taps start below the top bar
 
     if (this.tab === 'build') this.drawBuildBar(game, g, W, H);
     else if (this.tab === 'dog') this.drawDog(game, g, W, H);
@@ -346,15 +352,15 @@ export class BuildMode {
     if (this.msg) {
       const m = this.msg;
       const tw = textWidth(m.text);
-      panel(g, Math.round(W / 2 - tw / 2 - 5), 30, tw + 10, 11, C.plum, m.good ? C.butter : C.sage);
-      text(g, m.text, W / 2, 33, m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
+      panel(g, Math.round(W / 2 - tw / 2 - 5), uiTop + 2, tw + 10, 11, C.plum, m.good ? C.butter : C.sage);
+      text(g, m.text, W / 2, uiTop + 5, m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
     }
 
     // World taps / clicks move the cursor (and a mouse click builds).
     if (this.tab === 'build') {
       const { ox, oy } = game.view();
       for (const p of inp.ptrs.values()) {
-        if (p.justDown && !p.owner && p.y > 28) p.owner = 'world';
+        if (p.justDown && !p.owner && p.y > uiTop) p.owner = 'world';
         if (p.owner === 'world') {
           this.cx = Math.floor((p.x + ox) / TS);
           this.cy = Math.floor((p.y + oy) / TS);
@@ -362,7 +368,7 @@ export class BuildMode {
         }
       }
       const hv = inp.hover;
-      if (hv && !inp.touchMode && hv.y > 28 && hv.y < H - 44) {
+      if (hv && !inp.touchMode && hv.y > uiTop && hv.y < H - 44 - S.bottom) {
         this.cx = Math.floor((hv.x + ox) / TS);
         this.cy = Math.floor((hv.y + oy) / TS);
       }
@@ -373,8 +379,10 @@ export class BuildMode {
   private drawBuildBar(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
     const ui = game.ui;
     const n = CATALOG.length;
-    const cw = Math.min(28, Math.floor((W - 4) / n));
-    const bx = Math.round(W / 2 - (cw * n) / 2), by = H - 26;
+    const S = safeArea(game.screen);
+    const L = 2 + S.left, R = W - 2 - S.right;
+    const cw = Math.min(28, Math.floor((R - L) / n));
+    const bx = Math.round((L + R) / 2 - (cw * n) / 2), by = H - 26 - S.bottom;
     panel(g, bx - 2, by - 2, cw * n + 4, 28);
     CATALOG.forEach((d, i) => {
       const x = bx + i * cw;
@@ -418,19 +426,19 @@ export class BuildMode {
     }
     const ih = 10 + lines.length * 6;
     const iy = by - 6 - ih;
-    panel(g, 2, iy, W - 4, ih);
-    text(g, title, 6, iy + 3, C.butter, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l, 6, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
+    panel(g, L, iy, R - L, ih);
+    text(g, title, L + 4, iy + 3, C.butter, { iconColor: C.butter });
+    lines.forEach((l, i) => text(g, l, L + 4, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
 
     // Touch buttons.
     if (game.input.touchMode) {
-      const bw = 34, bh = 13, rx = W - bw - 2;
-      let y = iy - bh - 2;
+      const bw = 40, bh = 15, rx = R - bw;
+      let y = iy - bh - 3;
       const btn = (id: string, label: string, act: () => void) => {
         panel(g, rx, y, bw, bh, ui.isActive(id) ? C.teal : C.plum, C.butter);
-        text(g, label, rx + bw / 2, y + 4, C.wool, { align: 'center' });
-        if (ui.click(id, rx, y, bw, bh)) act();
-        y -= bh + 2;
+        text(g, label, rx + bw / 2, y + 5, C.wool, { align: 'center' });
+        if (ui.click(id, rx - 3, y - 1, bw + 4, bh + 2)) act();
+        y -= bh + 3;
       };
       btn('b-place', 'BUILD', () => game.input.push('confirm'));
       if (this.def.rotates) btn('b-rot', 'TURN', () => game.input.push('rotate'));

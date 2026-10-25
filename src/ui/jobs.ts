@@ -2,7 +2,9 @@ import { C } from '../palette';
 import { panel, rect } from '../gfx/draw';
 import { text, textWidth, wrap } from '../gfx/font';
 import type { Game } from '../game';
-import { edgeArrow } from './hud';
+import { edgeArrow, type Margins } from './hud';
+import { safeArea } from './safe';
+import { touchLayout } from './touch';
 import { SPECIES } from '../entities/species';
 import { tToClock, yardOf, type Order } from '../systems/orders';
 import { CLASSES, PARTS, classLabel, currentClass, isTrialDay, nextTrialDay, prizeToday, type TrialResult } from '../systems/trials';
@@ -43,8 +45,11 @@ function cardLines(game: Game, W: number): { s: string; c: string }[] {
   return out;
 }
 
-function arrows(game: Game, g: CanvasRenderingContext2D) {
-  const top = 30;
+function arrows(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
+  // Clear of the card at the top, the safe areas and the thumb controls.
+  const S = safeArea(game.screen);
+  const TL = game.input.touchMode ? touchLayout(game, W, H) : null;
+  const top: Margins = { top: S.top + 30, bottom: TL ? H - TL.top + 2 : S.bottom + 8, left: S.left, right: S.right };
   const r = game.trials.run;
   const c = game.ranch.course;
   if (r) {
@@ -79,10 +84,12 @@ export function drawJobs(game: Game, g: CanvasRenderingContext2D, W: number, H: 
     const w = Math.max(...lines.map((l) => textWidth(l.s))) + 10;
     const h = lines.length * 7 + 4;
     const x = Math.round(W / 2 - w / 2);
-    panel(g, x, 2, w, h, C.plum, C.butter);
-    lines.forEach((l, i) => text(g, l.s, W / 2, 5 + i * 7, l.c, { align: 'center', iconColor: C.butter }));
+    // Under the place name while it shows (it shares the top centre).
+    const y = 2 + safeArea(game.screen).top + (game.place ? 13 : 0);
+    panel(g, x, y, w, h, C.plum, C.butter);
+    lines.forEach((l, i) => text(g, l.s, W / 2, y + 3 + i * 7, l.c, { align: 'center', iconColor: C.butter }));
   }
-  arrows(game, g);
+  arrows(game, g, W, H);
   return false;
 }
 

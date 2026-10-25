@@ -19,7 +19,8 @@ original and drawn in code. No external art files, ever.
 - URL switches: `?debug` exposes `window.game`, `window.sim` and
   `window.resetFlock` (see `src/debug.ts`) and skips the title (add
   `&title` to keep it); `?play` skips the title; `?sprites=N` shows the
-  sprite sheet from row N.
+  sprite sheet from row N; `?safe=top,right,bottom,left` fakes safe-area
+  insets (CSS px) to check notched phones.
 - Scripts (all Playwright, all start their own Vite server):
   `scripts/shot.mjs` screenshots + console errors (`--hold`, `--press`,
   `--eval` steps), `scripts/zoom.mjs` enlarges part of a PNG,
@@ -30,8 +31,10 @@ original and drawn in code. No external art files, ever.
   `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`
   and `scripts/tour.mjs` check the loops end to end,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
-  `--dusk`, `--tier=N`). `SHOT_PORT=52xx` gives `shot.mjs` / `regions.mjs`
-  their own port when other checkouts are running servers too.
+  `--dusk`, `--tier=N`), `scripts/uitour.mjs` screenshots every screen at
+  phone, notched-phone, landscape and desktop sizes onto contact sheets
+  (`shots/ui/`). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
+  `regions.mjs` their own port when other checkouts are running servers too.
 
 ## Rendering rules
 

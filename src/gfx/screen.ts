@@ -30,8 +30,9 @@ export class Screen {
     const dw = Math.round(cssW * dpr);
     const dh = Math.round(cssH * dpr);
     const scale = Math.max(1, Math.round(Math.min(dw, dh) / TARGET_SHORT));
-    const W = Math.ceil(dw / scale);
-    const H = Math.ceil(dh / scale);
+    // Never zero: a page opened in a hidden tab has no size yet.
+    const W = Math.max(1, Math.ceil(dw / scale));
+    const H = Math.max(1, Math.ceil(dh / scale));
     if (W === this.W && H === this.H && scale === this.scale && dpr === this.dpr && this.buf.width === W) return;
     this.dpr = dpr;
     this.scale = scale;

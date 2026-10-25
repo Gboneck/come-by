@@ -11,6 +11,7 @@ import { skyDarkness, skySlope } from './sky';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
+import { settings } from '../ui/settings';
 
 export interface View {
   ox: number;
@@ -37,8 +38,9 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   game.fx.drawLow(g);
   game.life.drawGround(g);
 
-  // Lying down lets you read the flock: its flight zone shows faintly.
-  if (game.dog.lying) {
+  // Lying down lets you read the flock: its flight zone shows faintly
+  // (always, if the player turned that on in the pause menu).
+  if (game.dog.lying || settings.zones === 'always') {
     const gr = game.nearestGroup(160);
     if (gr) {
       let rad = 0;

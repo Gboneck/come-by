@@ -6,6 +6,8 @@ import type { Game } from '../game';
 import { MH, MW, REGIONS, TS, Ter, type WorldMap } from '../world/map';
 import { TIERS, goalDone, tierOf } from '../systems/progression';
 import { jobsLedger } from './jobs';
+import { safeArea } from './safe';
+import { drawCover } from './feel';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -97,7 +99,9 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   add(`DAY ${game.day.day}  HOME ${deliv}  EARNED ${tot.earned}$`, C.sage);
 
   const ph = Math.max(20 + lines.length * 7, wide ? mapH + 28 : 0) + (wide ? 0 : mapH + 8) + 16;
-  const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2, Math.round(H / 2 - ph / 2));
+  const S = safeArea(game.screen);
+  const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
+  drawCover(g, W, H, 8);
   panel(g, x0, y0, pw, ph);
   text(g, 'RANCH LEDGER', x0 + pw / 2, y0 + 4, C.butter, { align: 'center' });
   rect(g, x0 + 5, y0 + 11, pw - 10, 1, C.sage);
@@ -123,7 +127,7 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   const label = game.input.touchMode ? 'CLOSE' : 'TAB: CLOSE';
   const bw = textWidth(label) + 10;
   const bx = Math.round(x0 + pw / 2 - bw / 2), by = y0 + ph - 13;
-  panel(g, bx, by, bw, 11, C.plum, C.butter);
+  panel(g, bx, by, bw, 11, ui.isActive('ledger-close') ? C.teal : C.plum, C.butter);
   text(g, label, bx + bw / 2, by + 3, C.wool, { align: 'center' });
   return ui.click('ledger-close', bx, by, bw, 11) || ui.captureAll('ledger-bg');
 }

@@ -45,7 +45,8 @@ await page.evaluate(async () => {
 await page.keyboard.press('Escape');
 await page.waitForTimeout(100);
 await step('paused', () => ({ mode: window.game.mode }));
-for (const k of ['ArrowDown', 'ArrowDown', 'Enter']) {
+// Up from RESUME wraps to SAVE AND QUIT, the last row of the pause menu.
+for (const k of ['ArrowUp', 'Enter']) {
   await page.keyboard.press(k);
   await page.waitForTimeout(80);
 }
