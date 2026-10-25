@@ -155,6 +155,27 @@
 - [x] One-time tip about resting for players past the tutorial
 - [x] `scripts/resttest.mjs`
 
+## M13 Graphics round two: Show Ground, weather, resting
+- [x] Show Ground: judge's marquee, benches of onlookers (they cheer each
+      cleared part), flags on poles in the wind, bunting that lifts, worn
+      ground at the post, the release and the pen gate; the next gate has
+      big buttercup flags, chevrons through it and a bobbing marker
+- [x] Buyers' yards: shaded carts with spoked wheels, name boards under a
+      little roof, the miller's sacks, the drover's camp fire (smoke, and a
+      light at night), the sale yard's auction stand and bell
+- [x] Rain: slanting streaks, splashes, puddles that grow on paths and dry
+      out after, the ground darker when wet
+- [x] Fog: a dithered veil, thin round the dog and lamps, thick at the
+      edges, drifting; never buries the ground at night
+- [x] Wind strength drives the gusts: grass flutters, reeds stay bent,
+      smoke, flags and washing stream out
+- [x] Storm: heavy rain, a darker sky, lightning (a dither flash and a bolt)
+- [x] Cloud shadows drift over the ground on fair days
+- [x] Resting: the dog curls up asleep with drifting z's; clouds, smoke,
+      grass and water run as a time-lapse and moving shadows swing with
+      the sun; it all stops the moment the dog gets up
+- [x] Screenshot + console check, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -482,3 +503,24 @@
   on time. No resting at night, during a trial run or under the bot.
   Measured: from 08:00 a rest reaches the end of day one in ~20s, with
   47$ in hand.
+- Weather is drawn render-side only (`src/render/weather.ts`, reading
+  `game.weather`). The one dither pass in `render/night.ts` now carries the
+  night, a storm's darker sky, fog and lightning. Rain does not dim the
+  whole screen (a plum grid read as a screen door): a wet day darkens only
+  the ground, meadow to moss and paths to sage by dither, so the flock
+  stays bright. Cloud shadows work the same way.
+- Fog under ~25% is not drawn, so rain and storms do not carry a veil.
+  Night plus fog is capped at about two thirds of the pixels so the ground
+  still reads in the dark.
+- Wind gusts move with their own phase (`stepWind`, advanced by
+  `render/life.ts`) instead of the game clock, so a change of wind strength
+  never makes the fronts jump, and resting can speed them up.
+- Resting is a time-lapse of the valley's own clock (`life.vt`, up to x12
+  with `game.rest`); butterflies and birds cap at x3. The "Z" float is
+  gone: the dog curls up asleep (`drawSleepingDog` in `src/art/dog.ts`)
+  with pixel z's, drawn by `render/world.ts` while `game.rest` > 1.3.
+- Moving things' shadows (animals, dog, helpers) shift from 2px west in the
+  morning to 2px east at dusk. Tree and building shadows are baked and stay.
+- The Show Ground is not striped: mower stripes read as rain. It is mown
+  short (few tufts) with worn patches baked at the post, the release and
+  the pen gate. Onlookers and the tent are decoration: nothing collides.

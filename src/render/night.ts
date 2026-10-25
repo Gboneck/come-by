@@ -97,6 +97,9 @@ export class NightOverlay {
     const WT = this.wisps;
     const fx = Math.floor(o.fogX ?? 0);
     const hw = W / 2, hh = H / 2;
+    const exs = new Float32Array(W);
+    for (let x = 0; x < W; x++) exs[x] = ((x - hw) / hw) ** 2;
+    const M = NS - 1; // NS is a power of two: & wraps negatives too
     for (let y = 0; y < H; y++) {
       const by = ((y + oy) & 3) * 4;
       const wy = y + oy;
@@ -113,9 +116,8 @@ export class NightOverlay {
         const wx = x + ox;
         let f = 0;
         if (fog > 0) {
-          const ex = ((x - hw) / hw) ** 2;
-          const n = WT[((((wx - fx) % NS) + NS) % NS) + ((((wy >> 1) % NS) + NS) % NS) * NS] / 255;
-          f = fog * (0.25 + 0.55 * Math.min(1, ex + ey)) * (0.5 + 0.8 * n);
+          const n = WT[((wx - fx) & M) + ((wy >> 1) & M) * NS] / 255;
+          f = fog * (0.25 + 0.55 * Math.min(1, exs[x] + ey)) * (0.5 + 0.8 * n);
         }
         if ((dark > 0 || f > 0) && L.length) {
           let hole = 0;

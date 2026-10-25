@@ -77,12 +77,12 @@ export class WeatherFx {
     for (let y = 0; y < H; y++) {
       const wy = y + oy;
       const row = wy * WORLD_W + ox, by = (wy & 3) * 4;
-      const ny = ((((wy - cy) >> 2) % NS) + NS) % NS * NS;
+      const ny = ((wy - cy) >> 2 & (NS - 1)) * NS;
       for (let x = 0; x < W; x++) {
         let level = wetL;
         if (clouds > 0) {
           // Sampled at a quarter resolution, so the clouds are big and soft.
-          const n = CT[((((x + ox - cx) >> 2) % NS) + NS) % NS + ny];
+          const n = CT[((x + ox - cx) >> 2 & (NS - 1)) + ny];
           if (n > 160) level += clouds * Math.min(1, (n - 160) / 30);
         }
         let d = 0;

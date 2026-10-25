@@ -1,5 +1,5 @@
 import { C } from '../palette';
-import { ring } from '../gfx/draw';
+import { ellipse, ring } from '../gfx/draw';
 import type { Game } from '../game';
 import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from './animals';
 import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
@@ -13,6 +13,12 @@ import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
 import { yardFire } from '../art/course';
 import { drawSleepingDog, drawSnores } from '../art/dog';
+
+// Sideways shift of moving things' shadows with the time of day.
+function sunShift(game: Game): number {
+  if (game.day.phase === 'night') return 0;
+  return Math.max(-2, Math.min(2, Math.round(-2 + (4 * game.day.frac) / 0.8)));
+}
 
 // Resting: the dog curls up asleep while the day runs fast.
 const sleeping = (game: Game) => game.dog.lying && game.rest > 1.3;
@@ -38,10 +44,12 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   game.life.wx.drawGround(g, game);
   const inView = (x0: number, y0: number, x1 = x0, y1 = y0, m = 24) => x1 > ox - m && x0 < ox + W + m && y1 > oy - m && y0 < oy + H + m;
 
-  for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a);
-  game.dog.drawShadow(g);
+  // Shadows of things that move swing with the sun: west in the morning,
+  // east by evening (a time-lapse while resting shows them sweep round).
+  const sun = sunShift(game);
+  for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a, sun);
+  for (const d of [game.dog, ...game.helpers]) if (inView(d.x, d.y)) ellipse(g, d.x - 1 + sun, d.y + 2, d.face === 'l' || d.face === 'r' ? 5 : 3, 1, C.sage);
   for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
-  for (const h of game.helpers) if (inView(h.x, h.y)) h.drawShadow(g);
   game.fx.drawLow(g);
   game.life.drawGround(g);
 

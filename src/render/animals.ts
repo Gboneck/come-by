@@ -40,12 +40,12 @@ const SHADOW: Record<SpeciesId, [number, number]> = {
   pony: [7, 2],
 };
 
-export function drawAnimalShadow(g: CanvasRenderingContext2D, a: Animal) {
+export function drawAnimalShadow(g: CanvasRenderingContext2D, a: Animal, sun = 0) {
   if (a.inWater) return;
   const [rx, ry] = SHADOW[a.sp.id];
   const side = a.face === 'l' || a.face === 'r';
   const lying = (poses.get(a)?.rest ?? 0) > (poses.get(a)?.lieAfter ?? 1e9);
-  ellipse(g, a.x - 1, a.y + 1, side || lying ? rx + (lying ? 1 : 0) : Math.max(2, rx - 2), ry, C.sage);
+  ellipse(g, a.x - 1 + sun, a.y + 1, side || lying ? rx + (lying ? 1 : 0) : Math.max(2, rx - 2), ry, C.sage);
 }
 
 const cyc = (arr: Sprite[], f: number) => arr[((Math.floor(f) % arr.length) + arr.length) % arr.length];

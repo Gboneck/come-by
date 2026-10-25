@@ -365,26 +365,18 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
 
 // ---- Asleep: curled nose to tail while the day runs on (resting). ----
 // Facing right, 13 x 8, anchor at the feet (6, 7) like the other poses.
-const CURL = [
+const curlRows = (back: string) => [
   '.............',
   '.............',
-  '.............',
-  '....tttt.pp..',
-  '..ttwttttttt.',
-  '.ttttwttttrt.',
-  '.tttttttpttwp',
-  '..wwtttttrr..',
+  '........p.p..',
+  back,
+  '..ttwtttttpt.',
+  '.tttttttrttww',
+  '.ttwtttttttp.',
+  '..ttttttwww..',
 ];
-const CURL_BREATH = [
-  '.............',
-  '.............',
-  '.............',
-  '...ttttt.pp..',
-  '..ttwttttttt.',
-  '.ttttwttttrt.',
-  '.tttttttpttwp',
-  '..wwtttttrr..',
-];
+const CURL = curlRows('...tttt.ttt..');
+const CURL_BREATH = curlRows('..ttttt.ttt..');
 
 let curl: Sprite[] | null = null;
 
@@ -394,19 +386,14 @@ export function drawSleepingDog(g: CanvasRenderingContext2D, x: number, y: numbe
 }
 
 // Little z's drifting up from the sleeping dog, growing as they rise.
-const ZS = [['##', '.#', '##'], ['###', '.#.', '###'], ['####', '..#.', '.#..', '####']];
+const ZS = [['####', '..#.', '.#..', '####'], ['####', '..#.', '.#..', '####'], ['#####', '...#.', '..#..', '.#...', '#####']];
 export function drawSnores(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  for (let k = 0; k < 3; k++) {
-    const u = (t * 0.55 + k / 3) % 1;
+  g.fillStyle = C.wool;
+  for (let k = 0; k < 2; k++) {
+    const u = (t * 0.5 + k / 2) % 1;
     const z = ZS[Math.min(2, Math.floor(u * 3))];
-    const zx = Math.round(x + 3 + u * 8 + Math.sin((t + k) * 2) * 1.5), zy = Math.round(y - 6 - u * 14);
     if (u > 0.85 && Math.floor(t * 10) % 2) continue;
-    z.forEach((row, j) => [...row].forEach((ch, i) => {
-      if (ch !== '#') return;
-      g.fillStyle = C.plum;
-      g.fillRect(zx + i + 1, zy + j + 1, 1, 1);
-      g.fillStyle = C.wool;
-      g.fillRect(zx + i, zy + j, 1, 1);
-    }));
+    const zx = Math.round(x + 4 + u * 8 + Math.sin((t + k) * 2) * 1.5), zy = Math.round(y - 8 - u * 14);
+    z.forEach((row, j) => [...row].forEach((ch, i) => ch === '#' && g.fillRect(zx + i, zy + j, 1, 1)));
   }
 }

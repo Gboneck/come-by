@@ -33,7 +33,8 @@ original and drawn in code. No external art files, ever.
   `scripts/resttest.mjs`
   and `scripts/tour.mjs` check the loops end to end,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
-  `--dusk`, `--tier=N`), `scripts/uitour.mjs` screenshots every screen at
+  `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
+  include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
   phone, notched-phone, landscape and desktop sizes onto contact sheets
   (`shots/ui/`), `scripts/audiotest.mjs` renders the music, stingers and
   soundscape offline and prints levels, peaks, tuning, theory checks and
