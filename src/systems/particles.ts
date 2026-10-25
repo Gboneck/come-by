@@ -29,10 +29,13 @@ export interface Particle {
 
 export class Particles {
   list: Particle[] = [];
+  tap: ((p: Particle) => void) | null = null; // co-op host: pass effects to the guests
 
   add(p: Partial<Particle> & { kind: PKind; x: number; y: number }) {
     const max = p.max ?? p.life ?? 0.5;
-    this.list.push({ vx: 0, vy: 0, size: 1, color: C.wool, life: max, max, ...p });
+    const q: Particle = { vx: 0, vy: 0, size: 1, color: C.wool, life: max, max, ...p };
+    this.list.push(q);
+    this.tap?.(q);
   }
 
   // Small footfall puff that drifts and rises.

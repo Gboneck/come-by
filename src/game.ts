@@ -49,11 +49,14 @@ import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } fr
 import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
 import { courseDrawables } from './art/course';
 import type { Drawable } from './art/buildings';
+import type { HostNet } from './net/host';
+import type { GuestNet } from './net/guest';
+import { coopKeys, drawCoop, openCoop } from './ui/coop';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look';
-export type Request = 'new' | 'continue' | 'title' | null;
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop';
+export type Request = 'new' | 'continue' | 'title' | 'join' | null;
 
 export interface DayStats {
   delivered: Partial<Record<SpeciesId, number>>;
@@ -80,6 +83,8 @@ const REGION_TIPS: Partial<Record<string, string>> = {
   high: 'PONIES SPOOK FROM FAR OFF. WORK WIDE, SLOW AND QUIET.',
   show: 'SHEEPDOG TRIALS EVERY 3RD DAY. STAND BY THE CROOK AND NIP (E) TO START A RUN.',
 };
+
+const NO_DOGS: Dog[] = [];
 
 const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, lost: {}, goodsValue: 0, built: 0, sold: 0 });
 
@@ -157,8 +162,15 @@ export class Game {
   private idleT = 0;
   summaryT = 0; // time the end-of-day card has been up
   private buffered: Partial<Record<'bark' | 'nip', number>> = {};
+  // Co-op (src/net/): hosting friends on this ranch, or a guest on theirs.
+  net: HostNet | GuestNet | null = null;
 
-  constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null } = {}) {
+  // The other players' dogs: guests' on the host, everyone else's on a guest.
+  get coop(): Dog[] {
+    return this.net ? this.net.dogs : NO_DOGS;
+  }
+
+  constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null; guest?: GuestNet } = {}) {
     this.demo = !!opts.demo;
     // Behind the title, the saved dog does the herding.
     if (this.demo) this.look = readLook(saveInfo()?.look);
@@ -174,7 +186,12 @@ export class Game {
     this.dog = new Dog(door.x, door.y);
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
-    if (this.demo) {
+    if (opts.guest) {
+      // A friend's ranch: built from what their game sent, run by theirs.
+      this.net = opts.guest;
+      this.tut = 99;
+      opts.guest.setup(this);
+    } else if (this.demo) {
       // Attract mode behind the title: the heeler working a flock at home.
       this.mode = 'title';
       this.tut = 99;
@@ -403,6 +420,13 @@ export class Game {
     });
   }
 
+  // Co-op host with friends here: menus do not stop the world for them.
+  private coopWorld(dt: number) {
+    if (this.demo) {
+      if (this.mode === 'coop') this.updateDemo(dt); // the join screen over the title
+    } else if (this.net?.role === 'host' && this.net.dogs.length) this.stepWorld(dt, false);
+  }
+
   showBanner(big: string, small?: string, max = 2.2) {
     this.banner = { big, small, t: max, max };
   }
@@ -413,6 +437,10 @@ export class Game {
     this.audio?.tick(this, dt); // keeps the music scheduled through fades and hit-pause
     this.feel.update(dt, this.coins, this.screen.H);
     if (this.feel.fading) return;
+    if (this.net?.role === 'guest') {
+      this.net.update(this, dt);
+      return;
+    }
     // A beat of hit-pause when a nip lands (never under the tuning bot).
     if (this.mode === 'play' && this.feel.hitstop > 0 && !this.input.override) {
       this.feel.hitstop -= dt;
@@ -427,12 +455,19 @@ export class Game {
       if (act) this.startGame(act);
       return;
     }
+    if (this.mode === 'coop') {
+      coopKeys(this);
+      this.coopWorld(dt);
+      return;
+    }
     if (this.mode === 'pause') {
       pauseKeys(this);
+      this.coopWorld(dt);
       return;
     }
     if (this.mode === 'look') {
       lookKeys(this);
+      this.coopWorld(dt);
       return;
     }
     if (this.mode === 'summary') {
@@ -449,6 +484,7 @@ export class Game {
     }
     if (this.mode === 'ledger') {
       if (this.input.pressed('ledger') || this.input.pressed('cancel') || this.input.pressed('confirm')) this.mode = 'play';
+      this.coopWorld(dt);
       return;
     }
     if (this.mode === 'build') {
@@ -506,6 +542,12 @@ export class Game {
       }
       this.showBanner('GO HOME TO BUILD', undefined, 1.4);
     }
+    this.stepWorld(dt, true);
+  }
+
+  // The world going on: the clock, the night, the dogs, the herd, the ranch.
+  // `control` is false while a co-op host is in a menu: their dog stands.
+  private stepWorld(dt: number, control: boolean) {
     this.updateRest(dt);
     this.weather.update(dt);
     const dayEv = this.trials.run ? null : this.day.update(dt * this.rest); // the clock waits for a trial run
@@ -525,18 +567,21 @@ export class Game {
       return;
     }
     if (this.day.phase === 'night') {
+      const m = this.mode;
       this.updateNight(dt);
-      if (this.mode !== 'play') return;
+      if (this.mode !== m) return;
     }
 
-    this.bufferPress('bark', this.dog.barkCd, dt);
-    this.bufferPress('nip', this.dog.nipCd, dt);
-    this.dog.update(dt, this.input, this.map, this.fx);
+    if (control) {
+      this.bufferPress('bark', this.dog.barkCd, dt);
+      this.bufferPress('nip', this.dog.nipCd, dt);
+    }
+    this.dog.update(dt, this.input, this.map, this.fx, control);
     for (const ev of this.dog.events) this.onDogEvent(ev);
     this.dog.events.length = 0;
     updateHerd(this.animals, this.herdCtx(), dt);
     const night = this.day.phase === 'night';
-    for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
+    for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y, this.coop)) this.onRanchEvent(ev);
     jobsUpdate(this, dt);
     this.discovery.update(this, dt);
     if (!night && !this.trials.run) updateProduce(this, dt * this.rest);
@@ -544,7 +589,7 @@ export class Game {
       this.groups = findGroups(this.animals);
       this.groupT = 0.25;
     }
-    if (this.input.pressed('helper')) {
+    if (control && this.input.pressed('helper')) {
       if (this.helpers.length) this.cycleHelpers();
       else if (this.debug) this.showZones = !this.showZones;
     }
@@ -554,7 +599,12 @@ export class Game {
     this.life.update(this, dt);
     this.folk.update(this, dt);
     this.updateCamera(dt);
+    this.updateTips(dt);
+  }
 
+  // The region's name (and a first-visit tip) as the dog enters, and the
+  // timers on the lines that come and go.
+  updateTips(dt: number) {
     const reg = this.map.regionAt(this.dog.x, this.dog.y);
     if (reg && reg !== this.lastRegion) {
       this.place = { text: reg.name.toUpperCase(), t: 2.4 };
@@ -579,6 +629,8 @@ export class Game {
   canRest(): boolean {
     const d = this.dog;
     if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || !this.inRanch()) return false;
+    // Co-op: everyone has to be lying down at home for the day to fly by.
+    if (this.coop.some((o) => !o.lying || this.map.regionAt(o.x, o.y)?.id !== 'ranch')) return false;
     // Anything loose right by the dog stops it; further off, only stock that
     // is moving or upset does (calm strays grazing by the yard do not).
     return !this.animals.some((a) => {
@@ -654,6 +706,7 @@ export class Game {
       dogX: this.dog.x,
       dogY: this.dog.y,
       dogLying: this.dog.lying,
+      others: this.coop,
       animals: this.animals,
       pens: this.ranch.pens,
       sheltered: (p) => this.sheltered(p),
@@ -678,7 +731,7 @@ export class Game {
     for (const p of this.predators) {
       p.update(dt, ctx);
       // Catch a thief and it lets go.
-      if (p.carry && Math.hypot(p.x - this.dog.x, p.y - this.dog.y) < 11) {
+      if (p.carry && (Math.hypot(p.x - this.dog.x, p.y - this.dog.y) < 11 || this.coop.some((o) => Math.hypot(p.x - o.x, p.y - o.y) < 11))) {
         p.scare(2);
         const a = p.dropCarry();
         if (a) this.fx.float(a.x, a.y - 12, 'SAVED!', C.butter, 1.2);
@@ -700,12 +753,13 @@ export class Game {
       if (p.active && p.state !== 'flee') this.sources.push({ x: p.x, y: p.y, vx: p.vx, vy: p.vy, strength: 1.3, range: 1.5, kind: 'predator', lying: false });
     for (const h of this.helpers) this.sources.push(h.source());
     this.sources.push(...this.folk.sources());
+    for (const o of this.coop) this.sources.push({ x: o.x, y: o.y, vx: o.vx, vy: o.vy, strength: 1, range: 1, kind: 'dog', lying: o.lying });
     const gates = this.ranch.pens.map((p: Pen) => {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
     gates.push(...jobGates(this));
-    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather };
+    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather, dogs: this.coop.length ? this.coop : undefined };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
@@ -806,8 +860,9 @@ export class Game {
   }
 
   // Title menu choice: fade out, then main.ts swaps in the new game.
-  startGame(act: 'new' | 'continue') {
-    this.fadeTo(() => (this.request = act));
+  startGame(act: 'new' | 'continue' | 'join') {
+    if (act === 'join') openCoop(this, 'join');
+    else this.fadeTo(() => (this.request = act));
   }
 
   // A bark or nip pressed just before the dog is ready still happens.
@@ -858,7 +913,7 @@ export class Game {
   }
 
   // Now and then a flock near the dog calls out; frightened ones more often.
-  private animalCalls(dt: number) {
+  animalCalls(dt: number) {
     if (!this.audio) return;
     this.callT -= dt;
     if (this.callT > 0) return;
@@ -899,6 +954,7 @@ export class Game {
   hint(): string | null {
     if (this.rest > 1.5) return 'RESTING... THE PENS KEEP MAKING GOODS.';
     if (this.tip) return this.tip.text;
+    if (this.net?.role === 'guest') return this.net.hint(this);
     const jh = jobsHint(this);
     if (jh) return jh;
     const touch = this.input.touchMode;
@@ -928,7 +984,7 @@ export class Game {
     return best;
   }
 
-  private updateCamera(dt: number) {
+  updateCamera(dt: number) {
     const d = this.dog;
     let tx = d.x + d.vx * 0.35;
     let ty = d.y + d.vy * 0.35;
@@ -995,6 +1051,7 @@ export class Game {
     }
     drawWorld(this, g, v);
     drawSpeech(this, g, v);
+    drawCoop(this, g, v, 'world');
     this.input.uiHeld.clear();
     if (this.mode === 'title') {
       const act = drawTitle(this, g, v.W, v.H, this.menu);
@@ -1017,6 +1074,7 @@ export class Game {
     } else if (this.mode === 'look') {
       drawLook(this, g, v.W, v.H);
     }
+    drawCoop(this, g, v, 'ui');
     this.feel.drawCover(g, v.W, v.H);
   }
 }

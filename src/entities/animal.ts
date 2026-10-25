@@ -113,6 +113,9 @@ export interface HerdCtx {
   // Open gates pull pressured animals towards the opening.
   gates: { x: number; y: number; open: boolean; accepts(a: Animal): boolean }[];
   weather?: Weather;
+  // Co-op: the other players' dogs, which settle a flock and take up room
+  // just as yours does (their pressure is in `sources`).
+  dogs?: { x: number; y: number; r: number; lying: boolean }[];
 }
 
 const tmp = { x: 0, y: 0 };
@@ -266,7 +269,8 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
 
   // Lying dog nearby: settle.
   const dDog = Math.hypot(a.x - ctx.dogX, a.y - ctx.dogY);
-  const settling = ctx.dogLying && dDog < sp.flight * 1.8;
+  let settling = ctx.dogLying && dDog < sp.flight * 1.8;
+  if (ctx.dogs) for (const o of ctx.dogs) if (o.lying && Math.hypot(a.x - o.x, a.y - o.y) < sp.flight * 1.8) settling = true;
 
   // ---- Obstacles ----
   let mask = sp.climbs ? BLOCK_CLIMBER : BLOCK_ANIMAL;
@@ -456,6 +460,14 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     a.x += (ddx / dd) * (minDog - dd);
     a.y += (ddy / dd) * (minDog - dd);
   }
+  if (ctx.dogs)
+    for (const o of ctx.dogs) {
+      const ox = a.x - o.x, oy = a.y - o.y, od = Math.hypot(ox, oy), m = sp.r + o.r;
+      if (od < m && od > 1e-3) {
+        a.x += (ox / od) * (m - od);
+        a.y += (oy / od) * (m - od);
+      }
+    }
   collideCircle(ctx.map, a, sp.r, mask);
 
   // ---- Stress ----
@@ -588,6 +600,13 @@ export function barkAt(list: Animal[], x: number, y: number, range: number, weat
 
 // Heel nip: the animal nearest the dog's nose gets a hard shove.
 export function nipFrom(list: Animal[], x: number, y: number, hx: number, hy: number, power: number): Animal | null {
+  const best = nipPick(list, x, y, hx, hy);
+  if (best) nipAnimal(best, x, y, hx, hy, power);
+  return best;
+}
+
+// Which animal is at the dog's nose, if any.
+export function nipPick(list: Animal[], x: number, y: number, hx: number, hy: number): Animal | null {
   let best: Animal | null = null, bestD = 1e9;
   for (const a of list) {
     if (a.gone || a.pen || a.carried) continue;
@@ -598,8 +617,12 @@ export function nipFrom(list: Animal[], x: number, y: number, hx: number, hy: nu
     if (dot < 0.2) continue;
     if (d < bestD) { bestD = d; best = a; }
   }
-  if (!best) return null;
-  const a = best, sp = a.sp;
+  return best;
+}
+
+// The shove itself, for one animal (co-op: the one a guest's dog nipped).
+export function nipAnimal(a: Animal, x: number, y: number, hx: number, hy: number, power: number) {
+  const sp = a.sp;
   const dx = a.x - x, dy = a.y - y;
   const l = Math.hypot(dx, dy) || 1;
   // Shove along the dog's line, blended with the animal's own heading so a
@@ -615,7 +638,6 @@ export function nipFrom(list: Animal[], x: number, y: number, hx: number, hy: nu
   a.commitT = Math.max(a.commitT, 3 * power);
   a.stress = clamp(a.stress + sp.nipStress, 0, 1);
   a.hop = 1;
-  return a;
 }
 
 // ---- Groups: connected flocks, for strays, HUD and arrows ----

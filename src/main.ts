@@ -4,6 +4,8 @@ import { Game } from './game';
 import { Sound } from './systems/audio';
 import { clearSave, loadInto, saveGame } from './systems/save';
 import { installDebug, drawSpriteSheet } from './debug';
+import { joining } from './net/guest';
+import { openCoop } from './ui/coop';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const screen = new Screen(canvas);
@@ -21,11 +23,15 @@ if (params.has('sprites')) {
   const sound = new Sound();
   const debug = params.has('debug');
   // The title screen runs the game in attract mode; ?play skips it.
-  const skipTitle = params.has('play') || (debug && !params.has('title'));
+  // A co-op link (?join=CODE) opens the title's JOIN A FRIEND.
+  const joinCode = params.get('join');
+  const skipTitle = !joinCode && (params.has('play') || (debug && !params.has('title')));
   let game = new Game(screen, input, { demo: !skipTitle, audio: sound });
   if (debug) installDebug(game);
+  if (joinCode) openCoop(game, 'join', joinCode);
 
   const swap = (next: Game) => {
+    if (game.net && game.net !== next.net) game.net.close(); // hosting ends with the ranch's game
     game = next;
     if (debug) installDebug(game);
     input.clearQueue();
@@ -45,6 +51,7 @@ if (params.has('sprites')) {
     const steps = Math.max(1, Math.ceil(dt / STEP - 0.01));
     if (dt > 0) for (let i = 0; i < steps; i++) game.update(dt / steps);
     input.clearQueue();
+    if (game.net?.role === 'host') game.net.frame(now);
     game.render();
     screen.present();
     input.endFrame();
@@ -52,7 +59,9 @@ if (params.has('sprites')) {
     if (req) {
       game.request = null;
       if (req === 'title') swap(new Game(screen, input, { demo: true, audio: sound }));
-      else {
+      else if (req === 'join') {
+        if (joining) swap(new Game(screen, input, { audio: sound, guest: joining }));
+      } else {
         const next = new Game(screen, input, { audio: sound });
         if (req === 'continue') loadInto(next);
         else clearSave();

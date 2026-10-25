@@ -132,3 +132,15 @@ export function playerDogSprites(look: DogLook = current): DogSprites {
   }
   return s;
 }
+
+// A friend's dog in co-op: their markings, but a buttercup neck piece, so
+// red is only ever you on your own screen.
+export function friendDogSprites(look: DogLook): DogSprites {
+  const k = `y-${lookKey(look)}`;
+  let s = cache.get(k);
+  if (!s) {
+    s = makeDogSprites('y', look);
+    cache.set(k, s);
+  }
+  return s;
+}

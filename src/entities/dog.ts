@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { ellipse } from '../gfx/draw';
 import { drawSpr, type Sprite } from '../gfx/sprite';
-import { RUN_BOB, SPRINT_BOB, type DogPoses } from '../art/dog';
+import { RUN_BOB, SPRINT_BOB, type DogPoses, type DogSprites } from '../art/dog';
 import { playerDogSprites } from '../art/dogstyle';
 import { fxSprites } from '../art/fx';
 import type { Input } from '../input';
@@ -56,6 +56,8 @@ export class Dog {
   inWater = false;
   events: DogEvent[] = [];
   stats: DogStats = { ...BASE_STATS };
+  skin: DogSprites | null = null; // a co-op friend's dog; null = the player's own look
+  tag = ''; // a co-op friend's name, shown over their dog
 
   constructor(x: number, y: number) {
     this.x = x;
@@ -189,12 +191,7 @@ export class Dog {
       this.events.push('bark');
       fx.ring(this.x, this.y - 2, this.stats.barkRange, C.wool, 0.32, 6);
       fx.ring(this.x, this.y - 2, this.stats.barkRange * 0.55, C.wool, 0.22);
-      // Sound lines thrown from the mouth, riding along with the dog.
-      const B = fxSprites();
-      if (this.face === 'r') fx.attached(this, 7, -2, B.barkSide, 0.24);
-      else if (this.face === 'l') fx.attached(this, -7, -2, B.barkSide, 0.24, true);
-      else if (this.face === 'd') fx.attached(this, 0, 3, B.barkDown, 0.24);
-      else fx.attached(this, 0, -9, B.barkUp, 0.24);
+      this.barkLines(fx);
     }
     if (input.pressed('nip') && this.nipCd <= 0 && !this.lying) {
       this.nipCd = 0.45;
@@ -203,8 +200,70 @@ export class Dog {
     }
   }
 
+  // Sound lines thrown from the mouth, riding along with the dog.
+  barkLines(fx: Particles) {
+    const B = fxSprites();
+    if (this.face === 'r') fx.attached(this, 7, -2, B.barkSide, 0.24);
+    else if (this.face === 'l') fx.attached(this, -7, -2, B.barkSide, 0.24, true);
+    else if (this.face === 'd') fx.attached(this, 0, 3, B.barkDown, 0.24);
+    else fx.attached(this, 0, -9, B.barkUp, 0.24);
+  }
+
+  // Co-op: a dog run by someone else's browser. Take its state as sent and
+  // keep the poses (settling, getting up, the trot) going here.
+  puppet(dt: number, s: { x: number; y: number; vx: number; vy: number; face: Facing; lying: boolean; sprint: boolean }, map: WorldMap, fx: Particles) {
+    this.barkAnim -= dt;
+    this.nipT -= dt;
+    this.getUp -= dt;
+    if (s.lying && !this.lying) {
+      this.lying = true;
+      this.lieT = 0;
+      this.flopped = false;
+    } else if (!s.lying && this.lying) {
+      this.lying = false;
+      this.getUp = GET_UP;
+    }
+    if (this.lying) {
+      this.lieT += dt;
+      if (!this.flopped && this.lieT >= this.poses().settle.length * SETTLE_STEP) this.flopped = true;
+    }
+    this.x = s.x;
+    this.y = s.y;
+    this.vx = s.vx;
+    this.vy = s.vy;
+    this.face = s.face;
+    this.sprinting = s.sprint;
+    const v = this.speed;
+    if (v > 1) {
+      this.hx = this.vx / v;
+      this.hy = this.vy / v;
+    }
+    this.inWater = (map.flagsAtPx(this.x, this.y) & SHALLOW) !== 0;
+    this.phase += (v * dt) / (this.sprinting ? 7 : 4.5);
+    const step = Math.floor(this.phase);
+    this.dustT -= dt;
+    if (this.inWater) {
+      if (v > 20 && this.dustT <= 0) {
+        fx.splash(this.x, this.y + 2);
+        this.dustT = 0.18;
+      }
+    } else if (this.sprinting) {
+      if (step !== this.lastStep && (step & 1) === 1 && v > 20) fx.dust(this.x - this.hx * 5, this.y + 2 - this.hy * 2, -this.vx * 0.2, -this.vy * 0.2);
+    } else if (v > this.stats.walk * 1.2 && this.dustT <= 0) {
+      fx.dust(this.x - this.hx * 4, this.y + 2 - this.hy * 2, -this.vx * 0.15, -this.vy * 0.15);
+      this.dustT = 0.07;
+    }
+    this.lastStep = step;
+  }
+
+  // A friend's bark, seen here: mouth open and the lines from it.
+  puppetBark(fx: Particles) {
+    this.barkAnim = BARK_TIME;
+    this.barkLines(fx);
+  }
+
   private poses(): DogPoses {
-    const P = playerDogSprites().poses; // dressed in the player's look
+    const P = (this.skin ?? playerDogSprites()).poses; // dressed in the player's look
     return this.face === 'd' ? P.down : this.face === 'u' ? P.up : P.side;
   }
 

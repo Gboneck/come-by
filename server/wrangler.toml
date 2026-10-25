@@ -1,0 +1,21 @@
+# Come By co-op relay: a Worker with one Durable Object per room code.
+# Local:   npm run dev            (ws://localhost:8787)
+# LAN:     npm run dev:lan        (other devices on the same Wi-Fi)
+# Deploy:  npx wrangler login, then npm run deploy
+name = "come-by-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-24"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[observability]
+enabled = true
+
+[observability.traces]
+enabled = true

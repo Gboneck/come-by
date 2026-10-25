@@ -153,7 +153,7 @@ export class Person {
 
 // A building going up: the scaffold stands until the builder has put in
 // the hours, or until morning, whichever comes first.
-interface Job {
+export interface Job {
   b: Building;
   work: number;
   done: number;
@@ -176,7 +176,7 @@ const tileCentre = (d: { x: number; y: number }) => ({ x: d.x * TS + 4, y: d.y *
 export class Folk {
   people: Person[] = [];
   rancher = new Person('rancher', 0, 0);
-  private jobs: Job[] = [];
+  jobs: Job[] = [];
   private seeded = false;
   private known = new Map<Building, number>();
   private day = 0;
