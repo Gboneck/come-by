@@ -34,6 +34,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
   for (const h of game.helpers) if (inView(h.x, h.y)) h.drawShadow(g);
   game.fx.drawLow(g);
+  game.life.drawGround(g);
 
   // Lying down lets you read the flock: its flight zone shows faintly.
   if (game.dog.lying) {
@@ -74,6 +75,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
 
   g.save();
   g.translate(-ox, -oy);
+  game.life.drawAir(g);
   drawStamina(game, g);
   game.fx.drawHigh(g);
   g.restore();
@@ -92,6 +94,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     g.save();
     g.translate(-ox, -oy);
     for (const p of game.predators) if (inView(p.x, p.y)) p.drawEyes(g, game.t);
+    game.life.drawGlow(g);
     g.restore();
   }
   g.save();

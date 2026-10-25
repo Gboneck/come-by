@@ -13,6 +13,7 @@ import type { Pen } from './ranch/buildings';
 import { DayCycle } from './systems/day';
 import { spawnMorning } from './systems/spawner';
 import { NightOverlay } from './render/night';
+import { Life } from './render/life';
 import { drawWorld } from './render/world';
 import { drawHud } from './ui/hud';
 import { drawSummary, type Summary } from './ui/summary';
@@ -81,6 +82,7 @@ export class Game {
   groups: Group[] = [];
   fx = new Particles();
   night = new NightOverlay();
+  life = new Life();
   cam = { x: 0, y: 0 };
   t = 0;
   mode: Mode = 'play';
@@ -376,6 +378,7 @@ export class Game {
     }
     if (this.mode === 'build') {
       this.fx.update(dt);
+      this.life.update(this, dt);
       this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
       if (this.build.update(this, dt) === 'exit') this.exitBuild();
       const k = damp(6, dt);
@@ -449,6 +452,7 @@ export class Game {
     this.helpers.forEach((h, i) => h.update(this, dt, i));
     this.animalCalls(dt);
     this.fx.update(dt);
+    this.life.update(this, dt);
     this.updateCamera(dt);
 
     const reg = this.map.regionAt(this.dog.x, this.dog.y);
@@ -649,6 +653,7 @@ export class Game {
       this.groupT = 0.25;
     }
     this.fx.update(dt);
+    this.life.update(this, dt);
     const k = damp(1.5, dt);
     this.cam.x += ((cx + this.dog.x) / 2 - this.cam.x) * k;
     this.cam.y += ((cy + this.dog.y) / 2 + 20 - this.cam.y) * k;

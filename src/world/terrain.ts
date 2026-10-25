@@ -37,6 +37,9 @@ export interface Baked {
   canopy: HTMLCanvasElement;
   water: WaterAnim[];
   sway: SwayGrid;
+  // What the ground is made of, for footprints: 0 grass, 1 path or mud
+  // (moss), 2 wet bank (sage), 3 water, 4 rock.
+  soil: Uint8Array;
 }
 
 function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32Array {
@@ -422,6 +425,14 @@ function bakeWorld(map: WorldMap): Baked {
   }
   gg.putImageData(gimg, 0, 0);
 
+  const soil = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    if (water[i]) soil[i] = 3;
+    else if (rock[i]) soil[i] = 4;
+    else if (path[i]) soil[i] = 1;
+    else if (wdist[i] === 0 && (water[i - 1] || water[i + 1] || water[i - W] || water[i - 2] || water[i + 2] || water[i - 2 * W])) soil[i] = gp[i] === U32.sage ? 2 : 1;
+  }
+
   // ---- Swaying grass, flowers and reeds ----
   const sway = makeSwayGrid(W, H);
   const add = (it: SwayItem) => {
@@ -510,7 +521,7 @@ function bakeWorld(map: WorldMap): Baked {
     waterAnims.push(makeWaterAnim(src, x0, y0, x1 - x0, y1 - y0, flowing, flowing ? stones : []));
   });
 
-  return { ground, canopy: cb.canvas, water: waterAnims, sway };
+  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil };
 }
 
 function makeSwayGrid(W: number, H: number): SwayGrid {

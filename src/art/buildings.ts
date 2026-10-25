@@ -178,6 +178,12 @@ export function drawGood(g: CanvasRenderingContext2D, sp: string, x: number, y: 
 }
 
 // ---- Farmhouse: a whitewashed cabin that grows with the ranch. ----
+// Where the chimney smoke leaves the farmhouse (see render/life.ts).
+export function chimneyTop(b: Building): { x: number; y: number } {
+  const roofTop = b.y0 - (b.level >= 3 ? 12 : 7);
+  return { x: b.x1 - 10, y: roofTop - 6 };
+}
+
 export function farmhouseDrawable(g: CanvasRenderingContext2D, b: Building, night: boolean): Drawable {
   return { y: b.y1, draw: () => drawFarmhouse(g, b, night) };
 }
