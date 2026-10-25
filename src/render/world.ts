@@ -59,8 +59,8 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   }
   const tierName = tierOf(game.tier).name;
   for (const d of DECOR) {
-    if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, d.x * TS + 8, d.y * TS + 8, 40)) continue;
-    if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && d.x >= b.tx && d.x < b.tx + b.w && d.y >= b.ty && d.y < b.ty + b.h)) continue;
+    if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, (d.x + (d.w ?? 1)) * TS, (d.y + (d.h ?? 1)) * TS, 40)) continue;
+    if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && b.overlapsTiles(d.x, d.y, d.w ?? 1, d.h ?? 1))) continue;
     ents.push(decorDrawable(g, d, game.t, tierName, night));
   }
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t, night) });

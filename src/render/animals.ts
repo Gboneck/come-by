@@ -59,7 +59,8 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, ni
   const wary = a.stress > 0.4 || a.pressure > 0.2 || a.panicT > 0;
   const { lying } = poseOf(a, t, night);
   const hop = a.hop > 0 ? -Math.round(Math.sin(a.hop * Math.PI) * 2) : 0;
-  const x = a.x, y = a.y + 1 + hop;
+  // A goat up on an outcrop stands on its top, above the rock's face.
+  const x = a.x, y = a.y + 1 + hop - (a.onRock ? 2 : 0);
   const side = a.face === 'l' || a.face === 'r';
   const seed = a.id * 0.37;
   let s: Sprite;
