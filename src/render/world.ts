@@ -18,6 +18,7 @@ import { playerDogSprites } from '../art/dogstyle';
 import { drawSpr } from '../gfx/sprite';
 import { yardFire } from '../art/course';
 import { drawSleepingDog, drawSnores } from '../art/dog';
+import { cached, picturesFrame } from '../gfx/picture';
 
 // The player's dog: asleep while resting, its idles (sniff, scratch, the
 // shake-off) when left standing, otherwise its own pose.
@@ -49,6 +50,7 @@ export interface View {
 export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   const { ox, oy, W, H } = v;
   const night = skyDarkness(game.day) > 0.3;
+  picturesFrame();
   // The season: recoloured layers (rebuilt only when a step changes) and
   // the look that roofs, fences and decor read as they draw.
   setSeasonLook(game.season);
@@ -92,14 +94,14 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const b of game.ranch.buildings) {
     if (!inView(b.x0, b.y0 - 30, b.x1, b.y1, 8)) continue;
     const near = Math.hypot(game.dog.x - b.cx, game.dog.y - b.cy) < 120 || game.mode === 'build';
-    ents.push(...buildingDrawables(g, b, game.t, night, near));
+    ents.push(...cached(g, `b${b.id}`, (cg) => buildingDrawables(cg, b, game.t, night, near)));
   }
   const tierName = game.look.ranch || tierOf(game.tier).name; // the ranch sign
   ents.push(...game.extraDrawables(g));
   for (const d of DECOR) {
     if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, (d.x + (d.w ?? 1)) * TS, (d.y + (d.h ?? 1)) * TS, 40)) continue;
     if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && b.overlapsTiles(d.x, d.y, d.w ?? 1, d.h ?? 1))) continue;
-    ents.push(decorDrawable(g, d, game.t, tierName, night));
+    ents.push(...cached(g, `d${d.x},${d.y}`, (cg) => [decorDrawable(cg, d, game.t, tierName, night)]));
   }
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t, night) });
   ents.push({ y: game.dog.y, draw: () => drawPlayerDog(game, g) });

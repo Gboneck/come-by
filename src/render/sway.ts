@@ -4,11 +4,12 @@ import { WATER_FPS, WATER_FRAMES } from '../art/water';
 import { gust, windStrength } from './wind';
 import { C } from '../palette';
 import { seasonLook } from '../art/seasonlook';
+import { quality } from '../gfx/quality';
 
 // Grass tips, flower heads and reeds lean one pixel (reeds two) downwind as
 // a gust passes over them. Bases never move, so nothing looks rubbery.
 export function drawSway(g: CanvasRenderingContext2D, grid: SwayGrid, ox: number, oy: number, W: number, H: number, t: number) {
-  const ws = windStrength();
+  const ws = quality.sway ? windStrength() : 0;
   // Snow buries most of the grass; autumn dries some blades to buttercup.
   const snow = seasonLook.snow, dry = seasonLook.leaves > 0.3;
   const c0 = Math.max(0, Math.floor((ox - 8) / grid.cell)), c1 = Math.min(grid.cols - 1, Math.floor((ox + W + 8) / grid.cell));
@@ -18,10 +19,10 @@ export function drawSway(g: CanvasRenderingContext2D, grid: SwayGrid, ox: number
       for (const it of grid.cells[r * grid.cols + c]) {
         if (it.x < ox - 8 || it.x > ox + W + 2 || it.y < oy - 2 || it.y > oy + H + 8) continue;
         if (snow > 0.3 && !it.reed && ((it.x * 7 + it.y * 13) % 100) < snow * 92) continue;
-        const gs = gust(it.x, it.y, t);
+        const gs = quality.sway ? gust(it.x, it.y, t) : 0;
         // Reeds also nod on their own now and then; on a windy day grass
         // flutters between gusts and reeds stay bent.
-        const nod = it.reed && Math.sin(t * 1.3 + it.x * 0.7) > 0.93 ? 1 : 0;
+        const nod = it.reed && quality.sway && Math.sin(t * 1.3 + it.x * 0.7) > 0.93 ? 1 : 0;
         const flutter = ws > 0.55 && Math.floor(t * 7 + it.x * 0.37 + it.y * 0.11) % 3 === 0 ? 1 : 0;
         const lean = it.reed ? Math.min(2, (gs > 0.3 || ws > 0.7 ? 1 : 0) + (gs > 0.75 ? 1 : 0) + nod) : gs > 0.45 ? 1 : flutter;
         const x = Math.round(it.x), y = Math.round(it.y);

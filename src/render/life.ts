@@ -12,6 +12,7 @@ import { skyDarkness } from './sky';
 import { SHALLOW, TS, Ter, WORLD_H, WORLD_W, type SpeciesId } from '../world/map';
 import { seasonLook } from '../art/seasonlook';
 import type { Game } from '../game';
+import { quality } from '../gfx/quality';
 
 // A living valley, purely for the eye: butterflies and birds (with their
 // shadows) by day, fireflies at night, chimney smoke, and the traces animals
@@ -262,7 +263,7 @@ export class Life {
 
   // Butterflies wander over open grass by day and scatter from the dog.
   private updateFlies(game: Game, dt: number, v: { ox: number; oy: number; W: number; H: number }, dark: number, night: boolean) {
-    const want = night || dark > 0.15 ? 0 : Math.round((v.W * v.H) / 16000);
+    const want = night || dark > 0.15 ? 0 : Math.round(((v.W * v.H) / 16000) * quality.fx);
     if (this.flies.length < want && Math.random() < dt * 1.5) {
       // Enter from just outside the view, over grass.
       const side = Math.floor(Math.random() * 4);
@@ -315,7 +316,7 @@ export class Life {
 
   // Fireflies along the meadows at dusk and through the night.
   private updateGlows(game: Game, dt: number, v: { ox: number; oy: number; W: number; H: number }, dark: number, night: boolean) {
-    const want = Math.round(((night ? 1 : Math.max(0, dark - 0.2) * 3) * (v.W * v.H)) / 7000);
+    const want = Math.round((((night ? 1 : Math.max(0, dark - 0.2) * 3) * (v.W * v.H)) / 7000) * quality.fx);
     if (this.glows.length < want && Math.random() < dt * 6) {
       const x = v.ox + Math.random() * v.W, y = v.oy + Math.random() * v.H;
       if (this.openGrass(game, x, y)) this.glows.push({ x, y, vx: 0, vy: 0, ph: Math.random() * 10, rate: 0.6 + Math.random() * 0.8 });

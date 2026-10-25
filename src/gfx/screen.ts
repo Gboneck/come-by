@@ -1,6 +1,13 @@
 // Low-res internal buffer, scaled to the window by a whole number.
 export const TARGET_SHORT = 240;
 
+// Where the browser can scale a canvas with nearest-neighbour filtering
+// (CSS image-rendering: pixelated), the game draws straight into a canvas
+// of the internal size and the compositor does the whole-number upscale on
+// the GPU. Otherwise the small buffer is copied up by drawImage each frame,
+// which on a phone's 3x screen is millions of pixels.
+const CSS_SCALE = typeof CSS !== 'undefined' && !!CSS.supports?.('image-rendering', 'pixelated');
+
 export class Screen {
   view: HTMLCanvasElement;
   vctx: CanvasRenderingContext2D;
@@ -10,13 +17,20 @@ export class Screen {
   H = TARGET_SHORT;
   scale = 1;
   dpr = 1;
+  readonly cssScale = CSS_SCALE;
   onResize: (() => void) | null = null;
 
   constructor(view: HTMLCanvasElement) {
     this.view = view;
     this.vctx = view.getContext('2d', { alpha: false })!;
-    this.buf = document.createElement('canvas');
-    this.g = this.buf.getContext('2d')!;
+    if (CSS_SCALE) {
+      view.style.imageRendering = 'pixelated';
+      this.buf = view;
+      this.g = this.vctx;
+    } else {
+      this.buf = document.createElement('canvas');
+      this.g = this.buf.getContext('2d')!;
+    }
     this.resize();
     window.addEventListener('resize', () => this.resize());
     window.visualViewport?.addEventListener('resize', () => this.resize());
@@ -38,8 +52,8 @@ export class Screen {
     this.scale = scale;
     this.W = W;
     this.H = H;
-    this.view.width = W * scale;
-    this.view.height = H * scale;
+    this.view.width = CSS_SCALE ? W : W * scale;
+    this.view.height = CSS_SCALE ? H : H * scale;
     this.view.style.width = `${(W * scale) / dpr}px`;
     this.view.style.height = `${(H * scale) / dpr}px`;
     this.buf.width = W;
@@ -49,6 +63,7 @@ export class Screen {
   }
 
   present() {
+    if (CSS_SCALE) return; // already on screen
     this.vctx.imageSmoothingEnabled = false;
     this.vctx.drawImage(this.buf, 0, 0, this.W * this.scale, this.H * this.scale);
   }

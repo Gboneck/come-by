@@ -92,6 +92,22 @@ export function stopTyping() {
   el?.blur();
 }
 
+// A game pad types too (ui/pad.ts): +1 / -1 turns the last letter through
+// the alphabet, 'add' puts a letter on the end, 'del' takes one off.
+const PAD_ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ';
+export function padType(op: 1 | -1 | 'add' | 'del') {
+  if (!el || !active) return;
+  let v = el.value;
+  if (op === 'del') v = v.slice(0, -1);
+  else if (op === 'add' || !v) v = v.length < active.max ? v + 'A' : v;
+  else {
+    const i = Math.max(0, PAD_ABC.indexOf(v[v.length - 1]));
+    v = v.slice(0, -1) + PAD_ABC[(i + op + PAD_ABC.length) % PAD_ABC.length];
+  }
+  el.value = v;
+  el.dispatchEvent(new Event('input'));
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('pointerup', (e) => {
     if (!screen) return;

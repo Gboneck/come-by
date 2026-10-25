@@ -21,6 +21,7 @@ import { mergeTravels } from '../net/travels';
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
 const KEY = 'comeby-save-v1';
+export const SAVE_KEY = KEY; // ui/transfer.ts moves saves between devices
 
 // Seasons added `young` (a lamb) with `mom`, the `k` of its mother (only
 // mothers carry a `k`), and the years a ewe last lambed and was shorn.
