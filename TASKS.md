@@ -414,8 +414,10 @@ novice trial with a calm handler scores 99-100 with or without the change.
       here): a tap says OVER HERE with a flag where your dog stands; hold
       it and pick HOLD, COME BY or AWAY (a direction, or slide the thumb),
       said over your dog. Every screen sees it and hears its whistle
-      (`ping-here`, `ping-hold`, `ping-come`, `ping-away`; the Sound
-      session makes them); off screen, an arrow with the name
+      (`ping-here`, `ping-hold`, `ping-come`, `ping-away`, with `who`, the
+      player's slot, so each dog whistles and barks at its own pitch; the
+      Sound session makes them and chimes on its own when `game.net.players`
+      changes); off screen, an arrow with the name
 - [x] BRACE class at the Show Ground: a friend's dog at the post with
       yours makes the run a brace, ten sheep for two dogs, scored as one;
       either dog leaving the field retires it; prizes on trial days

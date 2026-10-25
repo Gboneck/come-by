@@ -230,9 +230,6 @@ export class HostNet implements PingNet {
           s.dog = d;
           this.dogs.push(d);
           this.game.showBanner(`${s.name} IS HERE`, 'A FRIEND CAME TO HELP', 2.4);
-          this.quiet++;
-          this.game.audio?.play('coop-join');
-          this.quiet--;
           // The first friend ever: what they can do, and how to talk to them.
           const game = this.game;
           if (!game.tipsSeen.has('coop-host')) {
@@ -291,7 +288,8 @@ export class HostNet implements PingNet {
     try {
       if (e.kind === 'bark') {
         barkAt(game.animals, e.x, e.y, stats.barkRange, game.weather);
-        game.audio?.play('bark', { x: e.x, y: e.y });
+        const opts = { x: e.x, y: e.y, who: s.slot }; // their own pitch
+        game.audio?.play('bark', opts);
         game.fx.ring(e.x, e.y - 2, stats.barkRange, C.wool, 0.32, 6);
         game.fx.ring(e.x, e.y - 2, stats.barkRange * 0.55, C.wool, 0.22);
         dog.puppetBark(game.fx);
@@ -567,9 +565,6 @@ export class HostNet implements PingNet {
         d.puppet(dt, { x: d.x + (dx / l) * v * dt, y: d.y + (dy / l) * v * dt, vx: (dx / l) * v, vy: (dy / l) * v, face: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'r' : 'l') : dy > 0 ? 'd' : 'u', lying: false, sprint: false }, game.map, game.fx);
         if (s.leaving <= 0) {
           game.fx.puff(d.x, d.y + 2);
-          this.quiet++;
-          game.audio?.play('coop-leave');
-          this.quiet--;
           this.drop(s);
           this.sendPlayers();
         }

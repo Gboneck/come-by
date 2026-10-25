@@ -44,7 +44,9 @@ export class Pings {
     // A newer word from the same dog replaces the old one.
     this.list = this.list.filter((q) => q.slot !== p.slot || (q.kind === 'here') !== (p.kind === 'here'));
     this.list.push({ ...p, t: 0 });
-    game.audio?.play(`ping-${p.kind}`, { x: p.x, y: p.y, force: true });
+    // `who` (the pinging player's slot) gives each dog its own whistle.
+    const opts = { x: p.x, y: p.y, force: true, who: p.slot };
+    game.audio?.play(`ping-${p.kind}`, opts);
   }
 
   update(dt: number) {

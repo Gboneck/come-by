@@ -438,7 +438,8 @@ export class GuestNet implements PingNet {
     const [kx, ky] = { r: [1, 0], l: [-1, 0], u: [0, -1], d: [0, 1] }[d.face];
     let target = 0;
     if (ev === 'bark') {
-      game.audio?.play('bark', { x: d.x, y: d.y });
+      const opts = { x: d.x, y: d.y, who: this.slot }; // our own pitch
+      game.audio?.play('bark', opts);
       game.feel.kick(kx, ky, 0.09);
       buzz(touch(game), 12);
     } else {
@@ -702,7 +703,9 @@ export class GuestNet implements PingNet {
         case 's': {
           if (own) break;
           const [, , name, x, y, vol, delay, force] = e as [string, number, string, number | null, number | null, number, number, number];
-          audio?.play(name, { ...(x === null || y === null ? {} : { x, y }), vol, delay, force: !!force });
+          // `who`: whose bark it was (each friend barks at their own pitch).
+          const opts = { ...(x === null || y === null ? {} : { x, y }), vol, delay, force: !!force, who: e[1] as number };
+          audio?.play(name, opts);
           break;
         }
         case 'st':
