@@ -14,6 +14,8 @@ import { DayCycle } from './systems/day';
 import { spawnMorning } from './systems/spawner';
 import { NightOverlay } from './render/night';
 import { Life } from './render/life';
+import { Folk } from './entities/folk';
+import { drawSpeech } from './ui/speech';
 import { drawWorld } from './render/world';
 import { drawHud } from './ui/hud';
 import { drawSummary, type Summary } from './ui/summary';
@@ -96,6 +98,7 @@ export class Game {
   fx = new Particles();
   night = new NightOverlay();
   life = new Life();
+  folk = new Folk(); // the rancher and the valley's townsfolk
   cam = { x: 0, y: 0 };
   t = 0;
   mode: Mode = 'play';
@@ -520,6 +523,7 @@ export class Game {
     this.animalCalls(dt);
     this.fx.update(dt);
     this.life.update(this, dt);
+    this.folk.update(this, dt);
     this.updateCamera(dt);
 
     const reg = this.map.regionAt(this.dog.x, this.dog.y);
@@ -656,6 +660,7 @@ export class Game {
     for (const p of this.predators)
       if (p.active && p.state !== 'flee') this.sources.push({ x: p.x, y: p.y, vx: p.vx, vy: p.vy, strength: 1.3, range: 1.5, kind: 'predator', lying: false });
     for (const h of this.helpers) this.sources.push(h.source());
+    this.sources.push(...this.folk.sources());
     const gates = this.ranch.pens.map((p: Pen) => {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
@@ -786,6 +791,7 @@ export class Game {
     }
     this.fx.update(dt);
     this.life.update(this, dt);
+    this.folk.update(this, dt);
     const k = damp(1.5, dt);
     this.cam.x += ((cx + this.dog.x) / 2 - this.cam.x) * k;
     this.cam.y += ((cy + this.dog.y) / 2 + 20 - this.cam.y) * k;
@@ -912,6 +918,7 @@ export class Game {
     const g = this.g;
     const v = this.view();
     drawWorld(this, g, v);
+    drawSpeech(this, g, v);
     this.input.uiHeld.clear();
     if (this.mode === 'title') {
       const act = drawTitle(this, g, v.W, v.H, this.menu);

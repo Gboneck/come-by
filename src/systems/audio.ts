@@ -344,6 +344,33 @@ export class Sound {
     src.start(at ?? this.ctx.currentTime);
   }
 
+  // Townsfolk talking: a little babble of blips in their own register, one
+  // per few letters, a lift at the end of a question.
+  voice(pitch: number, text: string, x: number, y: number) {
+    if (!this.ctx || this.muted) return;
+    const dx = x - this.lx, dy = y - this.ly, d = Math.hypot(dx, dy);
+    const vol = Math.max(0, 1 - d / 320);
+    if (vol < 0.02) return;
+    const o = this.out(vol, dx / 220, Math.min(1, d / 250));
+    if (!o) return;
+    const letters = text.replace(/[^A-Z]/g, '');
+    const n = Math.max(2, Math.min(10, Math.round(letters.length / 3)));
+    const t0 = this.ctx.currentTime + 0.01;
+    for (let i = 0; i < n; i++) {
+      const c = letters.charCodeAt((i * 3) % Math.max(1, letters.length)) || 65;
+      const lift = i === n - 1 && text.endsWith('?') ? 1.25 : 1;
+      const f = pitch * [1, 1.122, 1.26, 0.891, 1.335][c % 5] * lift;
+      this.tone(o, 'triangle', f, f * 0.94, t0 + i * 0.075, 0.06, 0.14, { attack: 0.006 });
+    }
+  }
+
+  // A person's footstep: softer and lower than the dog's.
+  footstep(x: number, y: number) {
+    const dx = x - this.lx, dy = y - this.ly;
+    const vol = 0.07 * Math.max(0, 1 - Math.hypot(dx, dy) / 240);
+    this.sample('step-dog', vol, dx / 220, 0.7 + Math.random() * 0.1);
+  }
+
   // The soundscape calls this when lightning strikes (its thunder is
   // already on the way, later the further off it struck).
   strike(near: number) {
@@ -455,6 +482,16 @@ export class Sound {
         this.duckFor(0.8, 0.25);
         break;
       }
+      case 'hammer':
+        // A nail going in: the ring of the strike and the knock of wood.
+        this.tone(o, 'sine', 900, 600, t, 0.03, 0.14);
+        this.tone(o, 'triangle', 260, 170, t, 0.07, 0.2);
+        this.noise(o, t, 0.025, 0.16, 'bandpass', 2500, 2);
+        break;
+      case 'chop':
+        this.tone(o, 'triangle', 180, 110, t, 0.09, 0.22);
+        this.noise(o, t, 0.05, 0.18, 'lowpass', 1100);
+        break;
       case 'nip':
         this.noise(o, t, 0.035, 0.35, 'highpass', 2500);
         this.tone(o, 'square', 900, 500, t, 0.04, 0.08, { filter: 'lowpass', ff: 2000 });
