@@ -10,8 +10,8 @@
 
 import { type Bank, mtof } from './synth';
 
-export type PieceId = 'title' | 'ranch' | 'meadow' | 'hills' | 'rocky' | 'ford' | 'high' | 'dusk' | 'night';
-export type StingerKind = 'calm' | 'steady' | 'rattled' | 'tierup' | 'summary';
+export type PieceId = 'title' | 'ranch' | 'meadow' | 'hills' | 'rocky' | 'ford' | 'high' | 'dusk' | 'night' | 'trial' | 'lullaby';
+export type StingerKind = 'calm' | 'steady' | 'rattled' | 'tierup' | 'summary' | 'gate' | 'sour' | 'sold' | 'missed';
 
 export interface MusicState {
   piece: PieceId;
@@ -19,6 +19,10 @@ export interface MusicState {
   tension: number; // 0..1 flock panic by day, predators close by night
   rest: boolean; // summary / build / ledger: soft and sparse
   muffle: boolean; // paused
+  // The sky, 0..1 each: rain darkens it, fog hushes it, wind lifts the drone.
+  rain?: number;
+  fog?: number;
+  wind?: number;
 }
 
 export interface NoteLog {
@@ -31,7 +35,8 @@ export interface NoteLog {
 }
 
 type Meter = '6/8' | '3/4' | '4/4';
-type Lead = 'whistle' | 'fiddle' | 'harp';
+type Lead = 'whistle' | 'fiddle' | 'harp' | 'bell';
+type Cells = { mid: number[][]; slow: number[][]; cad: number[][] };
 
 interface Chord {
   root: number; // semitones above the key's tonic
@@ -68,6 +73,10 @@ interface Piece {
   dark?: number; // 0..1 how muted the pad is
   orn: number; // ornament density
   theme?: number; // chance a section quotes the main theme
+  leadP?: number; // chance a section has a tune (instead of the mood's)
+  cells?: Cells; // rhythm cells (instead of the meter's)
+  march?: boolean; // a pipe-band drum pattern, always on
+  rock?: boolean; // the harp keeps every beat, however still the dog is
 }
 
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
@@ -132,6 +141,12 @@ const PIECES: Record<PieceId, Piece> = {
   high: { id: 'high', key: 2, mode: MIXOLYDIAN, meter: '3/4', bpm: 66, slot: 2, open: MIX_OPEN, close: MIX_CLOSE, tense: MIX_TENSE, leads: ['whistle', 'fiddle'], range: [74, 93], arps: ARP34, drone: 1, pad: 0.8, harp: 0.6, orn: 0.7 },
   // The light going: A minor, the fiddle takes the tune.
   dusk: { id: 'dusk', key: 9, mode: AEOLIAN, meter: '3/4', bpm: 70, slot: 1, open: AEO_OPEN, close: AEO_CLOSE, tense: AEO_TENSE, leads: ['fiddle', 'whistle', 'harp'], range: [69, 86], arps: ARP34, drone: 0.4, pad: 0.9, harp: 0.8, dark: 0.3, orn: 0.8 },
+  // The Show Ground: a pipe-band march in A mixolydian over a strong drone,
+  // the whistle playing chanter. Formal, and it never lets up.
+  trial: { id: 'trial', key: 9, mode: MIXOLYDIAN, meter: '4/4', bpm: 96, slot: 1, open: MIX_OPEN, close: MIX_CLOSE, tense: MIX_TENSE, leads: ['whistle', 'whistle', 'fiddle'], range: [69, 86], arps: [[0, -1, 2, -1, 1, -1, 3, -1]], drone: 1, pad: 0.35, harp: 0.7, orn: 1.4, leadP: 0.9, march: true, cells: { mid: [[3, 1, 2, 2], [3, 1, 3, 1], [2, 2, 3, 1], [2, 1, 1, 2, 2], [3, 1, 4], [2, 2, 2, 2]], slow: [[4, 4], [3, 1, 4], [6, 2]], cad: [[4, 4], [2, 2, 4], [6, -2], [3, 1, 4]] } },
+  // Resting on the ranch: a music-box lullaby rocking over soft harp,
+  // sometimes the main theme, very slowly.
+  lullaby: { id: 'lullaby', key: 7, mode: IONIAN, meter: '6/8', bpm: 40, slot: 1, open: ION_OPEN, close: ION_CLOSE, tense: ION_TENSE, leads: ['bell'], range: [76, 91], arps: [[0, -1, -1, 2, -1, -1], [0, -1, 2, -1, 3, -1]], drone: 0.25, pad: 0.6, harp: 0.55, dark: 0.45, orn: 0, theme: 0.4, leadP: 0.8, rock: true },
   // Night: D minor, a music box and a low whistle, very still.
   night: { id: 'night', key: 2, mode: AEOLIAN, meter: '3/4', bpm: 54, slot: 2, open: AEO_OPEN, close: AEO_CLOSE, tense: AEO_TENSE, leads: ['whistle', 'fiddle'], range: [64, 81], arps: ARP34, drone: 0.6, pad: 0.8, harp: 0, bells: true, dark: 0.7, orn: 0.5 },
 };
@@ -426,6 +441,7 @@ export class Music {
   private arpV: number[] = [55, 62, 67, 71];
   private bellPrev = 81;
   private stingWave: PeriodicWave;
+  private sky = { rain: 0, fog: 0, wind: 0 };
 
   constructor(private ctx: BaseAudioContext, out: AudioNode, private stingOut: AudioNode, private bank: Bank, private rnd: () => number = Math.random) {
     const c = ctx;
@@ -562,6 +578,9 @@ export class Music {
     this.tension += (s.tension - this.tension) * k(s.tension > this.tension ? 0.5 : 3.5);
     this.rest = s.rest;
     this.want = s.piece;
+    this.sky.rain += ((s.rain ?? 0) - this.sky.rain) * k(2);
+    this.sky.fog += ((s.fog ?? 0) - this.sky.fog) * k(2);
+    this.sky.wind += ((s.wind ?? 0) - this.sky.wind) * k(2);
     const now = this.ctx.currentTime;
     if (s.muffle !== this.muffled) {
       this.muffled = s.muffle;
@@ -629,13 +648,22 @@ export class Music {
     if (p.theme && !tense && themeTurn) {
       const part = THEME[this.themePart++ % 2];
       chords = part.chords.map(chord);
-      lead = p.id === 'title' ? (n % 6 < 3 ? 'whistle' : 'fiddle') : this.rnd() < 0.6 ? 'whistle' : 'fiddle';
+      lead = p.id === 'title' ? (n % 6 < 3 ? 'whistle' : 'fiddle') : p.id === 'lullaby' ? 'bell' : this.rnd() < 0.6 ? 'whistle' : 'fiddle';
       melody = this.themeMelody(part.bars, p, lead);
     } else {
-      const pick = <T>(a: T[]) => a[Math.floor(this.rnd() * a.length)];
+      // Grey skies lean on phrases that start on a minor chord.
+      const gloom = Math.max(this.sky.rain, this.sky.fog * 0.7);
+      const pick = (list: string[][]) => {
+        const w = list.map((ph) => 1 + 6 * gloom * (/^b?[iv]/.test(ph[0]) ? 1 : 0));
+        let x = this.rnd() * w.reduce((a, v) => a + v, 0);
+        for (let i = 0; i < list.length; i++) if ((x -= w[i]) <= 0) return list[i];
+        return list[list.length - 1];
+      };
       const a = pick(tense ? p.tense : p.open), b = pick(tense ? p.tense : p.close);
       chords = [...a, ...b].map(chord);
-      const pLead = (this.rest ? 0.3 : 0.45 + 0.4 * this.energy) * (tense ? 0.5 : 1) * (n === 0 && p.id !== 'title' ? 0.6 : 1);
+      // Pieces with their own chance (the trial, the lullaby) start with a
+      // tune; the others often let the harmony settle first.
+      const pLead = (p.leadP ?? (this.rest ? 0.3 : 0.45 + 0.4 * this.energy) * (n === 0 && p.id !== 'title' ? 0.6 : 1)) * (tense ? 0.5 : 1) * (1 - 0.4 * this.sky.fog);
       if (this.rnd() < pLead) {
         lead = p.leads[this.leadRot++ % p.leads.length];
         melody = this.genMelody(p, chords, lead);
@@ -657,8 +685,10 @@ export class Music {
     const t = this.next;
     // A change of scene (dusk, night, the title) turns on the next beat;
     // walking into another region waits for the bar line.
-    const scene = (id: PieceId) => id === 'dusk' || id === 'night' || id === 'title';
-    if (this.want !== this.piece!.id && this.tick % sub(this.piece!.meter) === 0 && (scene(this.want) || scene(this.piece!.id))) this.begin(this.want, t);
+    const scene = (id: PieceId) => id === 'dusk' || id === 'night' || id === 'title' || id === 'trial' || id === 'lullaby';
+    // Getting up from a rest ends the lullaby on the very next note.
+    const onBeat = this.tick % sub(this.piece!.meter) === 0 || this.piece!.id === 'lullaby';
+    if (this.want !== this.piece!.id && onBeat && (scene(this.want) || scene(this.piece!.id))) this.begin(this.want, t);
     if (this.tick % this.tpb() === 0) this.onBar(t);
     if (this.tick % sub(this.piece!.meter) === 0) this.onBeat(t);
     const p = this.piece!, sec = this.sec!;
@@ -686,13 +716,17 @@ export class Music {
       this.newSection();
     }
     const p = this.piece!;
-    this.tempo = 1 + 0.05 * this.energy + (p.id === 'night' ? 0.22 : 0.07) * this.tension;
+    const { rain, fog, wind } = this.sky;
+    // Fog and rain slow it a touch.
+    this.tempo = (1 + 0.05 * this.energy + (p.id === 'night' ? 0.22 : 0.07) * this.tension) * (1 - 0.06 * fog - 0.04 * rain);
     const e = this.energy, x = this.tension;
     const tau = 0.6;
-    this.padEnv.gain.setTargetAtTime(0.034 * p.pad * (0.8 + 0.35 * (1 - e)) * (1 - 0.3 * x), t, tau);
-    this.padLp.frequency.setTargetAtTime((600 + 1500 * (1 - (p.dark ?? 0))) * (0.75 + 0.35 * e) * (1 - 0.25 * x), t, tau);
-    this.droneEnv.gain.setTargetAtTime(0.03 * p.drone * (1 + 0.3 * x), t, tau);
+    this.padEnv.gain.setTargetAtTime(0.034 * p.pad * (0.8 + 0.35 * (1 - e)) * (1 - 0.3 * x) * (1 + 0.2 * fog), t, tau);
+    this.padLp.frequency.setTargetAtTime((600 + 1500 * (1 - (p.dark ?? 0))) * (0.75 + 0.35 * e) * (1 - 0.25 * x) * (1 - 0.3 * Math.max(rain, fog)), t, tau);
+    this.droneEnv.gain.setTargetAtTime(0.03 * p.drone * (1 + 0.3 * x) * (1 + 0.5 * fog + 0.3 * wind), t, tau);
     this.harpBus.gain.setTargetAtTime(p.harp, t, tau);
+    // Fog: everything a little further away, a little more reverb.
+    this.revIn.gain.setTargetAtTime(1 + 0.8 * fog, t, tau);
   }
 
   // The tension layers follow the mood beat by beat.
@@ -732,14 +766,16 @@ export class Music {
       if (n.at < this.tick) continue;
       if (!leadOn) {
         // Holding its breath: make sure no tied note is left hanging.
-        if (sec.lead !== 'harp') (sec.lead === 'whistle' ? this.whistle : this.fiddle).silence(t);
+        if (sec.lead === 'whistle' || sec.lead === 'fiddle') (sec.lead === 'whistle' ? this.whistle : this.fiddle).silence(t);
         continue;
       }
       const nx = mel[this.mi];
       const tie = !!nx && nx.slur === true && nx.at === n.at + n.len;
       const dur = n.len * td;
       const hum = (this.rnd() - 0.5) * 0.012;
-      if (sec.lead === 'harp') {
+      if (sec.lead === 'bell') {
+        this.ring(t + hum, n.midi, 0.13 * n.vel, this.bellBus, 'bell-mel');
+      } else if (sec.lead === 'harp') {
         this.pluck(t + hum, n.midi, 0.2 * n.vel, this.melBus, Math.max(0.6, dur * 1.4), 'harp-mel');
         if (n.len >= 3 && this.rnd() < 0.25) this.pluck(t + hum + 0.01, n.midi - 12, 0.09 * n.vel, this.melBus, dur, 'harp-oct');
       } else {
@@ -785,7 +821,7 @@ export class Music {
     const idx = this.sec!.arp[inBar % this.sec!.arp.length];
     if (idx < 0) return;
     const strong = inBar % s === 0;
-    const chance = inBar === 0 ? 0.92 : strong ? 0.35 + 0.65 * e : smooth((e - 0.15) / 0.5) * 0.95;
+    const chance = inBar === 0 ? 0.92 : strong ? (p.rock ? 0.95 : 0.35 + 0.65 * e) : smooth((e - 0.15) / 0.5) * 0.95;
     if (this.rnd() > chance) return;
     const vel = (inBar === 0 ? 0.24 : strong ? 0.18 : 0.13) * (0.85 + 0.3 * this.rnd());
     this.pluck(t + (this.rnd() - 0.5) * 0.014, this.arpV[idx], vel, this.harpBus, 1.5, 'harp');
@@ -828,6 +864,15 @@ export class Music {
       const v = 0.13 * smooth((x - 0.42) / 0.4);
       this.drum(t, 'drum', v, 0.85);
       if (x > 0.7) this.drum(t + 0.17, 'drum', v * 0.6, 0.8);
+    }
+    // The trial march: bass drum on one and three, side drum on the
+    // backbeats, a drag into the next bar.
+    if (p.march) {
+      const pat = [1, 0, 0.45, 0, 0.75, 0, 0.45, 0.3];
+      const a = pat[inBar];
+      if (a) this.drum(t, inBar % 4 === 0 ? 'drum' : 'tip', 0.13 * a * (this.rest ? 0.5 : 1), 1);
+      if (inBar === 7 && this.rnd() < 0.5) this.drum(t + this.tickDur() / 2, 'tip', 0.04, 1.05);
+      return;
     }
     // A light bodhran when a calm drive gets going.
     if (p.perc && e > 0.62 && x < 0.4 && !this.rest) {
@@ -905,7 +950,7 @@ export class Music {
     const tpb = barTicks(p.meter), tps = tpb * p.slot;
     const off = lead === 'harp' ? -12 : lead === 'fiddle' ? -7 : 0;
     const lo = p.range[0] + off, hi = p.range[1] + off;
-    const cells = CELLS[p.meter];
+    const cells = p.cells ?? CELLS[p.meter];
     const pick = <T>(a: T[]) => a[Math.floor(r() * a.length)];
     const slow = this.rest || r() < 0.5 - 0.35 * this.energy;
     const unitCell = (cad: boolean): number[] => {
@@ -989,6 +1034,17 @@ export class Music {
         const below = cands.filter((x) => x < fin.midi && fin.midi - x <= 2);
         const nb = (r() < 0.65 ? above[0] ?? below[below.length - 1] : below[below.length - 1] ?? above[0]);
         if (nb !== undefined) pn.midi = nb;
+        // If that leaves a big leap into the cadence, take the cadence to
+        // the octave of the note before it.
+        const pp = out[out.length - 3];
+        if (pp && Math.abs(pn.midi - pp.midi) > 7) {
+          const sh = pn.midi > pp.midi ? -12 : 12;
+          if (Math.min(pn.midi, fin.midi) + sh >= lo && Math.max(pn.midi, fin.midi) + sh <= hi) {
+            pn.midi += sh;
+            fin.midi += sh;
+            prev = fin.midi;
+          }
+        }
       }
       return out;
     };
@@ -1100,7 +1156,7 @@ export class Music {
   // Tin whistle ornaments: cuts to separate repeated notes, the odd roll,
   // slides up into a leap; and legato slurs on stepwise runs.
   private ornament(notes: Note[], p: Piece, lead: Lead) {
-    if (lead === 'harp') return;
+    if (lead === 'harp' || lead === 'bell') return;
     const r = this.rnd, d = p.orn;
     for (let i = 0; i < notes.length; i++) {
       const n = notes[i], pv = notes[i - 1];
@@ -1120,7 +1176,8 @@ export class Music {
   // A short phrase over the bed (which the mixer ducks). Played in the
   // current key, always ending on a major chord (a Picardy third in the
   // minor-key regions). Returns its length in seconds.
-  stinger(kind: StingerKind, t: number): number {
+  // `amt` (0..1) is how well it went, for the trial gate cue.
+  stinger(kind: StingerKind, t: number, amt = 1): number {
     const key = PIECES[this.want].key; // the key the bed is heading for
     // Tonic somewhere in G4..F#5, so the whistle stays sweet, not shrill.
     const T = 67 + ((key - 67 + 120) % 12);
@@ -1174,6 +1231,61 @@ export class Music {
         this.blow(t + 0.85, deg(1), 0.38, 0.8);
         this.blow(t + 1.25, deg(0), 1.6, 0.9);
         return 3.8;
+      case 'gate':
+        // Through a trial gate: a quick rising figure, fuller for a clean
+        // gate (all of them through) than a ragged one.
+        if (amt >= 0.99) {
+          this.blow(t, deg(4), 0.08, 0.7);
+          this.blow(t + 0.08, deg(5), 0.08, 0.75);
+          this.blow(t + 0.16, deg(7), 0.45, 0.85);
+          this.ring(t + 0.16, deg(7, 1), 0.08, out, 'sting-bell');
+          this.pluck(t + 0.16, deg(0, -1), 0.16, out, 1.2, 'sting-harp');
+          return 0.7;
+        }
+        this.blow(t, deg(4), 0.1, 0.55);
+        this.blow(t + 0.1, deg(amt >= 0.5 ? 7 : 5), 0.3, 0.6);
+        return 0.5;
+      case 'sour': {
+        // A bolt or a grip: two notes a semitone apart, sagging flat.
+        const c = this.ctx;
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 1600;
+        const g = c.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.03, t + 0.03);
+        g.gain.setTargetAtTime(0, t + 0.3, 0.08);
+        lp.connect(g).connect(out);
+        for (const m of [deg(4, -1), deg(4, -1) + 1]) {
+          const o = c.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(mtof(m), t);
+          o.frequency.exponentialRampToValueAtTime(mtof(m - 1), t + 0.4);
+          o.connect(lp);
+          o.start(t);
+          o.stop(t + 0.7);
+        }
+        this.pluck(t, bass + 1, 0.18, out, 0.6, 'sting-bass');
+        return 0.6;
+      }
+      case 'sold':
+        // An order filled: coins tumbling in and a bright "ta-da".
+        [0, 2, 4, 7, 9].forEach((d, i) => this.ring(t + i * 0.05, deg(d, 1), 0.07 * (1 - i * 0.1), out, 'sting-bell'));
+        roll(0.25, [0, 4, 7, 9], -1, 0.17, 0.04);
+        this.blow(t + 0.25, deg(4), 0.12, 0.75);
+        this.blow(t + 0.4, deg(7), 0.8, 0.9);
+        this.swell(t + 0.25, [0, 4, 7], key, 1.8);
+        return 2;
+      case 'missed':
+        // The buyer gave up: a gentle sigh down to the tonic, in minor.
+        this.pluck(t, bass, 0.22, out, 2, 'sting-bass');
+        this.pluck(t + 0.08, deg(0, -1), 0.12, out, 2, 'sting-harp');
+        this.pluck(t + 0.16, deg(2, -1) - 1, 0.11, out, 2, 'sting-harp');
+        this.blow(t + 0.05, deg(4), 0.3, 0.6);
+        this.blow(t + 0.38, deg(3), 0.3, 0.55);
+        this.blow(t + 0.71, deg(2) - 1, 0.35, 0.55);
+        this.blow(t + 1.08, deg(0), 0.8, 0.5);
+        return 1.9;
     }
   }
 
