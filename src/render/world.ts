@@ -11,6 +11,7 @@ import { skyDarkness, skySlope } from './sky';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
+import { yardFire } from '../art/course';
 import { settings } from '../ui/settings';
 
 export interface View {
@@ -94,6 +95,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
     decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1) }));
     for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
+    for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2 }); }
     game.night.draw(g, W, H, ox, oy, dark, lights, skySlope(game.day));
     // Above the dark: lamp glow, eyes, fireflies.
     g.save();

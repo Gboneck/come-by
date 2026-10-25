@@ -3,7 +3,7 @@ import { fbm, hash2, mulberry32, vnoise } from '../rng';
 import { makeCanvas } from '../gfx/screen';
 import { stampCrown, stampPine, pineCovers, type CanopyBuf } from '../art/trees';
 import { makeWaterAnim, type WaterAnim } from '../art/water';
-import { FORD_Y0, FORD_Y1, MH, MW, REGIONS, TS, Ter, WORLD_H, WORLD_W, riverX, type RegionDef, type WorldMap } from './map';
+import { COURSE, FORD_Y0, FORD_Y1, MH, MW, REGIONS, TS, Ter, WORLD_H, WORLD_W, riverX, type RegionDef, type WorldMap } from './map';
 
 // Canopy shadows fall down-left, as in the reference.
 export const SHADOW_DX = -5;
@@ -252,6 +252,26 @@ function bakeWorld(map: WorldMap): Baked {
     return lx < 0 || ly < 0 || lx >= hw || ly >= hh ? 0 : hm[ly * hw + lx];
   };
 
+  // Show Ground: mown short (few tufts, see below), the grass worn bare at
+  // the handler's post, the release point and the trial pen's gate.
+  const show = REGIONS.find((r) => r.id === 'show')!;
+  const sx0 = (show.cx - show.rx - 4) * TS, sx1 = (show.cx + show.rx + 4) * TS, sy0 = (show.cy - show.ry - 4) * TS;
+  const worn = [
+    { x: COURSE.post.x, y: COURSE.post.y + 3, rx: 17, ry: 9 },
+    { x: COURSE.release.x, y: COURSE.release.y + 2, rx: 11, ry: 6 },
+    { x: (COURSE.pen.tx + COURSE.pen.w / 2) * TS, y: COURSE.pen.ty * TS - 4, rx: 10, ry: 5 },
+  ];
+  function showGround(x: number, y: number): number {
+    const w = regionWeight(show, x, y, 0.75, 0.95);
+    if (w <= 0) return U32.meadow;
+    for (const p of worn) {
+      const d = Math.hypot((x - p.x) / p.rx, (y - p.y) / p.ry) + (hash2(x, y, 46) - 0.5) * 0.25;
+      if (d < 0.7) return hash2(x, y, 47) < 0.06 ? U32.sage : U32.moss;
+      if (d < 1) return ((x + y) & 1) === 0 ? U32.moss : U32.meadow;
+    }
+    return U32.meadow;
+  }
+
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
@@ -259,7 +279,7 @@ function bakeWorld(map: WorldMap): Baked {
       if (y >= hy0 && y < hy0 + hh && x >= hx0 && x < hx0 + hw) {
         const v = hillAt(x, y);
         if (v === 2 || (v === 1 && ((x + y) & 1) === 0)) c = U32.moss;
-      }
+      } else if (y > sy0 && x > sx0 && x < sx1) c = showGround(x, y);
       if (path[i]) c = hash2(x, y, 44) < 0.035 ? U32.sage : U32.moss;
       else if (at(path, x - 1, y) + at(path, x + 1, y) + at(path, x, y - 1) + at(path, x, y + 1) > 0 && ((x + y) & 1) === 0) c = U32.moss;
       if (water[i]) {
@@ -453,6 +473,7 @@ function bakeWorld(map: WorldMap): Baked {
     if (!isOpenGrass(x, y) || !isOpenGrass(x + 6, y)) continue;
     const reg = map.regionAt(x, y)?.id;
     if (reg === 'rocky' && r1 < 0.4) continue;
+    if (reg === 'show' && r1 < 0.75) continue; // mown
     const high = reg === 'high';
     const valley = reg === 'hills' && hillAt(x, y) > 0;
     const inShadow = shadow[y * W + x];

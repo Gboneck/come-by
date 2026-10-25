@@ -24,6 +24,10 @@ const SPOTS = [
   { name: 'high', x: 560, y: 120, herd: ['pony', 600, 130, 5] },
   // The ranch built up: barn (upgraded), kennel, market, mill, a sturdy pen.
   { name: 'yard', x: 800, y: 860, herd: ['sheep', 900, 850, 6], yard: true },
+  // The Show Ground with a trial under way, and two buyers' yards.
+  { name: 'show', x: 860, y: 1205, herd: ['duck', 2000, 2000, 1], trial: true },
+  { name: 'sale', x: 1215, y: 1140, herd: ['sheep', 1150, 1170, 5] },
+  { name: 'drover', x: 870, y: 615, herd: ['cow', 800, 640, 3] },
 ];
 
 const PORT = Number(process.env.SHOT_PORT || 5189);
@@ -55,6 +59,16 @@ for (const s of SPOTS) {
     if (dusk) { g.day.t = 290; g.day.phase = 'dusk'; }
     if (night) { g.day.startNight(); g.quietT = -1e9; g.banner = null; }
     g.spawnFlock(...s.herd);
+    if (s.trial) {
+      g.animals.length = 0;
+      return import('/src/systems/trials.ts').then((tr) => {
+        g.trials.won = [];
+        const p = g.ranch.course.post;
+        g.dog.x = p.x; g.dog.y = p.y + 6;
+        tr.startRun(g);
+        g.dog.x = p.x - 40; g.dog.y = p.y - 60;
+      });
+    }
     if (s.yard && !g.yardBuilt) {
       g.yardBuilt = true;
       const R = g.ranch, b0 = R.buildings[0];

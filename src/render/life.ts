@@ -3,6 +3,7 @@ import { drawSpr, tint, type Sprite } from '../gfx/sprite';
 import { fxSprites } from '../art/fx';
 import { critterSprites } from '../art/critters';
 import { chimneyTop } from '../art/buildings';
+import { yardFire } from '../art/course';
 import { hash2 } from '../rng';
 import { drift } from './wind';
 import { skyDarkness } from './sky';
@@ -76,6 +77,12 @@ export class Life {
       this.smokeT = 0.28 + Math.random() * 0.12;
       const c = chimneyTop(f);
       if (this.near(v, c.x, c.y, 80)) this.add({ kind: 'smoke', x: c.x + (Math.random() - 0.5), y: c.y, vy: -9 - Math.random() * 2, max: 2.2 + Math.random() * 0.6 });
+      // The drover's camp fire smokes too, thinner.
+      const dv = game.ranch.yards.find((y) => y.site.id === 'drover');
+      if (dv && Math.random() < 0.6) {
+        const f = yardFire(dv.site);
+        if (this.near(v, f.x, f.y, 60)) this.add({ kind: 'smoke', x: f.x, y: f.y - 3, vy: -7, max: 1.6 + Math.random() * 0.5 });
+      }
     }
 
     // Traces of everything that walks.
