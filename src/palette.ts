@@ -17,7 +17,8 @@ function pack(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
   const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   // ImageData is RGBA in memory; on little-endian that is ABGR as a uint32.
-  return (255 << 24) | (b << 16) | (g << 8) | r;
+  // Unsigned, so it compares equal to a pixel read back from a Uint32Array.
+  return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
 }
 
 export const U32 = Object.fromEntries(

@@ -343,6 +343,135 @@ function bakeWorld(map: WorldMap): Baked {
     return { lit: hash2(k1, 0, 72), seam: d2 - d1, crack: hash2(Math.min(k1, k2), Math.max(k1, k2), 73) < 0.3 };
   }
 
+  // Small things on the ground, by kind of ground rather than by place, so
+  // new areas get them too: wheel ruts and grass down the middle of the
+  // tracks, a worn shoulder; tonal speckle, clover, stones, molehill runs
+  // and bare patches on open meadow; boulders, roots and fallen logs along
+  // the forest edges; stones on the banks.
+  function groundDetail() {
+    const meadow = U32.meadow, moss = U32.moss, sage = U32.sage;
+    const open = (x: number, y: number) => x >= 1 && y >= 1 && x < W - 1 && y < H - 1 && gp[y * W + x] === meadow && !path[y * W + x] && !water[y * W + x] && !cm[y * W + x];
+    const pd = insideDist(path, W, H, 6);
+    const notCanopy = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) notCanopy[i] = cm[i] ? 0 : 1;
+    const cd = insideDist(notCanopy, W, H, 10);
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        if (water[i] || rock[i] || cm[i]) continue;
+        if (path[i]) {
+          // Two ruts worn by cart wheels, grass coming back between them.
+          const d = pd[i];
+          if (d === 2 && hash2(x >> 1, y >> 1, 140) < 0.8) gp[i] = sage;
+          else if (d >= 4 && hash2(x, y, 141) < 0.07) gp[i] = meadow;
+          continue;
+        }
+        if (gp[i] !== meadow) continue;
+        // A worn shoulder beside the tracks.
+        if (pd[i] === 0 && (path[i - 1] || path[i + 1] || path[i - W] || path[i + W] || path[i - 2] || path[i + 2]) && hash2(x, y, 142) < 0.3) {
+          gp[i] = moss;
+          continue;
+        }
+        // Tonal speckle: soft patches where the grass is a shade darker.
+        const r = hash2(x, y, 143);
+        if (r > 0.3) continue;
+        const n = fbm(x / 70, y / 64, 701, 2);
+        if (n > 0.56 && r < (n - 0.56) * 0.7) gp[i] = moss;
+      }
+    }
+    for (let y = 2; y < H - 3; y++) {
+      for (let x = 2; x < W - 3; x++) {
+        const i = y * W + x;
+        // Stones in the grass.
+        if (open(x, y) && open(x, y + 1) && hash2(x, y, 144) < 0.0006) {
+          plot(x, y, U32.wool);
+          plot(x, y + 1, sage);
+          if (hash2(x, y, 145) < 0.4 && open(x + 1, y) && open(x + 1, y + 1)) { plot(x + 1, y, U32.wool); plot(x + 1, y + 1, U32.plum); }
+        }
+        // Along the forest edge: boulders, roots and a fallen log now and then.
+        const c = cd[i];
+        if (c >= 1 && c <= 4 && hash2(x, y, 146) < 0.0035 && isGround(x + 3, y + 2) && isGround(x, y + 2)) {
+          ['.ww.', 'swww', '.pp.'].forEach((r, yy) => [...r].forEach((ch, xx) => {
+            if (ch !== '.') plot(x + xx, y + yy, ch === 'w' ? U32.wool : ch === 's' ? sage : U32.plum);
+          }));
+          plot(x - 1, y + 2, sage);
+        } else if (c === 1 && cm[i - W] && hash2(x, y, 147) < 0.035 && isGround(x, y + 2)) {
+          plot(x, y, U32.plum);
+          const s2 = hash2(x, y, 148) < 0.5 ? -1 : 1;
+          plot(x + s2, y + 1, U32.plum);
+          if (hash2(x, y, 149) < 0.5) plot(x + s2 * 2, y + 2, U32.plum);
+        }
+      }
+    }
+    // Fallen logs, clover, molehill runs and bare patches, on a coarse grid.
+    for (let gy = 0; gy * 23 < H; gy++) {
+      for (let gx = 0; gx * 29 < W; gx++) {
+        const x = gx * 29 + Math.floor(hash2(gx, gy, 150) * 20), y = gy * 23 + Math.floor(hash2(gx, gy, 151) * 16);
+        if (x < 4 || y < 4 || x >= W - 16 || y >= H - 8) continue;
+        const k = hash2(gx, gy, 152);
+        const reg = map.regionAt(x, y)?.id;
+        const c = cd[y * W + x];
+        if (c >= 2 && c <= 7 && k < 0.5) {
+          // A log, mossed on top, its cut end pale.
+          let ok = true;
+          for (let yy = -1; yy < 4 && ok; yy++) for (let xx = -1; xx < 13 && ok; xx++) if (!isGround(x + xx, y + yy) || path[(y + yy) * W + x + xx]) ok = false;
+          if (!ok) continue;
+          for (let xx = 0; xx < 12; xx++) {
+            const end = xx >= 10;
+            plot(x + xx, y + 3, sage);
+            if (end && xx === 10) plot(x + xx, y, U32.wool);
+            plot(x + xx, y + 1, end ? (xx === 10 ? U32.wool : U32.butter) : hash2(x + xx, y, 153) < 0.25 ? U32.teal : U32.plum);
+            plot(x + xx, y + 2, end ? U32.wool : U32.plum);
+            if (!end && xx > 0) plot(x + xx, y, hash2(x + xx, y, 154) < 0.6 ? moss : U32.plum);
+          }
+          plot(x + 11, y + 1, U32.wool);
+          continue;
+        }
+        if (!open(x, y)) continue;
+        if (k < 0.2) {
+          // Clover: little trefoils, a white head or two.
+          for (let j = 0; j < 6; j++) {
+            const cx = x + Math.round((hash2(x + j, y, 155) - 0.5) * 9), cy = y + Math.round((hash2(x, y + j, 156) - 0.5) * 6);
+            if (!open(cx, cy) || !open(cx + 1, cy + 1)) continue;
+            plot(cx, cy, moss); plot(cx + 1, cy, moss); plot(cx, cy + 1, moss);
+            if (hash2(cx, cy, 157) < 0.25) plot(cx + 1, cy - 1, U32.wool);
+          }
+        } else if (k < 0.27 && reg !== 'ranch' && reg !== 'show') {
+          // A molehill run across the field.
+          const a = hash2(gx, gy, 158) * Math.PI * 2;
+          let mx = x, my = y;
+          const n = 3 + Math.floor(hash2(gx, gy, 159) * 3);
+          for (let j = 0; j < n; j++) {
+            if (open(mx, my) && open(mx + 3, my + 2)) {
+              ['.oo.', 'ooos', '.ss.'].forEach((r, yy) => [...r].forEach((ch, xx) => {
+                if (ch !== '.') plot(mx + xx, my + yy, ch === 'o' ? moss : sage);
+              }));
+            }
+            mx = Math.round(mx + Math.cos(a + (hash2(mx, my, 160) - 0.5)) * 9);
+            my = Math.round(my + Math.sin(a + (hash2(mx, my, 160) - 0.5)) * 6);
+          }
+        } else if (k < 0.32) {
+          // A bare patch where the grass has worn away.
+          const r = 3 + hash2(gx, gy, 161) * 4;
+          for (let yy = -Math.ceil(r * 0.6); yy <= r * 0.6; yy++)
+            for (let xx = -Math.ceil(r); xx <= r; xx++) {
+              const d = Math.hypot(xx / r, yy / (r * 0.6)) + (hash2(x + xx, y + yy, 162) - 0.5) * 0.35;
+              if (d > 1 || !open(x + xx, y + yy)) continue;
+              plot(x + xx, y + yy, d < 0.6 ? (hash2(x + xx, y + yy, 163) < 0.12 ? sage : moss) : ((x + xx + y + yy) & 1) === 0 ? moss : meadow);
+            }
+        }
+      }
+    }
+    // Stones on the banks.
+    for (let y = 2; y < H - 2; y++)
+      for (let x = 2; x < W - 2; x++) {
+        const i = y * W + x;
+        if (water[i] || rock[i] || cm[i] || path[i]) continue;
+        if (!(water[i - 1] || water[i + 1] || water[i + W] || water[i - W] || water[i + 2 * W])) continue;
+        if (hash2(x, y, 164) < 0.04) { plot(x, y, U32.wool); if (!water[i + W]) plot(x, y + 1, U32.plum); }
+      }
+  }
+
   // Canopy and rock shadows (down-left), sage on grass, plum on water.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -405,6 +534,8 @@ function bakeWorld(map: WorldMap): Baked {
       }
     }
   }
+
+  groundDetail();
 
   // River Ford: stepping stones along the path where it crosses.
   const stones: { x: number; y: number }[] = [];
