@@ -175,6 +175,7 @@ const STATES = {
       g.day.day = 3; g.day.t = 30; g.trials.lastPrizeDay = 0; // past the dawn
       const p = g.ranch.course.post;
       g.dog.x = p.x; g.dog.y = p.y + 6; g.cam.x = p.x; g.cam.y = p.y;
+      for (let i = 0; i < 120; i++) g.update(1 / 60);
       return 60;
     },
   },

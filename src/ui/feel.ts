@@ -27,8 +27,10 @@ function coverPattern(g: CanvasRenderingContext2D, level: number): CanvasPattern
   return patterns[level];
 }
 
-// Plum dither over the whole screen: 0 = clear, 16 = solid.
-export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, level: number) {
+// Plum dither over the whole screen: 0 = clear, 16 = solid. Pass the view
+// offset to anchor it to the world like the night's dither, so a dimmed
+// night stays at the night's own level instead of filling in solid.
+export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, level: number, ox = 0, oy = 0) {
   const l = Math.max(0, Math.min(16, Math.round(level)));
   if (l <= 0) return;
   if (l >= 16) {
@@ -38,8 +40,17 @@ export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, lev
   }
   const p = coverPattern(g, l);
   if (!p) return;
+  const sx = ox & 3, sy = oy & 3;
+  g.save();
+  g.translate(-sx, -sy);
   g.fillStyle = p;
-  g.fillRect(0, 0, W, H);
+  g.fillRect(0, 0, W + sx, H + sy);
+  g.restore();
+}
+
+// The dim behind a menu or card.
+export function dimView(g: CanvasRenderingContext2D, view: { ox: number; oy: number; W: number; H: number }, level = 8) {
+  drawCover(g, view.W, view.H, level, view.ox, view.oy);
 }
 
 export class Feel {

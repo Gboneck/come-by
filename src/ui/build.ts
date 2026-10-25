@@ -12,6 +12,7 @@ import { SPECIES } from '../entities/species';
 import { HELPER_COSTS } from '../entities/helper';
 import { buildingDrawables } from '../render/world';
 import { safeArea } from './safe';
+import { nextGoal } from '../systems/progression';
 
 export type Tab = 'build' | 'dog' | 'market';
 
@@ -42,6 +43,15 @@ interface Ghost {
   pen?: Pen;
 }
 
+// The catalog item a "BUILD A ..." goal asks for, or -1.
+function goalBuilding(game: Game): number {
+  const ng = nextGoal(game);
+  const m = ng?.goal.label.match(/^BUILD (?:A|THE) (\w+)$/);
+  if (!m) return -1;
+  const kind = m[1].toLowerCase();
+  return CATALOG.findIndex((d) => d.kind === kind || d.id === kind);
+}
+
 export class BuildMode {
   tab: Tab = 'build';
   item = 0;
@@ -63,6 +73,9 @@ export class BuildMode {
       this.cy = r.cy + 2;
     }
     this.row = 0;
+    // When the goal is to build something, have it ready to place.
+    const want = goalBuilding(game);
+    if (want >= 0) this.item = want;
     game.input.stickEnabled = false;
   }
 
@@ -383,10 +396,13 @@ export class BuildMode {
     const L = 2 + S.left, R = W - 2 - S.right;
     const cw = Math.min(28, Math.floor((R - L) / n));
     const bx = Math.round((L + R) / 2 - (cw * n) / 2), by = H - 26 - S.bottom;
+    const goalItem = goalBuilding(game);
     panel(g, bx - 2, by - 2, cw * n + 4, 28);
     CATALOG.forEach((d, i) => {
       const x = bx + i * cw;
       const sel = i === this.item;
+      // The building the current goal asks for blinks in the bar.
+      if (i === goalItem && !sel && Math.floor(game.t * 3) % 2 === 0) panel(g, x, by, cw - 1, 24, C.plum, C.butter);
       const locked = d.tier > game.tier;
       if (sel) panel(g, x, by, cw - 1, 24, C.teal, C.butter);
       rect(g, x + 2, by + 2, cw - 5, 12, C.meadow);

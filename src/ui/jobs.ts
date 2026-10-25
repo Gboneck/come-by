@@ -4,12 +4,11 @@ import { text, textWidth, wrap } from '../gfx/font';
 import type { Game } from '../game';
 import { edgeArrow, type Margins } from './hud';
 import { safeArea } from './safe';
-import { touchLayout } from './touch';
-import { drawCover } from './feel';
+import { dimView } from './feel';
 import { buzz } from './settings';
 import { SPECIES } from '../entities/species';
 import { tToClock, yardOf, type Order } from '../systems/orders';
-import { CLASSES, PARTS, classLabel, currentClass, isTrialDay, nextTrialDay, prizeToday, type TrialResult } from '../systems/trials';
+import { CLASSES, PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, prizeToday, type TrialResult } from '../systems/trials';
 import { LEGACY, goalDone } from '../systems/progression';
 
 // Orders and trials on screen: a card in the HUD's left column (under the
@@ -70,11 +69,9 @@ export function jobCard(game: Game, g: CanvasRenderingContext2D, x: number, y: n
   return h + 2;
 }
 
-function arrows(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
-  // Clear of the HUD at the top, the safe areas and the thumb controls.
-  const S = safeArea(game.screen);
-  const TL = game.input.touchMode ? touchLayout(game, W, H) : null;
-  const M: Margins = { top: S.top + 14, bottom: TL ? H - TL.top + 2 : S.bottom + 8, left: S.left, right: S.right };
+// Drawn by the HUD with its own arrows, under its panels and inside the
+// same margins (clear of the hint line and the thumbs).
+export function jobArrows(game: Game, g: CanvasRenderingContext2D, M: Margins) {
   const r = game.trials.run;
   const c = game.ranch.course;
   if (r) {
@@ -98,7 +95,7 @@ function arrows(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
       const gp = yardOf(game, o.yard).pen.gatePoint(10);
       edgeArrow(g, game, gp.x, gp.y, C.butter, YARD_SHORT[o.yard], M);
     }
-  } else if (inShow && currentClass(game) && game.day.phase !== 'night') {
+  } else if (inShow && currentClass(game) && game.day.phase !== 'night' && !atPost(game)) {
     edgeArrow(g, game, c.post.x, c.post.y + 4, C.butter, 'CROOK', M);
   } else if (prizeToday(game) && currentClass(game) && game.day.phase !== 'night') {
     edgeArrow(g, game, c.post.x, c.post.y, C.butter, 'TRIAL', M);
@@ -106,9 +103,7 @@ function arrows(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
 }
 
 export function drawJobs(game: Game, g: CanvasRenderingContext2D, W: number, H: number): boolean {
-  let tapped = false;
-  if (game.trials.result) tapped = drawResult(game, g, W, H, game.trials.result);
-  else arrows(game, g, W, H);
+  const tapped = game.trials.result ? drawResult(game, g, W, H, game.trials.result) : false;
   // Coins in flight and confetti go over everything, the judge's card too.
   game.feel.drawTop(g);
   return tapped;
@@ -176,7 +171,7 @@ function drawResult(game: Game, g: CanvasRenderingContext2D, W: number, H: numbe
   const S = safeArea(game.screen);
   const drop = Math.round(Math.max(0, 1 - t / 0.25) * -16);
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2)) + drop;
-  drawCover(g, W, H, Math.min(8, t * 40));
+  dimView(g, game.view(), Math.min(8, t * 40));
   panel(g, x0, y0, pw, ph);
   if (!flown) {
     // The prize money leaves the card at once and lands as the placing

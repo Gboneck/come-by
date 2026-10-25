@@ -11,7 +11,7 @@ import { currentClass, prizeToday } from '../systems/trials';
 import { safeArea } from './safe';
 import { SKY_WORD, skyIcon } from './icons';
 import type { Sky } from '../systems/weather';
-import { drawCover } from './feel';
+import { dimView } from './feel';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -147,7 +147,7 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   const top = 16, foot = 16;
   const ph = wide ? Math.max(top + linesH(A), top + 2 + mapH + 6 + linesH(B)) + foot : top + linesH(A) + 4 + linesH(B) + 4 + mapH + 4 + foot;
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
-  drawCover(g, W, H, 8);
+  dimView(g, game.view());
   panel(g, x0, y0, pw, ph);
   text(g, 'RANCH LEDGER', x0 + pw / 2, y0 + 4, C.butter, { align: 'center' });
   rect(g, x0 + 5, y0 + 11, pw - 10, 1, C.sage);

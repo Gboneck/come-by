@@ -7,7 +7,7 @@ import type { Game } from '../game';
 import { saveInfo } from '../systems/save';
 import { tierOf } from '../systems/progression';
 import { canVibrate, saveSettings, settings } from './settings';
-import { drawCover } from './feel';
+import { dimView } from './feel';
 import { safeArea } from './safe';
 
 let dogSpr: ReturnType<typeof makeDogSprites> | null = null;
@@ -186,7 +186,7 @@ export function drawPause(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const rh = touch ? 15 : 12, gap = touch ? 4 : 3;
   const pw = Math.min(W - 16, 150), ph = 36 + rows.length * (rh + gap);
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
-  drawCover(g, W, H, 8);
+  dimView(g, game.view());
   panel(g, x0, y0, pw, ph);
   text(g, 'PAUSED', W / 2, y0 + 6, C.butter, { align: 'center' });
   text(g, `DAY ${game.day.day}  ${tierOf(game.tier).name}`, W / 2, y0 + 14, C.sage, { align: 'center' });

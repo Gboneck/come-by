@@ -4,7 +4,7 @@ import { text, textWidth } from '../gfx/font';
 import type { DayStats, Game } from '../game';
 import { SPECIES, SPECIES_ORDER } from '../entities/species';
 import { nextGoal } from '../systems/progression';
-import { drawCover } from './feel';
+import { dimView } from './feel';
 import { SKY_WORD, skyIcon } from './icons';
 
 export interface Summary {
@@ -56,7 +56,7 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   // The card drops in as the fade clears.
   const drop = Math.round(Math.max(0, 1 - age / 0.25) * -16);
   const py0 = Math.round(H / 2 - ph / 2) + drop;
-  drawCover(g, W, H, Math.min(8, age * 40));
+  dimView(g, game.view(), Math.min(8, age * 40));
   panel(g, px0, py0, pw, ph);
   text(g, `DAY ${s.day} IS DONE`, W / 2, py0 + 6, C.butter, { align: 'center', scale: 1 });
   rect(g, px0 + 6, py0 + 14, pw - 12, 1, C.sage);

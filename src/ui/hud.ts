@@ -8,7 +8,7 @@ import { wrap } from '../gfx/font';
 import { touchLayout } from './touch';
 import { safeArea } from './safe';
 import { coachHint, drawCoach } from './coach';
-import { jobCard } from './jobs';
+import { jobArrows, jobCard } from './jobs';
 import { skyIcon } from './icons';
 import { CALM_MAX } from '../systems/trials';
 import { clamp } from '../util';
@@ -53,6 +53,20 @@ export function edgeArrow(g: CanvasRenderingContext2D, game: Game, wx: number, w
   }
 }
 
+// A hint stays up long enough to be read before the next one replaces it
+// (a fresh tip, which is about what just happened, still cuts in at once).
+let held: string | null = null;
+let heldAt = 0;
+function steadyHint(game: Game, want: string | null): string | null {
+  if (want === held) return held;
+  const read = held ? Math.min(3.5, 1.2 + held.length * 0.045) : 0;
+  const urgent = !!want && (want === game.tip?.text || want.startsWith('RESTING') || !!held?.startsWith('RESTING'));
+  if (held && game.t - heldAt < read && !urgent) return held;
+  held = want;
+  heldAt = game.t;
+  return held;
+}
+
 // A HUD button. Touch gets a generous invisible hit area round it.
 function button(game: Game, g: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, h: number, rim: string, pulse = false): boolean {
   const hot = game.ui.isActive(id);
@@ -70,10 +84,31 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   const bh = touch ? 13 : 11; // button height
   const ty = (touch ? 4 : 3); // text inset in a button
 
-  drawCoach(game, g);
+  // ---- Hint line layout (drawn later): it bounds the view from below ----
+  const hint = steadyHint(game, coachHint(game) ?? game.hint());
+  let bottomY = TL ? TL.top - 2 : H - 4 - S.bottom;
+  let hcx = (L + R) / 2, hmax = Math.min(W - 16 - S.left - S.right, 200);
+  if (TL && W > H) {
+    // Landscape: the thumbs sit in the corners, so the hint can use the
+    // bottom edge between them instead of the middle of the field.
+    const x0 = TL.stickHome.x + 28, x1 = TL.lie.x - TL.lie.r - 6;
+    if (x1 - x0 >= 120) {
+      hcx = (x0 + x1) / 2;
+      hmax = Math.min(200, x1 - x0 - 10);
+      bottomY = H - 4 - S.bottom;
+    }
+  }
+  const hl = hint ? wrap(hint, hmax) : [];
+  const hh = hl.length * 7 + 5;
+  const hy = Math.round(bottomY - hh);
+  // What is left of the field to point at: below this, a marker would hide
+  // under the hint or the thumbs, so it gets an edge arrow instead.
+  const viewBottom = Math.min(hint ? hy - 2 : H, TL ? TL.top : H - S.bottom - 4);
+
+  drawCoach(game, g, T + 12, viewBottom);
 
   // ---- Edge arrows: groups out in the pastures, and home when driving ----
-  const M: Margins = { top: T + 12, bottom: TL ? H - TL.top + 2 : S.bottom + 8, left: S.left, right: S.right };
+  const M: Margins = { top: T + 12, bottom: H - viewBottom + 2, left: S.left, right: S.right };
   const gr = game.nearestGroup();
   const driving = gr && Math.hypot(gr.x - game.dog.x, gr.y - game.dog.y) < 90;
   if (driving) {
@@ -91,6 +126,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
       .slice(0, 2);
     for (const grp of groups) edgeArrow(g, game, grp.x, grp.y, C.butter, `${grp.members.length}`, M);
   }
+  jobArrows(game, g, M);
 
   // ---- Clock (top-left) ----
   const d = game.day;
@@ -207,27 +243,11 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   }
 
   // ---- Hint line (tutorial and region tips) ----
-  const hint = coachHint(game) ?? game.hint();
-  let bottomY = TL ? TL.top - 2 : H - 4 - S.bottom;
-  let hcx = (L + R) / 2, hmax = Math.min(W - 16 - S.left - S.right, 200);
-  if (TL && W > H) {
-    // Landscape: the thumbs sit in the corners, so the hint can use the
-    // bottom edge between them instead of the middle of the field.
-    const x0 = TL.stickHome.x + 28, x1 = TL.lie.x - TL.lie.r - 6;
-    if (x1 - x0 >= 120) {
-      hcx = (x0 + x1) / 2;
-      hmax = Math.min(200, x1 - x0 - 10);
-      bottomY = H - 4 - S.bottom;
-    }
-  }
   if (hint) {
-    const lines = wrap(hint, hmax);
-    const hw = Math.max(...lines.map((l) => textWidth(l))) + 10;
-    const hh = lines.length * 7 + 5;
-    const hy = Math.round(bottomY - hh);
+    const hw = Math.max(...hl.map((l) => textWidth(l))) + 10;
     const hx = Math.round(hcx - hw / 2);
     panel(g, hx, hy, hw, hh);
-    lines.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
+    hl.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
   }
 
   // ---- Place name and banners ----

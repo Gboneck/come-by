@@ -7,6 +7,7 @@ import { arrow } from './hud';
 import { buzz } from './settings';
 import { orderFor, penGateAt, yardOf } from '../systems/orders';
 import { PARTS, atPost, currentClass } from '../systems/trials';
+import { CATALOG } from '../ranch/catalog';
 
 // In-the-moment coaching: markers showing where to stand or where the flock
 // goes next, key caps and pulsing buttons for the move a hint asks for, and
@@ -35,7 +36,8 @@ function flockTarget(game: Game, gr: Group): { x: number; y: number } | null {
   if (a.trial) return trialTarget(game);
   const o = orderFor(game, a.sp.id);
   if (o) return yardOf(game, o.yard).pen.gatePoint(10);
-  const pen = game.ranch.pens.find((p) => p.hasRoomFor(a));
+  // No pen with room: still read the drive against the ranch's first pen.
+  const pen = game.ranch.pens.find((p) => p.hasRoomFor(a)) ?? game.ranch.pens[0];
   return pen ? pen.gatePoint(10) : null;
 }
 
@@ -125,9 +127,14 @@ export function updateCoach(game: Game, dt: number) {
   frontT = near && dr.behind < -0.3 && game.tut >= 2 && !trial ? frontT + dt : 0;
   if (frontT > 2.5 && !seen.has('c-front') && game.tier <= 2)
     tip('c-front', 'YOU ARE IN FRONT, SO THEY TURN BACK. GO ROUND TO THE FAR SIDE.');
-  stressT = dr.gr.stress > 0.55 ? stressT + dt : 0;
+  stressT = dr.gr.stress > 0.55 && near ? stressT + dt : 0;
   if (stressT > 0.6 && !seen.has('c-stress') && game.tier <= 3)
     tip('c-stress', touch ? 'EASY! THEY ARE RATTLED. STOP, OR HOLD DOWN TILL THEY SETTLE.' : 'EASY! THEY ARE RATTLED. STOP, OR HOLD Q TILL THEY SETTLE.');
+  // Driving a kind no pen can take: pens hold one kind at a time.
+  const a = dr.gr.members[0];
+  const drivingHome = near && !trial && !orderFor(game, a.sp.id) && game.tut >= 7;
+  if (drivingHome && !game.ranch.pens.some((p) => p.hasRoomFor(a)) && !seen.has(`c-nopen-${a.sp.id}`))
+    tip(`c-nopen-${a.sp.id}`, `NO PEN HAS ROOM FOR ${a.sp.plural.toUpperCase()}. A PEN HOLDS ONE KIND: BUILD ANOTHER AT THE RANCH (${CATALOG.find((d) => d.id === 'pen')!.cost}$).`, 7);
   // Two bits of the same flock close to the dog: it split.
   if (!seen.has('c-split') && game.tut >= 3) {
     const same = game.groups.filter((g) => g.species === dr.gr.species && Math.hypot(g.x - game.dog.x, g.y - game.dog.y) < 120);
@@ -196,14 +203,17 @@ function pointer(g: CanvasRenderingContext2D, W: number, x: number, y: number, a
 }
 
 // World-anchored markers, drawn with the HUD.
-export function drawCoach(game: Game, g: CanvasRenderingContext2D) {
+// Only between `top` and `bottom` (the field the HUD leaves clear); outside
+// that the edge arrows point the way.
+export function drawCoach(game: Game, g: CanvasRenderingContext2D, top: number, bottom: number) {
   if (game.mode !== 'play' || game.trials.result) return;
-  const { ox, oy, W, H } = game.view();
+  const { ox, oy, W } = game.view();
   const t = game.t;
-  const on = (x: number, y: number) => x > -20 && x < W + 20 && y > -20 && y < H + 20;
+  const on = (x: number, y: number) => x > 4 && x < W - 4 && y > top + 18 && y < bottom - 2;
   if (game.tut === 1) {
     const dr = driveInfo(game);
-    if (dr && dr.behind <= 0.7) marker(g, W, Math.round(dr.spot.x - ox), Math.round(dr.spot.y - oy), 'HERE', t);
+    const x = dr ? Math.round(dr.spot.x - ox) : 0, y = dr ? Math.round(dr.spot.y - oy) : 0;
+    if (dr && dr.behind <= 0.7 && on(x, y)) marker(g, W, x, y, 'HERE', t);
   }
   if (game.tut === 3) {
     const dr = driveInfo(game);

@@ -35,7 +35,9 @@ original and drawn in code. No external art files, ever.
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`), `scripts/uitour.mjs` screenshots every screen at
   phone, notched-phone, landscape and desktop sizes onto contact sheets
-  (`shots/ui/`), `scripts/audiotest.mjs` renders the music, stingers and
+  (`shots/ui/`), `scripts/playthrough.mjs` plays a new save with the bot
+  and logs every hint, tip, banner and card against the clock (for pacing
+  and pile-ups; shots in `shots/play/`), `scripts/audiotest.mjs` renders the music, stingers and
   soundscape offline and prints levels, peaks, tuning, theory checks and
   CPU (we cannot listen, so we measure). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
   `regions.mjs` their own port when other checkouts are running servers too.
