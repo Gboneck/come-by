@@ -355,6 +355,10 @@ function bakeWorld(map: WorldMap): Baked {
     const notCanopy = new Uint8Array(W * H);
     for (let i = 0; i < W * H; i++) notCanopy[i] = cm[i] ? 0 : 1;
     const cd = insideDist(notCanopy, W, H, 10);
+    // The speckle's noise, on a coarse 4px grid (it is soft anyway).
+    const BW = (W >> 2) + 1;
+    const tone = new Float32Array(BW * ((H >> 2) + 1));
+    for (let by = 0; by * 4 < H; by++) for (let bx = 0; bx < BW; bx++) tone[by * BW + bx] = fbm((bx * 4) / 70, (by * 4) / 64, 701, 2);
     for (let y = 1; y < H - 1; y++) {
       for (let x = 1; x < W - 1; x++) {
         const i = y * W + x;
@@ -375,7 +379,7 @@ function bakeWorld(map: WorldMap): Baked {
         // Tonal speckle: soft patches where the grass is a shade darker.
         const r = hash2(x, y, 143);
         if (r > 0.3) continue;
-        const n = fbm(x / 70, y / 64, 701, 2);
+        const n = tone[(y >> 2) * BW + (x >> 2)];
         if (n > 0.56 && r < (n - 0.56) * 0.7) gp[i] = moss;
       }
     }

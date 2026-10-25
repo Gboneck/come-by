@@ -181,6 +181,12 @@ Round two:
 - [x] Resting: the dog curls up asleep with drifting z's; clouds, smoke,
       grass and water run as a time-lapse and moving shadows swing with
       the sun; it all stops the moment the dog gets up
+- [x] More detail everywhere (playtest): wheel ruts and grass down the
+      tracks, worn shoulders, tonal speckle, clover, stones, molehill runs
+      and bare patches on open ground; boulders, roots and fallen logs at
+      the forest edge; stones on the banks and ripple rings by the reeds;
+      a sunlit rim on the dog and every coat; moss on the eaves, damp
+      footings, board knots and mud, gate hinges and latches, hay wisps
 - [x] Screenshot + console check, commit
 
 ## Decisions
@@ -561,3 +567,15 @@ Round two:
 - The Show Ground is not striped: mower stripes read as rain. It is mown
   short (few tufts) with worn patches baked at the post, the release and
   the pen gate. Onlookers and the tent are decoration: nothing collides.
+- Ground detail is placed by kind of ground (open meadow, path, forest
+  edge, bank), never by coordinates, so new areas get it too. Wheel ruts
+  are the path pixels exactly 2px in from its edge (a distance field), so
+  they follow any track. Molehills keep off the ranch and the Show Ground.
+- Palette colours (`U32` in `src/palette.ts`) are now packed unsigned. They
+  were negative int32s, so comparing them with pixels read back from a
+  Uint32Array never matched: the wet ground, cloud shadows, soil types and
+  a few bake checks had silently done nothing.
+- Rim light is a pass over the sprite grids (`rimLight` in
+  `src/art/animals.ts`): coat pixels on the top edge, on the sunny right
+  two thirds and above the legs, become buttercup (sparse, white coats),
+  teal (plum coats), moss (sage coats) or sage (the dog's teal).
