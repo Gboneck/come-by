@@ -409,6 +409,38 @@ novice trial with a calm handler scores 99-100 with or without the change.
       150ms each way; tune.mjs before/after; the existing loop tests
 - [ ] BRACE class at the Show Ground for two dogs (optional, not started)
 
+## M22 Co-op, round three: pings, brace, travels, phones
+- [x] Pings: F (or the PING button by the thumb buttons, only with friends
+      here): a tap says OVER HERE with a flag where your dog stands; hold
+      it and pick HOLD, COME BY or AWAY (a direction, or slide the thumb),
+      said over your dog. Every screen sees it and hears its whistle
+      (`ping-here`, `ping-hold`, `ping-come`, `ping-away`; the Sound
+      session makes them); off screen, an arrow with the name
+- [x] BRACE class at the Show Ground: a friend's dog at the post with
+      yours makes the run a brace, ten sheep for two dogs, scored as one;
+      either dog leaving the field retires it; prizes on trial days
+- [x] Guests keep what they find: hidden places (with the usual reward,
+      paid into their own ranch), keepsakes, the map their dog walks, a
+      stamp for each ranch visited and brace ribbons; folded into their
+      own save the next time they load or start a ranch; RANCHES VISITED
+      in the Ledger
+- [x] Seasons reach guests (season, progress, bloom, leaves, snow); two
+      hooks for the rest of round three: `src/net/shared.ts` (JSON ranch
+      state) and `animalExtra` / `applyAnimalExtra` in snapshot.ts (a byte
+      per animal, e.g. a lamb)
+- [x] Phones: quiet lines pinged every 3s, a line silent for 9s (or 3s
+      after a change of network) dialled again; a screen going off tells
+      the others (a guest's dog naps, a host's guests wait on a card);
+      a dropped host's room waits 4 minutes, a guest's slot 5; guests keep
+      trying for 2 minutes on screen
+- [x] First-time hints for host and guest (what a friend's dog does, how
+      to ping, whose pay it is, that finds are theirs); a guest's Show
+      Ground tip
+- [x] cooptest: pings both ways (API and keys), seasons and shared state,
+      the brace and its ribbon, a place and a keepsake for the guest (and
+      in their own save afterwards), screens off on both sides, a dead line
+      after a network change, the drive with lag, jitter and 5% loss
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1051,3 +1083,22 @@ novice trial with a calm handler scores 99-100 with or without the change.
   same player after its storage read, not before, and says nothing about a
   drop that was already mended. A host who is back before the relay notices
   never shows guests the waiting card; guests just get a fresh world.
+- Pings are whistles, not a chat: four words a handler would use. COME BY
+  is clockwise round the flock and AWAY anticlockwise, as on a trial field.
+  A tap is OVER HERE because that is the one you need in a hurry.
+- The brace is not a rung on the class ladder: it runs whenever a friend's
+  dog stands at the post with the host's (`braceReady`), so it never gets
+  in the way of single player. Ten sheep, 240s, prizes 70/40/20.
+- A guest's finds go to `comeby-travels-v1`, not straight into their save:
+  their own game is not running while they visit (and they may not have a
+  ranch yet). `mergeTravels` folds them in on the next load or new game;
+  the found-place rewards are paid once and zeroed.
+- On a friend's ranch the Ledger shows what both of you know: the host's
+  places, fog and keepsakes with the guest's own laid over them.
+- A dead socket is noticed by silence, not by a close (phones often send
+  none): the relay answers pings without waking the room, so asking every
+  3s costs nothing. Hidden pages never give up a line (their timers lie).
+- `&loss=0.05` models packet loss as TCP does: the lost message and all
+  behind it arrive 200-500ms late, never out of order.
+- Relay change waiting to deploy: grace times (host 4 min, guest slot 5
+  min, were 30s / 90s). The live relay still has the old ones.

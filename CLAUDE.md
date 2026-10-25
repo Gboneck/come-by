@@ -22,8 +22,8 @@ original and drawn in code. No external art files, ever.
   (`&season=spring|summer|autumn|winter` a season);
   `?play` skips the title; `?join=CODE` opens JOIN A FRIEND with the
   code (a co-op invite link), `?relay=URL` points co-op at another relay,
-  `&lag=150` (`&jitter=40`) holds every co-op message that long each way
-  to play as if on a slow line; `?sprites=N` shows the
+  `&lag=150` (`&jitter=40`, `&loss=0.05`) holds every co-op message that
+  long each way to play as if on a slow, lossy line; `?sprites=N` shows the
   sprite sheet from row N; `?safe=top,right,bottom,left` fakes safe-area
   insets (CSS px) to check notched phones.
 - Scripts (all Playwright, all start their own Vite server):
@@ -104,6 +104,7 @@ stays unique.
 | Invite a friend | pause menu, INVITE A FRIEND (code + link) | same, SHARE LINK      |
 | Join a friend   | title, JOIN A FRIEND, type the code (or open the link) | same     |
 | Leave a friend's ranch | pause menu, LEAVE ...'S RANCH | same                     |
+| Ping (co-op)    | F: tap = OVER HERE; hold + a direction = HOLD (up), COME BY (right), AWAY (left) | PING button: tap, or hold and slide |
 
 ## Design laws
 
@@ -157,7 +158,9 @@ stays unique.
   the model for helper dogs.
 - `src/net/` co-op: `protocol.ts` (wire format), `link.ts` (the socket,
   relay URL, lag switch), `host.ts` (hosting: guests' dogs, snapshots),
-  `guest.ts` (playing on a friend's ranch), `snapshot.ts` (encode/decode);
+  `guest.ts` (playing on a friend's ranch), `snapshot.ts` (encode/decode),
+  `ping.ts` (pings), `travels.ts` (a guest's own finds), `shared.ts`
+  (extra ranch state for guests);
   `src/ui/coop.ts` the invite and join screens, name tags, guests' cards.
 - `server/` the co-op relay: a Cloudflare Worker with one Durable Object
   per room code (own `package.json` and `wrangler.toml`).
@@ -177,9 +180,13 @@ stays unique.
   is at the summary, building, or at the judge's card, guests wait on a
   read-only card. Menus (pause, Ledger, looks, invite) do not stop the
   world while friends are there; resting needs every dog lying down at home.
-- New shared-world features: put their state in the snapshot or the meta
-  message (`src/net/host.ts`), and keep anything that only the host's dog
+- New shared-world features: JSON ranch state goes in `src/net/shared.ts`
+  (one line each), a byte of per-animal state in `animalExtra` /
+  `applyAnimalExtra` (snapshot.ts); keep anything that only the host's dog
   triggers working for guest dogs too (`game.coop` lists the other dogs).
+- What a guest finds (places, keepsakes, their map, stamps, brace ribbons)
+  is theirs: `src/net/travels.ts`, folded into their own save on its next
+  load. Pings: `src/net/ping.ts`. The BRACE class: `braceReady` in trials.ts.
 - **Run it locally:** `cd server && npm install && npm run dev` (relay on
   :8787), then `npm run dev`; under `npm run dev` the game finds the relay
   on the page's own host at :8787. Same Wi-Fi: `npm run dev:lan` in
