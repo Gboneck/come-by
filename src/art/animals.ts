@@ -214,6 +214,8 @@ export type Coat = 0 | 1 | 2;
 function recoat(id: SpeciesId, coat: Coat, rows: string[]): string[] {
   if (coat === 0) return rows;
   switch (id) {
+    case 'sheep': // the black sheep (found, never spawned): dark fleece, pale face and socks
+      return rows.map((r) => r.replace(/[wp]/g, (m) => (m === 'w' ? 'p' : 'w')));
     case 'goat':
       return rows.map((r) => r.replace(/w/g, 's'));
     case 'cow':

@@ -12,6 +12,7 @@ import { safeArea } from './safe';
 import { SKY_WORD, skyIcon } from './icons';
 import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
+import { discoveryLines, drawFog, drawPlaceMarks } from './discovery';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -41,6 +42,7 @@ function drawMap(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number
   const m = minimap(game.map);
   rect(g, x0 - 1, y0 - 1, m.width + 2, m.height + 2, C.plum);
   g.drawImage(m, x0, y0);
+  drawFog(game, g, x0, y0);
   for (const r of REGIONS) {
     const cx = x0 + Math.round(r.cx / 2), cy = y0 + Math.round(r.cy / 2);
     if (r.tier > game.tier) {
@@ -53,8 +55,10 @@ function drawMap(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number
       text(g, `T${r.tier}`, cx, cy + 5, C.wool, { align: 'center' });
     }
   }
+  drawPlaceMarks(game, g, x0, y0);
   // Groups out in the pastures, then the dog (blinking bandana red).
   for (const gr of game.groups) {
+    if (!game.discovery.known(gr.x, gr.y)) continue; // no flocks in the fog
     const gx = x0 + Math.round(gr.x / TS / 2), gy = y0 + Math.round(gr.y / TS / 2);
     rect(g, gx - 1, gy - 1, 2, 2, C.wool);
   }
@@ -131,6 +135,8 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
     add(game.won ? 'THE VALLEY THRIVES!' : 'THE LAST TIER', C.butter);
     add('KEEP THE RANCH GROWING', C.wool);
   }
+  add('');
+  for (const l of discoveryLines(game, colW - 12)) add(l.s, l.c);
   add('');
   const tot = game.totals;
   const deliv = Object.values(tot.delivered).reduce((s, n) => s + (n ?? 0), 0);

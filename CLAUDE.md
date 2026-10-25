@@ -33,7 +33,9 @@ original and drawn in code. No external art files, ever.
   `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
   `scripts/resttest.mjs`, `scripts/weathertest.mjs`, `scripts/transittest.mjs`
   (an order's flock across a built-up ranch to each yard)
-  and `scripts/tour.mjs` check the loops end to end,
+  `scripts/discoverytest.mjs` and `scripts/tour.mjs` check the loops end to
+  end, `scripts/places.mjs` screenshots every hidden place and its way in
+  (`--found`, `--only=circle,hut`),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,
   coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`),
@@ -125,14 +127,16 @@ stays unique.
 - `src/art/` sprite grids and procedural art (trees, rocks, buildings);
   the player's choices: `dogstyle.ts` (markings, neck piece),
   `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
-- `src/world/` tile map, regions, terrain/canopy baking.
+- `src/world/` tile map, regions, terrain/canopy baking; `places.ts` the
+  hidden places (pockets, ways, landmarks, strays and wild flocks).
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
 - `src/systems/` day cycle, economy, progression, save, audio (mixer and
   sound effects), music (generative score), soundscape, synth (sample bank),
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
-  weather state everything else reads: `game.weather`).
+  weather state everything else reads: `game.weather`), `discovery.ts`
+  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
   pieces, `textfield.ts` typed names.

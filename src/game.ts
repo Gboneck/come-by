@@ -42,6 +42,8 @@ import { botStep } from './bot';
 import { clamp, damp } from './util';
 import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
+import { Discovery } from './systems/discovery';
+import { landmarkDrawables } from './art/landmarks';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
 import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
@@ -149,6 +151,7 @@ export class Game {
   trials = new Trials();
   feel = new Feel();
   weather = new Weather();
+  discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
   private idleT = 0;
@@ -356,6 +359,7 @@ export class Game {
     this.summary = null;
     this.showBanner(`DAY ${this.day.day}`, 'BRING THEM HOME BEFORE DUSK', 2.6);
     jobsMorning(this, spawn);
+    this.discovery.morning(this);
     saveGame(this);
   }
 
@@ -534,6 +538,7 @@ export class Game {
     const night = this.day.phase === 'night';
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y)) this.onRanchEvent(ev);
     jobsUpdate(this, dt);
+    this.discovery.update(this, dt);
     if (!night && !this.trials.run) updateProduce(this, dt * this.rest);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
@@ -962,9 +967,9 @@ export class Game {
     return { ox, oy, W, H };
   }
 
-  // Trial course, buyers' yards and carts, for the y-sorted world layer.
+  // Trial course, buyers' yards and carts, hidden places, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.
