@@ -12,6 +12,10 @@ import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
 import { yardFire } from '../art/course';
+import { drawSleepingDog, drawSnores } from '../art/dog';
+
+// Resting: the dog curls up asleep while the day runs fast.
+const sleeping = (game: Game) => game.dog.lying && game.rest > 1.3;
 import { settings } from '../ui/settings';
 
 export interface View {
@@ -25,11 +29,13 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   const { ox, oy, W, H } = v;
   const night = skyDarkness(game.day) > 0.3;
   g.drawImage(game.baked.ground, ox, oy, W, H, 0, 0, W, H);
-  drawWater(g, game.baked.water, ox, oy, W, H, game.t);
+  game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
+  drawWater(g, game.baked.water, ox, oy, W, H, game.life.vt);
 
   g.save();
   g.translate(-ox, -oy);
-  drawSway(g, game.baked.sway, ox, oy, W, H, game.t);
+  drawSway(g, game.baked.sway, ox, oy, W, H, game.life.vt);
+  game.life.wx.drawGround(g, game);
   const inView = (x0: number, y0: number, x1 = x0, y1 = y0, m = 24) => x1 > ox - m && x0 < ox + W + m && y1 > oy - m && y0 < oy + H + m;
 
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a);
@@ -68,7 +74,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     ents.push(decorDrawable(g, d, game.t, tierName, night));
   }
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t, night) });
-  ents.push({ y: game.dog.y, draw: () => game.dog.draw(g) });
+  ents.push({ y: game.dog.y, draw: () => (sleeping(game) ? drawSleepingDog(g, game.dog.x, game.dog.y, game.dog.face === 'l', game.t) : game.dog.draw(g)) });
   for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
   for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => h.draw(g) });
   ents.sort((p, q) => p.y - q.y);
@@ -85,18 +91,31 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   game.fx.drawHigh(g);
   g.restore();
 
-  // Dawn, dusk and night. Lamps and lanterns flicker a little.
+  // Dawn, dusk and night, the weather's light, rain over everything. Lamps
+  // and lanterns flicker a little.
   const dark = skyDarkness(game.day);
+  const fogged = game.weather.fog > 0.03;
+  const lights: Light[] = [];
+  if (fogged && dark <= 0) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
   if (dark > 0) {
     const fl = (i: number) => Math.sin(game.t * 7.3 + i * 2.1) * 0.8 + Math.sin(game.t * 13.1 + i) * 0.6;
-    const lights: Light[] = [{ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 }];
+    lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 });
     for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
     const f = game.ranch.farmhouse;
     if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
     decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1) }));
     for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
     for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2 }); }
-    game.night.draw(g, W, H, ox, oy, dark, lights, skySlope(game.day));
+  }
+  game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), ...game.life.wx.sky(game, dark) });
+  game.life.wx.drawAir(g, game, W, H, dark > 0.25);
+  if (sleeping(game)) {
+    g.save();
+    g.translate(-ox, -oy);
+    drawSnores(g, game.dog.x, game.dog.y, game.t);
+    g.restore();
+  }
+  if (dark > 0) {
     // Above the dark: lamp glow, eyes, fireflies.
     g.save();
     g.translate(-ox, -oy);

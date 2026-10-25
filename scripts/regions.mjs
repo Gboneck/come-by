@@ -1,5 +1,6 @@
 // Screenshot each region at real scale (tier 5, its herd grazing nearby):
 //   node scripts/regions.mjs [--out=shots/regions] [--only=ford,ranch] [--night] [--dusk] [--t=seconds] [--tier=5] [--day=1]
+//   [--weather=rain|fog|wind|storm] [--rest] (the dog lies down and rests)
 // Writes <out>/<spot>.png at 1280x720 (3x pixels) for every spot.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
@@ -28,6 +29,8 @@ const SPOTS = [
   { name: 'show', x: 860, y: 1205, herd: ['duck', 2000, 2000, 1], trial: true },
   { name: 'sale', x: 1215, y: 1140, herd: ['sheep', 1150, 1170, 5] },
   { name: 'drover', x: 870, y: 615, herd: ['cow', 800, 640, 3] },
+  // The dog napping by the farmhouse (use with --rest).
+  { name: 'nap', x: 740, y: 820, herd: ['duck', 1300, 870, 1] },
 ];
 
 const PORT = Number(process.env.SHOT_PORT || 5189);
@@ -43,7 +46,7 @@ await page.goto(`http://localhost:${PORT}/?debug`);
 await page.waitForFunction(() => window.game);
 for (const s of SPOTS) {
   if (only && !only.includes(s.name)) continue;
-  await page.evaluate(({ s, night, dusk, t, tier, day }) => {
+  await page.evaluate(({ s, night, dusk, t, tier, day, weather, rest }) => {
     const g = window.game;
     g.setTier(tier);
     g.tut = 99;
@@ -58,6 +61,7 @@ for (const s of SPOTS) {
     g.day.day = Number(day);
     if (dusk) { g.day.t = 290; g.day.phase = 'dusk'; }
     if (night) { g.day.startNight(); g.quietT = -1e9; g.banner = null; }
+    if (weather) { g.weather.force(weather); g.life.wx.wet = weather === 'rain' || weather === 'storm' ? 1 : 0; }
     g.spawnFlock(...s.herd);
     if (s.trial) {
       g.animals.length = 0;
@@ -90,12 +94,14 @@ for (const s of SPOTS) {
     g.dog.y = s.y + 20;
     g.cam.x = s.x;
     g.cam.y = s.y;
-  }, { s, night: flag('night'), dusk: flag('dusk'), t: Number(opt('t', '60')), tier: Number(opt('tier', '5')), day: opt('day', '1') });
+  }, { s, night: flag('night'), dusk: flag('dusk'), t: Number(opt('t', '60')), tier: Number(opt('tier', '5')), day: opt('day', '1'), weather: opt('weather', ''), rest: flag('rest') });
+  if (flag('rest')) await page.keyboard.down('KeyQ');
   await page.waitForTimeout(Number(opt('wait', '700')));
   await page.evaluate(({ x, y }) => { const g = window.game; g.cam.x = x; g.cam.y = y; g.banner = null; }, s);
   await page.waitForTimeout(60);
   const file = `${out}/${s.name}.png`;
   await page.screenshot({ path: file });
+  if (flag('rest')) await page.keyboard.up('KeyQ');
   console.log(file);
 }
 if (errors.length) console.log('errors:\n  ' + errors.join('\n  '));

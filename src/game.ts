@@ -566,7 +566,7 @@ export class Game {
     // A second of lying still, then the clock eases up to full speed.
     const k = clamp((this.restT - 1) / 1.5, 0, 1);
     this.rest = 1 + (REST_MAX - 1) * k * k * (3 - 2 * k);
-    if (this.rest > 2 && Math.floor((this.restT - dt) / 0.9) !== Math.floor(this.restT / 0.9)) this.fx.float(this.dog.x + 4, this.dog.y - 8, 'Z', C.wool, 1.4);
+    // The dog curls up asleep and the valley runs fast (render/world.ts).
   }
 
   // ---- Night ----

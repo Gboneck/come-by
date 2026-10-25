@@ -40,6 +40,9 @@ export interface Baked {
   // What the ground is made of, for footprints: 0 grass, 1 path or mud
   // (moss), 2 wet bank (sage), 3 water, 4 rock.
   soil: Uint8Array;
+  // Low spots on paths and banks where puddles gather in the rain.
+  puddles: { x: number; y: number; r: number }[];
+  groundPx: Uint32Array; // the baked ground's pixels (for the wet look)
 }
 
 function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32Array {
@@ -453,6 +456,21 @@ function bakeWorld(map: WorldMap): Baked {
     else if (wdist[i] === 0 && (water[i - 1] || water[i + 1] || water[i - W] || water[i - 2] || water[i + 2] || water[i - 2 * W])) soil[i] = gp[i] === U32.sage ? 2 : 1;
   }
 
+  const puddles: { x: number; y: number; r: number }[] = [];
+  for (let gy = 8; gy < H - 8; gy += 7)
+    for (let gx = 8; gx < W - 8; gx += 9) {
+      const x = gx + Math.floor(hash2(gx, gy, 132) * 5), y = gy + Math.floor(hash2(gx, gy, 133) * 4);
+      if (hash2(x, y, 130) > 0.2) continue;
+      const r = 2 + Math.floor(hash2(x, y, 131) * 4);
+      let ok = true;
+      for (let dy = -Math.ceil(r * 0.5) - 1; dy <= Math.ceil(r * 0.5) + 1 && ok; dy++)
+        for (let dx = -r - 1; dx <= r + 1 && ok; dx++) {
+          const sv = soil[(y + dy) * W + x + dx];
+          if (sv !== 1 && sv !== 2) ok = false;
+        }
+      if (ok) puddles.push({ x, y, r });
+    }
+
   // ---- Swaying grass, flowers and reeds ----
   const sway = makeSwayGrid(W, H);
   const add = (it: SwayItem) => {
@@ -542,7 +560,7 @@ function bakeWorld(map: WorldMap): Baked {
     waterAnims.push(makeWaterAnim(src, x0, y0, x1 - x0, y1 - y0, flowing, flowing ? stones : []));
   });
 
-  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil };
+  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp };
 }
 
 function makeSwayGrid(W: number, H: number): SwayGrid {

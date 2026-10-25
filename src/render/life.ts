@@ -5,7 +5,8 @@ import { critterSprites } from '../art/critters';
 import { chimneyTop } from '../art/buildings';
 import { yardFire } from '../art/course';
 import { hash2 } from '../rng';
-import { drift } from './wind';
+import { drift, stepWind } from './wind';
+import { WeatherFx } from './weather';
 import { skyDarkness } from './sky';
 import { SHALLOW, TS, Ter, WORLD_H, WORLD_W, type SpeciesId } from '../world/map';
 import type { Game } from '../game';
@@ -61,19 +62,31 @@ export class Life {
   private smokeT = 0;
   private track = new WeakMap<object, Track>();
   private t = 0;
+  wx = new WeatherFx();
+  vt = 0; // the valley's own clock: runs up to x12 while the dog rests
 
   update(game: Game, dt: number) {
-    this.t += dt;
+    // Resting is a time-lapse: wind, clouds, smoke and water all run fast.
+    const lapse = Math.max(1, game.rest);
+    stepWind(dt * lapse, game.weather.wind);
+    this.wx.update(game, dt, lapse);
+    this.vt += dt * lapse;
+    const dtl = dt * lapse;
+    this.t += dtl;
     const v = game.view();
     const dark = skyDarkness(game.day);
     const night = game.day.phase === 'night';
-    this.updateFlies(game, dt, v, dark, night);
-    this.updateBirds(dt, v, dark);
-    this.updateGlows(game, dt, v, dark, night);
+    // Rain and fog keep the butterflies and birds in; a storm, everything.
+    const w = game.weather;
+    const fair = Math.max(0, 1 - w.rain * 3) * Math.max(0, 1 - w.fog * 1.5);
+    const quick = dt * Math.min(lapse, 3);
+    this.updateFlies(game, quick, v, fair > 0.5 ? dark : 1, night);
+    this.updateBirds(quick, v, fair > 0.3 ? dark : 1);
+    this.updateGlows(game, dt, v, w.rain > 0.5 ? 0 : dark, night && w.rain < 0.5);
 
     // Chimney smoke, drifting downwind.
     const f = game.ranch.farmhouse;
-    if (f && (this.smokeT -= dt) <= 0) {
+    if (f && (this.smokeT -= dtl) <= 0) {
       this.smokeT = 0.28 + Math.random() * 0.12;
       const c = chimneyTop(f);
       if (this.near(v, c.x, c.y, 80)) this.add({ kind: 'smoke', x: c.x + (Math.random() - 0.5), y: c.y, vy: -9 - Math.random() * 2, max: 2.2 + Math.random() * 0.6 });
@@ -97,10 +110,11 @@ export class Life {
     for (const h of game.helpers) if (this.near(v, h.x, h.y, 30)) this.walk(game, h, 'dog', dt, 80, false, false);
 
     for (const b of this.bits) {
-      b.life -= dt;
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
-      b.z += b.vz * dt;
+      const bdt = b.kind === 'smoke' ? dtl : dt;
+      b.life -= bdt;
+      b.x += b.vx * bdt;
+      b.y += b.vy * bdt;
+      b.z += b.vz * bdt;
       switch (b.kind) {
         case 'anim': b.vx *= 0.9; b.vy *= 0.9; break;
         case 'smoke': b.vx = drift(b.x, b.y, this.t) * 0.45 * (1 - b.life / b.max) * 2; b.vy *= 0.99; break;
