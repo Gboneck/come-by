@@ -155,6 +155,84 @@
 - [x] One-time tip about resting for players past the tutorial
 - [x] `scripts/resttest.mjs`
 
+## M13 Pacing pass (gameplay, round two)
+- [x] `scripts/pacetest.mjs` + `src/pacebot.ts`: a decent-player bot plays
+      from day one until the valley thrives (drives each tier's flocks home
+      along A* routes, builds what the goals ask for, fills orders, runs
+      trials, rests on the ranch, defends the night) and logs every tier
+- [x] Found and smoothed the waits and the money flood (table below)
+- [x] Before/after table, 5 seeds each
+
+Same bot, 5 seeds, before = the merged round-one branch, after = this
+pass. Days are bot days (a person takes longer); "play min" is time at the
+controls, resting included.
+
+| tier | days | play min | earned $/day | spent $ | purse at tier end $ | where it stalled before |
+|---|---|---|---|---|---|---|
+| 1 | 2.0 → 2.0 | 3.0 → 3.7 | 137 → 109 | 190 → 158 | 84 → 61 | kennel waits on day one's eggs (resting covers it); "pen 6 ducks" with 5 out |
+| 2 | 1.0 → 1.0 | 6.3 → 6.6 | 578 → 391 | 528 → 348 | 133 → 104 | none |
+| 3 | 1.0 → 1.0 | 5.3 → 5.3 | 787 → 522 | 101 → 502 | 819 → 124 | money outruns the shop; calm strays block resting |
+| 4 | 1.4 → 1.0 | 9.3 → 6.2 | 1129 → 791 | 191 → 450 | 2281 → 465 | waits for a trial day; land runs short |
+| 5 | 15.4 → 1.0 | 99.5 → 6.9 | 2763 → 1201 | 90 → 41 | 54797 → 1625 | six ponies need 24 pen space with no land left |
+| done | 2 of 5 by day 8, 3 still at tier 5 on day 31 → all 5 on day 7 | | | | | |
+
+Income after the pass, per day: tier 1 stock 120 / goods 99; tier 2
+stock 153 / goods 196 / orders 22 / trials 20; tier 3 stock 124 / goods
+340 / orders 58; tier 4 stock 234 / goods 444 / orders 91; tier 5 stock
+260 / goods 618 / orders 223 / trials 47. Through tier 4 the purse is
+spent most evenings (the day-end card lists 6-8 things you can afford,
+not everything). Past tier 5 money piles up again: see Decisions.
+
+## M14 Weather (gameplay, round two)
+- [x] Skies by tier (tier 1 clear; from tier 2 about half clear, the rest
+      wind, rain, fog; storms from tier 4, never two days running)
+- [x] `forecast` is always tomorrow's sky, rolled as today's arrives; saved
+- [x] Wind: grazing flocks drift downwind, a lightly driven flock leans
+      with it, a bark carries further downwind
+- [x] Rain: flocks huddle and head for tree cover; stock left out frets
+- [x] Fog: flocks huddle, a slightly shorter but jumpier flight zone;
+      `weather.sight` for the UI to hide far groups
+- [x] Storm: wind and rain, and an extra, bolder coyote at night
+- [x] First-time tip per sky; the morning banner names the sky
+- [x] `scripts/weathertest.mjs`; tune.mjs `--weather` and `--seed`
+- [x] tune.mjs for every species in clear (before = after, exact) and in
+      each sky (table below)
+
+Seeded (`--seed=1`), 3 runs each: runs home / mean seconds / peak stress.
+Clear is identical to the old code. The steady style for each species
+(calm walk; nip heels for goats and cattle, which need it in any sky) gets
+home calmly in every sky; barking every 2s gets worse in wind, rain and storm.
+Cattle are slowest in rain: between nips they huddle and drift for the
+trees, so a nip drive runs past the scenario's 120s cap.
+
+| species | sky | calm walk | nip heels | bark every 2s | chase (sprint) |
+|---|---|---|---|---|---|
+| duck | clear | 3/3 16s 0.00 | 3/3 12s 0.14 | 3/3 12s 0.66 | 0/3 20s 1.00 |
+| duck | wind | 3/3 20s 0.00 | 3/3 12s 0.16 | 3/3 10s 0.88 | 0/3 20s 1.00 |
+| duck | rain | 3/3 14s 0.07 | 3/3 16s 0.71 | 3/3 9s 0.97 | 0/3 20s 1.00 |
+| duck | fog | 3/3 20s 0.00 | 3/3 12s 0.46 | 3/3 13s 0.72 | 0/3 20s 1.00 |
+| duck | storm | 3/3 16s 0.10 | 3/3 11s 0.50 | 2/3 47s 1.00 | 0/3 20s 1.00 |
+| sheep | clear | 3/3 12s 0.00 | 3/3 9s 0.06 | 3/3 8s 0.71 | 0/3 20s 1.00 |
+| sheep | wind | 2/3 52s 0.01 | 3/3 9s 0.01 | 2/3 44s 0.92 | 0/3 20s 1.00 |
+| sheep | rain | 3/3 11s 0.07 | 3/3 8s 0.16 | 2/3 43s 1.00 | 1/3 17s 1.00 |
+| sheep | fog | 3/3 15s 0.01 | 3/3 9s 0.07 | 3/3 8s 0.70 | 0/3 20s 1.00 |
+| sheep | storm | 3/3 19s 0.09 | 3/3 8s 0.23 | 3/3 5s 1.00 | 0/3 20s 1.00 |
+| goat | clear | 0/3 120s 0.00 | 3/3 13s 0.00 | 1/3 95s 0.55 | 0/3 20s 1.00 |
+| goat | wind | 0/3 120s 0.01 | 3/3 14s 0.01 | 2/3 69s 0.75 | 0/3 20s 1.00 |
+| goat | rain | 1/3 94s 0.07 | 3/3 11s 0.07 | 2/3 48s 0.86 | 0/3 20s 1.00 |
+| goat | fog | 1/3 116s 0.02 | 3/3 19s 0.02 | 3/3 20s 0.56 | 0/3 20s 1.00 |
+| goat | storm | 0/3 120s 0.13 | 3/3 10s 0.08 | 1/3 100s 1.00 | 0/3 20s 1.00 |
+| cow | clear | 0/3 120s 0.00 | 2/3 114s 0.20 | 0/3 120s 0.17 | 0/3 20s 1.00 |
+| cow | wind | 0/3 120s 0.00 | 3/3 102s 0.22 | 1/3 117s 0.28 | 0/3 20s 1.00 |
+| cow | rain | 0/3 120s 0.07 | 0/3 120s 0.29 | 0/3 120s 0.16 | 0/3 20s 1.00 |
+| cow | fog | 0/3 120s 0.00 | 3/3 92s 0.22 | 1/3 119s 0.10 | 0/3 20s 1.00 |
+| cow | storm | 0/3 120s 0.12 | 1/3 99s 0.54 | 1/3 89s 0.51 | 0/3 20s 1.00 |
+| pony | clear | 3/3 7s 0.01 | 3/3 6s 0.09 | 3/3 7s 0.30 | 1/3 16s 1.00 |
+| pony | wind | 3/3 8s 0.01 | 3/3 6s 0.08 | 3/3 5s 0.59 | 1/3 16s 1.00 |
+| pony | rain | 3/3 7s 0.05 | 3/3 6s 0.22 | 3/3 6s 0.47 | 1/3 14s 1.00 |
+| pony | fog | 3/3 7s 0.02 | 3/3 6s 0.10 | 3/3 7s 0.43 | 0/3 20s 1.00 |
+| pony | storm | 3/3 7s 0.06 | 3/3 6s 0.30 | 3/3 4s 0.71 | 1/3 16s 1.00 |
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -482,3 +560,43 @@
   on time. No resting at night, during a trial run or under the bot.
   Measured: from 08:00 a rest reaches the end of day one in ~20s, with
   47$ in hand.
+- Pacing (M13) is measured with a bot that is quicker and surer than a
+  person: it knows where every flock is, never misreads a flock, and walks
+  goat and cattle drives it cannot do through at a walking drive's pace
+  ("assisted", flagged in its log). So read its days as a floor; a person
+  takes longer. What it shows well is where the curve stalls and where the
+  money stops meaning anything.
+- What the bot found on the merged branch: (1) day one waited on the
+  kennel (fixed by resting); (2) "pen 6 ducks" when only 5 spawned;
+  (3) a newly opened region could have only one flock out, short of its
+  pen goal; (4) tier 4 waited for a trial day; (5) tier 5's six ponies
+  need 24 pen space when land had run out (3 of 5 seeds never finished);
+  (6) money flooded from tier 2: by tier 4 the bot earned ~1100$ a day,
+  three quarters of it goods from pens, against items that cost 2-180$;
+  (7) calm strays grazing near the house stopped you resting.
+- Fixes: tier 1 pens 5 ducks; a region that has just opened always has two
+  flocks out; tier 4 wants a trial score of 60 (practice counts); tier 5
+  pens 4 ponies (one plain pen); wool, cheese and milk come about 2.5
+  times less often and eggs a little less (eggs 80s, wool 230s, cheese
+  220s, milk 190s, from 55/90/85/75), so a
+  penned animal earns about its own delivery value a day and driving
+  stock matters as much as owning pens; pens get dearer as the ranch fills
+  (25, 25, then +15 each); helpers 70/130, top dog training 100-120, pen
+  upgrade 40, barn upgrade 70, mill 260; buyers do not ask for the kind
+  a tier's pen goal still needs; resting is stopped by anything loose
+  within 40px, but further off only by stock that is moving or upset.
+- Still true after the pass: past tier 5 money piles up (nothing left to
+  buy). Grazing rotation (penned stock eats its pen down and needs driving
+  out to pasture, or hay) would be the natural sink and more herding
+  work; left for the next round because it needs the pen floor drawn and
+  shown in the UI to read at a glance.
+- Weather (M14) only touches stock out of pens. The wind that moves things
+  (`pushX/Y`) is zero for a breeze, so clear days herd exactly as before
+  (seeded tune: 55 of 55 lines identical). Wind leans on a lightly driven
+  flock but a firm, steady push beats it; first tries at full strength
+  stopped calm drives dead, and fog's smaller flight zone plus a twice-as-
+  jumpy startle together tripled calm drives and split flocks, so wind was
+  softened twice and fog now also huddles the flock (as rain does) with
+  only an 8% shorter flight zone and a modestly jumpier startle.
+- `forecast` is rolled each morning for tomorrow (not at day's end) so it
+  means the same thing all day for the HUD, the summary and audio.

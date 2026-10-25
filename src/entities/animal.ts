@@ -174,7 +174,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   // ---- Flocking ----
   const stressBunch = (sp.splitter
     ? Math.max(0.1, 1 - 1.4 * smooth01((a.stress - 0.15) / 0.45))
-    : 1 + 1.4 * smooth01((a.stress - 0.15) / 0.45) * (a.stress < 0.8 ? 1 : 0.3)) * (1 + 0.7 * rain); // rain huddles them
+    : 1 + 1.4 * smooth01((a.stress - 0.15) / 0.45) * (a.stress < 0.8 ? 1 : 0.3)) * (1 + 0.7 * rain + 0.4 * fog); // rain and fog huddle them
   const sepR = sp.sep * (1 - 0.25 * smooth01((a.stress - 0.2) / 0.5));
   let cx = 0, cy = 0, avx = 0, avy = 0, n = 0, sx = 0, sy = 0;
   grid.near(a.x, a.y, Math.max(sp.nbr, 16), nbrs);
@@ -226,7 +226,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   for (const s of ctx.sources) {
     if (s.lying) continue;
     // Fog: they let you closer before they move, then start more easily.
-    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen && !a.pen.letOut ? 0.5 : 1) * safety * (1 - 0.12 * fog);
+    const R = sp.flight * s.range * (1 + 0.6 * a.stress) * (a.pen && !a.pen.letOut ? 0.5 : 1) * safety * (1 - 0.08 * fog);
     const dx = a.x - s.x, dy = a.y - s.y;
     const d = Math.hypot(dx, dy);
     if (d >= R || d < 1e-3) continue;
@@ -289,7 +289,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     spd = sp.run * 1.05;
   } else if (driven) {
     // Wind leans on a lightly driven flock; a firm, steady push beats it.
-    const lean = 0.35 * Math.max(0, 1 - P / 0.5);
+    const lean = 0.2 * Math.max(0, 1 - P / 0.5);
     dirX = fx * 2.6 + cohX * cohW * 0.7 + aliX * sp.wAli * 1.4 + sx * sepW + wallX * 3 + wx * lean;
     dirY = fy * 2.6 + cohY * cohW * 0.7 + aliY * sp.wAli * 1.4 + sy * sepW + wallY * 3 + wy * lean;
     const drive = Math.min(P, 1.4);
@@ -335,8 +335,8 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     }
   } else if (follow > sp.graze * 2.2 && n > 0) {
     // The flock is moving: go with it.
-    dirX = aliX * 2 + cohX * cohW + sx * sepW + wallX * 3 + wx * 0.2;
-    dirY = aliY * 2 + cohY * cohW + sy * sepW + wallY * 3 + wy * 0.2;
+    dirX = aliX * 2 + cohX * cohW + sx * sepW + wallX * 3 + wx * 0.12;
+    dirY = aliY * 2 + cohY * cohW + sy * sepW + wallY * 3 + wy * 0.12;
     spd = follow * 0.92;
   } else {
     // Calm: graze, amble, keep loosely together.
@@ -377,8 +377,8 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
     }
     if (a.grazeMode === 'amble') {
       // Wind: a grazing flock wanders downwind.
-      dirX = a.gdx + cohX * cohW * far + sx * sepW + wallX * 3 + wx * 0.45;
-      dirY = a.gdy + cohY * cohW * far + sy * sepW + wallY * 3 + wy * 0.45;
+      dirX = a.gdx + cohX * cohW * far + sx * sepW + wallX * 3 + wx * 0.35;
+      dirY = a.gdy + cohY * cohW * far + sy * sepW + wallY * 3 + wy * 0.35;
       spd = sp.graze * (settling ? 0.5 : 1);
     } else {
       dirX = cohX * cohW * far * 0.6 + sx * sepW + wallX * 3;

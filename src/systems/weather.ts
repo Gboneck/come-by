@@ -17,8 +17,9 @@
 //   easier than against it; a bark carries further downwind.
 // - rain: flocks bunch and drift to the nearest tree cover; stock left out
 //   frets a little.
-// - fog: a smaller but jumpier flight zone (anything rushing in startles
-//   them more); you can only see so far (`sight`).
+// - fog: flocks huddle; a slightly smaller but jumpier flight zone
+//   (anything rushing in startles them more); you can only see so far
+//   (`sight`).
 // - storm: wind and rain together, and bolder predators at night.
 
 export type Sky = 'clear' | 'wind' | 'rain' | 'fog' | 'storm';

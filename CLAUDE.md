@@ -26,12 +26,16 @@ original and drawn in code. No external art files, ever.
   `scripts/shot.mjs` screenshots + console errors (`--hold`, `--press`,
   `--eval` steps), `scripts/zoom.mjs` enlarges part of a PNG,
   `scripts/mapshot.mjs` exports the whole world, `scripts/tune.mjs` runs
-  bot herding scenarios per species and prints stress/time/splits,
+  bot herding scenarios per species and prints stress/time/splits
+  (`--weather=rain` etc.; `--seed=N` makes a run exact for before/after),
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
   `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
-  `scripts/resttest.mjs`
+  `scripts/resttest.mjs`, `scripts/weathertest.mjs`
   and `scripts/tour.mjs` check the loops end to end,
+  `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
+  from day one to the valley thriving and logs each tier (days, minutes,
+  coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`),
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`), `scripts/uitour.mjs` screenshots every screen at
   phone, notched-phone, landscape and desktop sizes onto contact sheets
