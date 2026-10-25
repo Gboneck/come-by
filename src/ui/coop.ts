@@ -144,7 +144,7 @@ function drawPanel(game: Game, g: CanvasRenderingContext2D, W: number, H: number
       rows.push({ s: `HERE: ${ps.map((p) => (p.slot === 0 ? `${p.name} (YOU)` : p.here ? p.name : `${p.name}...`)).join(', ')}`, c: C.wool });
       if (ps.length < 2) rows.push({ s: 'WAITING FOR A FRIEND. PLAY ON!', c: C.sage });
       buttons.push({ id: 'coop-share', label: touch && 'share' in navigator ? 'SHARE LINK' : 'COPY LINK', act: () => shareLink(game, net), hot: true });
-      buttons.push({ id: 'coop-stop', label: 'CLOSE RANCH', act: () => net.close() });
+      buttons.push({ id: 'coop-stop', label: 'CLOSE RANCH', act: () => { net.close(); closeCoop(game); } });
     }
     buttons.push({ id: 'coop-back', label: 'BACK', act: () => closeCoop(game) });
   } else {

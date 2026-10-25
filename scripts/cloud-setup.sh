@@ -14,6 +14,11 @@ else
   exit 0
 fi
 
+# The co-op relay (server/) runs under wrangler for scripts/cooptest.mjs.
+if (cd server && (npm ci --no-audit --no-fund || npm install --no-audit --no-fund)) >>/tmp/comeby-npm.log 2>&1; then
+  echo "Come By: relay packages installed (cooptest can run)."
+fi
+
 if npx playwright install --with-deps chromium-headless-shell >/tmp/comeby-pw.log 2>&1 \
   || npx playwright install chromium-headless-shell >>/tmp/comeby-pw.log 2>&1; then
   echo "Come By: Playwright ready, so npm run shot works."

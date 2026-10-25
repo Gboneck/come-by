@@ -348,6 +348,11 @@ await wait(1500);
 const lagPenned = await host.evaluate(() => window.game.ranch.pens[0].animals.length);
 check(`with ${LAG}ms each way on the guest's line (host paused), the drive still pens them`, lagPenned === 6, `${lagPenned}/6 in ${lagRes.t}s`);
 
+// ---- The host's game stops (a phone asleep): the guest is told to wait ----
+await host.evaluate(() => { window.requestAnimationFrame = () => 0; });
+await guest.waitForFunction(() => window.game.net.stale, null, { timeout: 5000 }).catch(() => {});
+check("the host's game stops: the guest waits for it", await guest.evaluate(() => window.game.net.stale));
+
 // ---- The host closes the ranch: the guest is told, and goes home ----
 await host.evaluate(() => window.game.net.close());
 await guest.waitForFunction(() => window.game.net?.ended, null, { timeout: 8000 }).catch(() => {});
