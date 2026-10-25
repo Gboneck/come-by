@@ -6,6 +6,7 @@ import { WORLD_W } from '../world/map';
 import { windStrength } from './wind';
 import type { Game } from '../game';
 import { NS, tileNoise, type SkyOpts } from './night';
+import { quality } from '../gfx/quality';
 
 // The weather, drawn. Reads `game.weather` (sky, rain, fog, wind) and keeps
 // only what drawing needs: how wet the ground is, the drift of clouds and
@@ -81,7 +82,7 @@ export class WeatherFx {
     const w = game.weather;
     const wetL = this.wet * 5;
     const clouds = 9 * Math.max(0, 1 - w.rain * 2.5) * Math.max(0, 1 - w.fog * 2) * Math.max(0, 1 - dark * 3);
-    if (wetL < 0.5 && clouds < 0.5) return;
+    if ((wetL < 0.5 && clouds < 0.5) || !quality.shade) return;
     if (!this.wc || this.wc.width !== W || this.wc.height !== H) {
       [this.wc, this.wg] = makeCanvas(W, H);
       this.wimg = this.wg.createImageData(W, H);
@@ -144,7 +145,7 @@ export class WeatherFx {
     }
     if (w.rain < 0.05) return;
     // Splashes: each slot shows a drop landing somewhere new every moment.
-    const n = Math.round((w.rain * W * H) / 1400);
+    const n = Math.round(((w.rain * W * H) / 1400) * quality.fx);
     g.fillStyle = C.wool;
     for (let j = 0; j < n; j++) {
       const s = this.t * 9 + hash2(j, 0, 5) * 9;
@@ -164,7 +165,7 @@ export class WeatherFx {
   drawAir(g: CanvasRenderingContext2D, game: Game, W: number, H: number, night: boolean) {
     const w = game.weather;
     if (w.rain > 0.03) {
-      const n = Math.round((w.rain * W * H) / 260);
+      const n = Math.round(((w.rain * W * H) / 260) * quality.fx);
       const slant = 0.2 + windStrength() * 0.55;
       const len = 3 + Math.round(w.rain * 2);
       g.fillStyle = night ? C.sage : C.wool;
@@ -173,7 +174,14 @@ export class WeatherFx {
         const fall = this.t * v;
         const y = Math.floor((((hash2(i, 2, 9) * (H + 30) + fall) % (H + 30)) + H + 30) % (H + 30)) - 15;
         const x = Math.floor((((hash2(i, 3, 9) * (W + 40) + fall * slant) % (W + 40)) + W + 40) % (W + 40)) - 20;
-        for (let k = 0; k < len; k++) g.fillRect(x + Math.round(k * slant), y + k, 1, 1);
+        // One rect per straight run of the streak (same pixels, fewer calls).
+        for (let k = 0; k < len; ) {
+          const dx = Math.round(k * slant);
+          let e = k + 1;
+          while (e < len && Math.round(e * slant) === dx) e++;
+          g.fillRect(x + dx, y + k, 1, e - k);
+          k = e;
+        }
       }
     }
     if (this.flash > 0.08 && this.flashNear > 0.45) {

@@ -18,6 +18,7 @@ import type { DiscoverySave } from './discovery';
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
 const KEY = 'comeby-save-v1';
+export const SAVE_KEY = KEY; // ui/transfer.ts moves saves between devices
 
 interface SavedAnimal { id: SpeciesId; coat: Coat; stress: number; x?: number; y?: number; wanderer?: boolean; produceT?: number; home?: boolean }
 

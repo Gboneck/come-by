@@ -2,21 +2,22 @@ import type { SwayGrid } from '../world/terrain';
 import type { WaterAnim } from '../art/water';
 import { WATER_FPS, WATER_FRAMES } from '../art/water';
 import { gust, windStrength } from './wind';
+import { quality } from '../gfx/quality';
 
 // Grass tips, flower heads and reeds lean one pixel (reeds two) downwind as
 // a gust passes over them. Bases never move, so nothing looks rubbery.
 export function drawSway(g: CanvasRenderingContext2D, grid: SwayGrid, ox: number, oy: number, W: number, H: number, t: number) {
-  const ws = windStrength();
+  const ws = quality.sway ? windStrength() : 0;
   const c0 = Math.max(0, Math.floor((ox - 8) / grid.cell)), c1 = Math.min(grid.cols - 1, Math.floor((ox + W + 8) / grid.cell));
   const r0 = Math.max(0, Math.floor((oy - 8) / grid.cell)), r1 = Math.min(grid.rows - 1, Math.floor((oy + H + 8) / grid.cell));
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       for (const it of grid.cells[r * grid.cols + c]) {
         if (it.x < ox - 8 || it.x > ox + W + 2 || it.y < oy - 2 || it.y > oy + H + 8) continue;
-        const gs = gust(it.x, it.y, t);
+        const gs = quality.sway ? gust(it.x, it.y, t) : 0;
         // Reeds also nod on their own now and then; on a windy day grass
         // flutters between gusts and reeds stay bent.
-        const nod = it.reed && Math.sin(t * 1.3 + it.x * 0.7) > 0.93 ? 1 : 0;
+        const nod = it.reed && quality.sway && Math.sin(t * 1.3 + it.x * 0.7) > 0.93 ? 1 : 0;
         const flutter = ws > 0.55 && Math.floor(t * 7 + it.x * 0.37 + it.y * 0.11) % 3 === 0 ? 1 : 0;
         const lean = it.reed ? Math.min(2, (gs > 0.3 || ws > 0.7 ? 1 : 0) + (gs > 0.75 ? 1 : 0) + nod) : gs > 0.45 ? 1 : flutter;
         const x = Math.round(it.x), y = Math.round(it.y);

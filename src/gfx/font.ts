@@ -103,7 +103,15 @@ function glyphKey(ch: string): string {
 
 export const LINE_H = 6;
 
+// Rewrites text before it is measured or drawn: while a game pad is in use,
+// src/ui/pad.ts swaps keyboard prompts ("SPACE TO BARK") for pad buttons.
+let filter: ((s: string) => string) | null = null;
+export function setTextFilter(f: ((s: string) => string) | null) {
+  filter = f;
+}
+
 export function textWidth(s: string, scale = 1): number {
+  if (filter) s = filter(s);
   let w = 0;
   for (const ch of s) w += glyphs[glyphKey(ch)].w + 1;
   return Math.max(0, w - 1) * scale;
@@ -118,6 +126,7 @@ export interface TextOpts {
 }
 
 export function text(g: CanvasRenderingContext2D, s: string, x: number, y: number, color: string, o: TextOpts = {}): number {
+  if (filter) s = filter(s);
   const scale = o.scale ?? 1;
   const w = textWidth(s, scale);
   let cx = Math.round(o.align === 'center' ? x - w / 2 : o.align === 'right' ? x - w : x);
@@ -136,6 +145,7 @@ export function text(g: CanvasRenderingContext2D, s: string, x: number, y: numbe
 
 // Greedy word wrap to a pixel width.
 export function wrap(s: string, maxW: number): string[] {
+  if (filter) s = filter(s);
   const out: string[] = [];
   for (const para of s.split('\n')) {
     let line = '';

@@ -14,6 +14,15 @@ original and drawn in code. No external art files, ever.
 - Vite + TypeScript, HTML Canvas 2D, no game engine, no external art files.
 - Static build (`npm run build` → `dist/`) that deploys to GitHub Pages
   (`.github/workflows/deploy.yml`, relative `base: './'`).
+- An installable app (PWA), all made by `scripts/pwa.mjs` (a Vite plugin):
+  `manifest.webmanifest`, icons drawn by the game's own sprite code at
+  build time (`src/pwa/icon.ts`, run under Node with a stand-in canvas; no
+  image files), the manifest/icon `<link>` tags, and `sw.js`, which keeps
+  every file of the build for offline play under a cache named for the
+  build. index.html is network first (a deploy shows on the next launch);
+  other origins (the co-op relay) are never touched. Only the build
+  registers the worker (`src/pwa/register.ts`), never `npm run dev`.
+  Phones get an "add to home screen" card on the title (`src/ui/install.ts`).
 - `npm run dev` for the dev server, `npm run typecheck`, `npm run shot` for a
   Playwright screenshot + console-error check (writes to `shots/`).
 - URL switches: `?debug` exposes `window.game`, `window.sim` and
@@ -38,7 +47,16 @@ original and drawn in code. No external art files, ever.
   `scripts/resttest.mjs`, `scripts/weathertest.mjs`, `scripts/transittest.mjs`
   (an order's flock across a built-up ranch to each yard)
   `scripts/discoverytest.mjs` and `scripts/tour.mjs` check the loops end to
-  end, `scripts/places.mjs` screenshots every hidden place and its way in
+  end, `scripts/perftest.mjs` measures each frame's work at a phone size
+  under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
+  tier-5 ranch, `scripts/fixtures/tier5.json` from
+  `scripts/makefixture.mjs`; `--profile`, `--calls`, `--live`,
+  `--quality=low`, `--idle`), `scripts/picturetest.mjs` checks the picture
+  cache draws exactly what the art does, `scripts/pwatest.mjs` builds and
+  serves the game twice (installable, offline with the server off, a new
+  deploy picked up), `scripts/installtest.mjs` the install card,
+  `scripts/padtest.mjs` plays every screen with a simulated game pad,
+  `scripts/transfertest.mjs` moves a save between two browsers, `scripts/places.mjs` screenshots every hidden place and its way in
   (`--found`, `--only=circle,hut`),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,
@@ -60,7 +78,18 @@ original and drawn in code. No external art files, ever.
 
 - Render to a small internal canvas (~240px on the short side), then scale up
   by a whole number with nearest-neighbour filtering. The internal size is
-  derived from the window so the scale is always an integer.
+  derived from the window so the scale is always an integer. The game draws
+  straight into the page's canvas at the internal size and CSS
+  (`image-rendering: pixelated`) does the whole-number scale on the GPU
+  (`src/gfx/screen.ts`; a drawImage copy where `pixelated` is missing).
+- Procedural art that rarely changes (buildings, fences, ranch decor) goes
+  through `cached()` in `src/gfx/picture.ts`: drawn into a recorder, shown
+  from a bitmap until it asks for different pixels. Art using paths, clips
+  or alpha is drawn directly by itself.
+- GRAPHICS (pause menu: AUTO, HIGH, MEDIUM, LOW; `src/gfx/quality.ts`) thins
+  only mood: read `quality.fx` (share of rain, splashes, critters),
+  `quality.shade` (cloud shadows, wet ground), `quality.sway` (grass in
+  gusts). Never the night, the herd or anything you play with.
 - No blurry or sub-pixel drawing: round every draw position to whole pixels,
   never draw rotated/scaled images except by integer factors.
 - Sprites are pixel grids defined in code (`src/art/`), one char per pixel.
@@ -87,23 +116,33 @@ stays unique.
 
 ## Controls
 
-| Action          | Keyboard                         | Touch (portrait)              |
-|-----------------|----------------------------------|-------------------------------|
-| Move            | WASD / arrow keys                | virtual stick (left thumb)    |
-| Sprint          | Shift (hold, uses stamina)       | push stick to the rim         |
-| Bark            | Space / K                        | BARK button                   |
-| Nip             | E / J (also: open a pen gate, start a trial at the post) | NIP button  |
-| Lie down        | Q / L (hold)                     | DOWN button (hold)            |
-| Rest            | lie down on the ranch, no stock near (day passes x12) | same |
-| Build mode      | B (on the ranch)                 | BUILD button                  |
-| Ranch Ledger    | Tab / G                          | LEDGER button                 |
-| Helper command  | H                                | HELP button                   |
-| Pause           | Esc / P                          | pause button                  |
-| Mute            | M                                | sliders to 0 in pause menu    |
-| Volume          | pause menu, left/right           | pause menu, - and +           |
-| Invite a friend | pause menu, INVITE A FRIEND (code + link) | same, SHARE LINK      |
-| Join a friend   | title, JOIN A FRIEND, type the code (or open the link) | same     |
-| Leave a friend's ranch | pause menu, LEAVE ...'S RANCH | same                     |
+| Action          | Keyboard                         | Touch (portrait)              | Game pad                  |
+|-----------------|----------------------------------|-------------------------------|---------------------------|
+| Move            | WASD / arrow keys                | virtual stick (left thumb)    | left stick / d-pad        |
+| Sprint          | Shift (hold, uses stamina)       | push stick to the rim         | RT, LT or RB (hold)       |
+| Bark            | Space / K                        | BARK button                   | A                         |
+| Nip             | E / J (also: open a pen gate, start a trial at the post) | NIP button  | B          |
+| Lie down        | Q / L (hold)                     | DOWN button (hold)            | X (hold)                  |
+| Rest            | lie down on the ranch, no stock near (day passes x12) | same | same               |
+| Build mode      | B (on the ranch)                 | BUILD button                  | LB (on the ranch)         |
+| Ranch Ledger    | Tab / G                          | LEDGER button                 | SELECT                    |
+| Helper command  | H                                | HELP button                   | Y                         |
+| Pause           | Esc / P                          | pause button                  | START                     |
+| Menus           | arrows, Enter, Esc               | tap                           | d-pad / stick, A, B       |
+| Build mode keys | arrows, Q/E pick, R turn, X remove, U upgrade, 1-5 tabs | buttons | stick, LB/RB pick, Y turn or upgrade, X remove, LT/RT tabs, B done |
+| Typing a name   | the keyboard                     | the phone's keyboard          | up/down letter, right add, left delete, A done |
+| Mute            | M                                | sliders to 0 in pause menu    | pause menu                |
+| Volume          | pause menu, left/right           | pause menu, - and +           | pause menu, left/right    |
+| Graphics        | pause menu, GRAPHICS (AUTO / HIGH / MEDIUM / LOW) | same         | same                      |
+| Invite a friend | pause menu, INVITE A FRIEND (code + link) | same, SHARE LINK      | same                      |
+| Join a friend   | title, JOIN A FRIEND, type the code (or open the link) | same     | same (B leaves)           |
+| Leave a friend's ranch | pause menu, LEAVE ...'S RANCH | same                     | same                      |
+| Move a save     | title MOVE A RANCH / pause MOVE THIS RANCH: copy or paste a code, save or load a file | same (share sheet) | same (codes via the browser's box) |
+
+While a pad is in use the prompts read as pad buttons: `src/ui/pad.ts` has
+one table (PROMPTS) of keyboard phrases and what they say on a pad, applied
+to drawn text through a hook in `src/gfx/font.ts`. A new keyboard prompt
+needs a line there.
 
 ## Design laws
 
@@ -155,6 +194,14 @@ stays unique.
   wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
   the model for helper dogs.
+- Platform: `src/input.ts` (keys, touch, and game pads via the Gamepad API),
+  `src/ui/pad.ts` (pad buttons per screen, pad typing, pad prompts),
+  `src/gfx/quality.ts` (GRAPHICS and AUTO), `src/gfx/picture.ts` (cached
+  pictures of procedural art), `src/pwa/` (icon, worker registration),
+  `src/ui/install.ts` (install card), `src/ui/transfer.ts` (moving a save:
+  the code, the file, the checks; mode `transfer`). `src/main.ts` polls the
+  pad, draws a quiet menu or build mode at 30fps and a 120Hz screen at 60,
+  and feeds AUTO each frame's work time.
 - `src/net/` co-op: `protocol.ts` (wire format), `link.ts` (the socket,
   relay URL, lag switch), `host.ts` (hosting: guests' dogs, snapshots),
   `guest.ts` (playing on a friend's ranch), `snapshot.ts` (encode/decode);

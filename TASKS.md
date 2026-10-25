@@ -409,6 +409,88 @@ novice trial with a calm handler scores 99-100 with or without the change.
       150ms each way; tune.mjs before/after; the existing loop tests
 - [ ] BRACE class at the Show Ground for two dogs (optional, not started)
 
+## M22 Platform: an installable app, phone performance, game pads, moving a save
+- [x] Installable (PWA): `manifest.webmanifest` (Come By, plum theme,
+      standalone with full screen preferred, any rotation), icons drawn by
+      the game's own sprite code at build time (`src/pwa/icon.ts`: the heeler
+      and a sheep on a patch of meadow; `scripts/pwa.mjs` runs it under Node
+      with a tiny stand-in canvas and writes PNGs; no image files in the
+      repo), apple-touch-icon and the iOS meta tags
+- [x] Service worker (`sw.js`, generated per build): keeps every file of the
+      build under a cache named for its contents; index.html network first,
+      so a new deploy shows on the next launch; the page asks for a new
+      worker on every launch; anything on another origin (the co-op relay)
+      goes straight to the network
+- [x] "Add to home screen" card on the title, phones only: INSTALL (Chrome's
+      own dialog) or Safari's Share steps on an iPhone; X hides it for good
+- [x] Phone performance, measured first (`scripts/perftest.mjs`, a real
+      tier-5 ranch the pace bot built: `scripts/fixtures/tier5.json`), then
+      the hot spots fixed (table below)
+- [x] GRAPHICS in the pause menu: AUTO (steps down when frames run long and
+      back up when there is time to spare), HIGH, MEDIUM, LOW. Lower levels
+      thin only mood: rain, splashes, butterflies and fireflies, cloud
+      shadows and the wet-ground dither, grass bending in gusts
+- [x] Less work when idle: a quiet menu or build mode draws 30 frames a
+      second, a 120Hz screen draws every other frame; a hidden tab already
+      gets no frames and its sound suspends
+- [x] Game pads (Gamepad API): play, every menu, build mode, the Ledger,
+      the look screen and its name, the co-op screens and the join code;
+      prompts switch to pad buttons while a pad is in use
+      (`scripts/padtest.mjs`, a simulated pad)
+- [x] Moving a save: MOVE A RANCH (title) / MOVE THIS RANCH (pause): copy a
+      save code, save a file (the share sheet on phones), paste a code or
+      load a file; checked before anything is touched, and replacing a ranch
+      asks first with NO picked (`scripts/transfertest.mjs`)
+- [x] Checks: `pwatest` (installable, offline, a new deploy), `installtest`,
+      `padtest`, `transfertest`, `picturetest`; typecheck, build, shot and
+      the existing loop tests including cooptest
+
+Performance: work per frame (update and render, every frame's drawing
+finished), best of 9 batches of 60 stepped frames, seeded, at 390x844@3
+(234x507 internal) in headless Chromium, which draws canvas in software:
+
+| scene | CPU | before | after (HIGH) | after (LOW) |
+|---|---|---|---|---|
+| title (attract mode) | 1x | 2.6 ms | 0.9 ms | |
+| day: tier-5 ranch, clear summer | 1x | 4.0 ms | 1.7 ms | |
+| worst: same ranch, winter storm night, predators, 2 helpers | 1x | 7.1 ms | 4.0 ms | |
+| title | 4x | 11.6 ms | 4.1 ms | 2.7 ms |
+| day | 4x | 17.7 ms | 7.5 ms | 6.1 ms |
+| worst | 4x | 29.5 ms | 10.8 ms | 9.0 ms |
+| title | 6x | 17.2 ms | 6.2 ms | 4.2 ms |
+| day | 6x | 25.1 ms | 12.2 ms | 9.6 ms |
+| worst | 6x | 43.8 ms | 16.7 ms | 13.7 ms |
+
+At 60fps a frame has 16.7 ms. Live (the page's own loop, AUTO): 4x day
+holds 60fps on HIGH; at 6x AUTO steps down to LOW and the worst case runs
+52 fps (from 16 fps before).
+
+Where the time went, and what changed:
+- The copy up to the screen: every frame the 234x507 buffer was drawn at
+  3x onto a 1170x2535 canvas, about 6 ms at 4x. Now the game draws straight
+  into a canvas of its own size and CSS (`image-rendering: pixelated`)
+  scales it by the same whole number on the GPU (`src/gfx/screen.ts`; the
+  old copy stays for browsers without `pixelated`).
+- The night overlay (27% of the worst case): every pixel was tested against
+  every light. Each light's hole is now stamped over its own box only;
+  the output is identical (`src/render/night.ts`, surgical).
+- Buildings, fences and props drawn a pixel at a time, ~5,000 fillRect calls
+  a frame on a built-up ranch: a recorder keeps each one's drawing as a
+  bitmap and redraws it only when the art asks for something different
+  (`src/gfx/picture.ts`, hooked in `src/render/world.ts`); ~4 ms at 6x,
+  pixel for pixel the same (`scripts/picturetest.mjs`).
+- Rain streaks: one rect per straight run instead of per pixel
+  (`src/render/weather.ts`).
+- Not hot after all: grass sway (~500 pixels a frame, under 1%), the herd's
+  neighbour loops (~3%), music scheduling (not in the top 15). Left alone.
+
+PWA checks (`scripts/pwatest.mjs`, against two real builds served by
+`vite preview`): Chrome reports no installability errors; with the server
+switched off after one visit the game starts from the kept build; a new
+deploy's bundle is running after one relaunch, its files are kept and the
+old build's cache is deleted, and it then plays offline too; requests to
+another origin are never answered from the cache.
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1051,3 +1133,39 @@ novice trial with a calm handler scores 99-100 with or without the change.
   same player after its storage read, not before, and says nothing about a
   drop that was already mended. A host who is back before the relay notices
   never shows guests the waiting card; guests just get a fresh world.
+- The screen scale-up moved to CSS (`image-rendering: pixelated`): the
+  canvas is the internal size and its CSS size is a whole multiple of it in
+  device pixels, so it stays crisp and nearest-neighbour; browsers without
+  `pixelated` keep the old drawImage copy.
+- Icons are drawn at build time by the game's own sprite code under Node,
+  with a stand-in canvas that does only fillRect and drawImage (all the
+  sprite code needs), rather than Playwright: the Pages build needs no
+  browser, and the icons match the sprites exactly.
+- The service worker keeps everything the build made and nothing else
+  (the relay is a WebSocket, which workers never see). It skips waiting:
+  the build is one hashed bundle loaded at start, so a page running the old
+  build never asks for an old file after the new worker clears its cache.
+- Performance is measured with stepped, seeded frames and the best of
+  several batches: five sessions share this machine, and live frame rates
+  swung 3x between identical runs. Each stepped frame reads one pixel back,
+  so the new direct-to-screen drawing pays for its raster like the old copy.
+- Quality levels never touch the night, the herd or anything you play with;
+  the dither overlay is gameplay (darkness, lamps). AUTO judges our own work
+  per frame (12 ms budget, 6 ms to step up), not the frame rate, so a
+  30fps power-saving mode does not look like a slow phone.
+- Pad mapping follows the brief (A bark, B nip, X hold lie down, Y helpers,
+  START pause, SELECT Ledger, triggers or RB sprint) plus LB for build mode;
+  in build mode LB/RB pick, LT/RT change tab, X removes, Y upgrades the
+  building under the cursor or turns the one being placed.
+- Pad prompts are one table of keyboard phrases (`src/ui/pad.ts` PROMPTS)
+  applied to drawn text while a pad is in use, through a hook in the font,
+  rather than edits to the fifteen screens that write prompts. A new
+  keyboard prompt needs a line there to read right on a pad.
+- Pad typing (names, the join code): up/down turn the last letter, right
+  adds one, left deletes. B on the join screen leaves it, since that screen
+  takes the keyboard back to its code field every frame.
+- A save code is the save's JSON deflated (CompressionStream) in URL-safe
+  base64 behind `COMEBY1.`; a tier-5 ranch is about 3,100 letters, which
+  is fine to copy and paste but not to type, so a file is offered too.
+  Codes may arrive broken over lines; plain save JSON also loads.
+

@@ -68,6 +68,10 @@ export class NightOverlay {
   private W = 0;
   private H = 0;
   private wisps = tileNoise(16, 911);
+  // Per-pixel scratch, kept between frames: each light's hole is stamped
+  // only over its own box, not tested at every pixel of the screen.
+  private hole = new Float64Array(1);
+  private exs = new Float32Array(1);
 
   constructor() {
     [this.c, this.g] = makeCanvas(1, 1);
@@ -83,6 +87,8 @@ export class NightOverlay {
     this.c.height = H;
     this.img = this.g.createImageData(W, H);
     this.buf = new Uint32Array(this.img.data.buffer);
+    this.hole = new Float64Array(W * H);
+    this.exs = new Float32Array(W);
   }
 
   draw(g: CanvasRenderingContext2D, W: number, H: number, ox: number, oy: number, o: SkyOpts) {
@@ -97,8 +103,27 @@ export class NightOverlay {
     const WT = this.wisps;
     const fx = Math.floor(o.fogX ?? 0);
     const hw = W / 2, hh = H / 2;
-    const exs = new Float32Array(W);
+    const exs = this.exs;
     for (let x = 0; x < W; x++) exs[x] = ((x - hw) / hw) ** 2;
+    const hole = this.hole;
+    if (L.length) {
+      hole.fill(0);
+      for (const l of L) {
+        const ry = l.r / SY, r2 = l.r * l.r;
+        const x0 = Math.max(0, Math.floor(l.x - l.r)), x1 = Math.min(W - 1, Math.ceil(l.x + l.r));
+        const y0 = Math.max(0, Math.floor(l.y - ry)), y1 = Math.min(H - 1, Math.ceil(l.y + ry));
+        for (let y = y0; y <= y1; y++) {
+          const dy = (y - l.y) * SY, dy2 = dy * dy;
+          for (let x = x0, i = y * W + x0; x <= x1; x++, i++) {
+            const dx = x - l.x, d2 = dx * dx + dy2;
+            if (d2 < r2) {
+              const h = Math.min(1, (1 - Math.sqrt(d2) / l.r) * 1.8);
+              if (h > hole[i]) hole[i] = h;
+            }
+          }
+        }
+      }
+    }
     const M = NS - 1; // NS is a power of two: & wraps negatives too
     for (let y = 0; y < H; y++) {
       const by = ((y + oy) & 3) * 4;
@@ -120,16 +145,10 @@ export class NightOverlay {
           f = fog * (0.25 + 0.55 * Math.min(1, exs[x] + ey)) * (0.5 + 0.8 * n);
         }
         if ((dark > 0 || f > 0) && L.length) {
-          let hole = 0;
-          for (let k = 0; k < L.length; k++) {
-            const l = L[k];
-            const dx = x - l.x, dy = (y - l.y) * SY;
-            const d2 = dx * dx + dy * dy;
-            if (d2 < l.r * l.r) hole = Math.max(hole, Math.min(1, (1 - Math.sqrt(d2) / l.r) * 1.8));
-          }
-          if (hole > 0) {
-            dark -= 16 * hole;
-            f *= 1 - hole;
+          const h = hole[i];
+          if (h > 0) {
+            dark -= 16 * h;
+            f *= 1 - h;
           }
         }
         if (dark > 0) level += dark;

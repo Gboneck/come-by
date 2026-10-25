@@ -53,10 +53,11 @@ import type { Drawable } from './art/buildings';
 import type { HostNet } from './net/host';
 import type { GuestNet } from './net/guest';
 import { coopKeys, drawCoop, openCoop } from './ui/coop';
+import { drawTransfer, openTransfer, transferKeys } from './ui/transfer';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop' | 'transfer';
 export type Request = 'new' | 'continue' | 'title' | 'join' | null;
 
 export interface DayStats {
@@ -472,6 +473,12 @@ export class Game {
       this.coopWorld(dt);
       return;
     }
+    if (this.mode === 'transfer') {
+      transferKeys(this);
+      if (this.demo) this.updateDemo(dt);
+      else this.coopWorld(dt);
+      return;
+    }
     if (this.mode === 'summary') {
       this.fx.update(dt);
       // A beat before the card takes input, so a bark held through dusk
@@ -863,8 +870,9 @@ export class Game {
   }
 
   // Title menu choice: fade out, then main.ts swaps in the new game.
-  startGame(act: 'new' | 'continue' | 'join') {
+  startGame(act: 'new' | 'continue' | 'join' | 'move') {
     if (act === 'join') openCoop(this, 'join');
+    else if (act === 'move') openTransfer(this);
     else this.fadeTo(() => (this.request = act));
   }
 
@@ -1076,6 +1084,8 @@ export class Game {
       if (drawLedger(this, g, v.W, v.H)) this.input.push('ledger');
     } else if (this.mode === 'look') {
       drawLook(this, g, v.W, v.H);
+    } else if (this.mode === 'transfer') {
+      drawTransfer(this, g, v.W, v.H);
     }
     drawCoop(this, g, v, 'ui');
     this.feel.drawCover(g, v.W, v.H);
