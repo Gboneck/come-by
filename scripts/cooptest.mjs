@@ -12,7 +12,7 @@ import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 
 const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).split('=').slice(1).join('=');
 const LAG = Number(arg('lag', 150));
@@ -32,6 +32,10 @@ const check = (label, ok, info = '') => {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- The relay ----
+if (!REMOTE && !existsSync(`${root}server/node_modules/.bin/wrangler`)) {
+  console.log('FAIL the relay\'s packages are not installed: run (cd server && npm install) first');
+  process.exit(1);
+}
 const relay = REMOTE ? null : spawn('npx', ['wrangler', 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], { cwd: `${root}server`, stdio: ['ignore', 'pipe', 'pipe'] });
 let relayLog = '';
 relay?.stdout.on('data', (d) => (relayLog += d));
