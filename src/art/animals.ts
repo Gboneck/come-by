@@ -55,8 +55,8 @@ const SHEEP: Grids = {
   ],
   downAlert: ['.wwwww.', 'wwwwwww', 'pwwwwwp', 'wwpppww', '.wpppw.', '.sppps.', '.p...p.'],
   up: [
-    ['..ppp..', '.pwpwp.', 'wwwwwww', 'wwwwwww', 'wwwwwww', '.swwws.', '.p...p.'],
-    ['..ppp..', '.pwpwp.', 'wwwwwww', 'wwwwwww', 'wwwwwww', '.swwws.', '..p.p..'],
+    ['..ppp..', 'pwwpwwp', 'wwwwwww', 'wwwwwww', 'wwwwwww', '.swwws.', '.p...p.'],
+    ['..ppp..', 'pwwpwwp', 'wwwwwww', 'wwwwwww', 'wwwwwww', '.swwws.', '..p.p..'],
   ],
 };
 

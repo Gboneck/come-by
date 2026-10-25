@@ -105,14 +105,14 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
 
 export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: number, night: boolean, sign = false): Drawable[] {
   if (b instanceof Pen) return penDrawables(g, b, t, sign);
-  if (b instanceof Farmhouse) return [farmhouseDrawable(g, b, night)];
+  if (b instanceof Farmhouse) return farmhouseDrawable(g, b, night, t);
   if (b instanceof RegionGate) return regionGateDrawables(g, b, t);
   if (b instanceof Fence) return fenceDrawables(g, b);
   if (b instanceof FieldGate) return fieldGateDrawables(g, b);
-  if (b instanceof Barn) return [barnDrawable(g, b, night)];
-  if (b instanceof Kennel) return [kennelDrawable(g, b)];
-  if (b instanceof Market) return [marketDrawable(g, b)];
-  if (b instanceof Windmill) return [windmillDrawable(g, b, t)];
+  if (b instanceof Barn) return barnDrawable(g, b, night, t);
+  if (b instanceof Kennel) return kennelDrawable(g, b);
+  if (b instanceof Market) return marketDrawable(g, b);
+  if (b instanceof Windmill) return windmillDrawable(g, b, t);
   return [];
 }
 
