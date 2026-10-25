@@ -42,6 +42,7 @@ import { botStep } from './bot';
 import { clamp, damp } from './util';
 import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
+import { Seasons } from './systems/season';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
 import { Trials, closeResult, trialNip } from './systems/trials';
@@ -156,6 +157,7 @@ export class Game {
   trials = new Trials();
   feel = new Feel();
   weather = new Weather();
+  season = new Seasons();
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
@@ -550,6 +552,7 @@ export class Game {
   private stepWorld(dt: number, control: boolean) {
     this.updateRest(dt);
     this.weather.update(dt);
+    this.season.update(dt);
     const dayEv = this.trials.run ? null : this.day.update(dt * this.rest); // the clock waits for a trial run
     if (dayEv === 'dusk') {
       this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);

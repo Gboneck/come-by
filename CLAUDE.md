@@ -18,7 +18,8 @@ original and drawn in code. No external art files, ever.
   Playwright screenshot + console-error check (writes to `shots/`).
 - URL switches: `?debug` exposes `window.game`, `window.sim` and
   `window.resetFlock` (see `src/debug.ts`) and skips the title (add
-  `&title` to keep it), and `&weather=rain|fog|wind|storm` holds a sky;
+  `&title` to keep it), and `&weather=rain|fog|wind|storm` holds a sky
+  (`&season=spring|summer|autumn|winter` a season);
   `?play` skips the title; `?join=CODE` opens JOIN A FRIEND with the
   code (a co-op invite link), `?relay=URL` points co-op at another relay,
   `&lag=150` (`&jitter=40`) holds every co-op message that long each way
@@ -143,7 +144,8 @@ stays unique.
   sound effects), music (generative score), soundscape, synth (sample bank),
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
-  weather state everything else reads: `game.weather`), `discovery.ts`
+  weather state everything else reads: `game.weather`), `season.ts` (the
+  season state everything else reads: `game.season`), `discovery.ts`
   (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
