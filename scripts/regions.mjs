@@ -1,5 +1,5 @@
 // Screenshot each region at real scale (tier 5, its herd grazing nearby):
-//   node scripts/regions.mjs [--out=shots/regions] [--only=ford,ranch] [--night] [--dusk] [--t=seconds]
+//   node scripts/regions.mjs [--out=shots/regions] [--only=ford,ranch] [--night] [--dusk] [--t=seconds] [--tier=5]
 // Writes <out>/<spot>.png at 1280x720 (3x pixels) for every spot.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
@@ -26,7 +26,8 @@ const SPOTS = [
   { name: 'yard', x: 800, y: 860, herd: ['sheep', 900, 850, 6], yard: true },
 ];
 
-const server = await createServer({ server: { port: 5197, strictPort: true }, logLevel: 'error' });
+const PORT = Number(process.env.SHOT_PORT || 5197);
+const server = await createServer({ server: { port: PORT, strictPort: true }, logLevel: 'error' });
 await server.listen();
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch();
@@ -34,13 +35,13 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(e.message));
-await page.goto('http://localhost:5197/?debug');
+await page.goto(`http://localhost:${PORT}/?debug`);
 await page.waitForFunction(() => window.game);
 for (const s of SPOTS) {
   if (only && !only.includes(s.name)) continue;
-  await page.evaluate(({ s, night, dusk, t }) => {
+  await page.evaluate(({ s, night, dusk, t, tier }) => {
     const g = window.game;
-    g.setTier(5);
+    g.setTier(tier);
     g.tut = 99;
     g.tipsSeen = new Set(['hills', 'rocky', 'ford', 'high', 'night']);
     g.banner = null;
@@ -51,7 +52,7 @@ for (const s of SPOTS) {
     g.day.phase = 'day';
     g.day.t = t;
     if (dusk) { g.day.t = 290; g.day.phase = 'dusk'; }
-    if (night) g.day.startNight();
+    if (night) { g.day.startNight(); g.quietT = -1e9; g.banner = null; }
     g.spawnFlock(...s.herd);
     if (s.yard && !g.yardBuilt) {
       g.yardBuilt = true;
@@ -74,9 +75,9 @@ for (const s of SPOTS) {
     g.dog.y = s.y + 20;
     g.cam.x = s.x;
     g.cam.y = s.y;
-  }, { s, night: flag('night'), dusk: flag('dusk'), t: Number(opt('t', '60')) });
+  }, { s, night: flag('night'), dusk: flag('dusk'), t: Number(opt('t', '60')), tier: Number(opt('tier', '5')) });
   await page.waitForTimeout(Number(opt('wait', '700')));
-  await page.evaluate(({ x, y }) => { window.game.cam.x = x; window.game.cam.y = y; }, s);
+  await page.evaluate(({ x, y }) => { const g = window.game; g.cam.x = x; g.cam.y = y; g.banner = null; }, s);
   await page.waitForTimeout(60);
   const file = `${out}/${s.name}.png`;
   await page.screenshot({ path: file });

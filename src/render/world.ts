@@ -6,7 +6,8 @@ import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
 import { Barn, FieldGate, Fence, Kennel, Market, Windmill } from '../ranch/structures';
 import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
 import type { Light } from './night';
-import { DECOR, decorDrawable, decorLights } from '../ranch/decor';
+import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
+import { skyDarkness, skySlope } from './sky';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
@@ -20,7 +21,7 @@ export interface View {
 
 export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   const { ox, oy, W, H } = v;
-  const night = game.day.darkness() > 0.3;
+  const night = skyDarkness(game.day) > 0.3;
   g.drawImage(game.baked.ground, ox, oy, W, H, 0, 0, W, H);
   drawWater(g, game.baked.water, ox, oy, W, H, game.t);
 
@@ -80,19 +81,21 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   game.fx.drawHigh(g);
   g.restore();
 
-  // Dusk and night.
-  const dark = game.day.darkness();
+  // Dawn, dusk and night. Lamps and lanterns flicker a little.
+  const dark = skyDarkness(game.day);
   if (dark > 0) {
+    const fl = (i: number) => Math.sin(game.t * 7.3 + i * 2.1) * 0.8 + Math.sin(game.t * 13.1 + i) * 0.6;
     const lights: Light[] = [{ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 }];
     for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
     const f = game.ranch.farmhouse;
-    if (f) lights.push({ x: f.cx - ox, y: f.y1 - 6 - oy, r: 64 });
-    for (const l of decorLights(game.tier)) lights.push({ x: l.x - ox, y: l.y - oy, r: l.r });
-    for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 - oy, r: 64 });
-    game.night.draw(g, W, H, ox, oy, dark, lights);
-    // Eyes in the dark.
+    if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
+    decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1) }));
+    for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
+    game.night.draw(g, W, H, ox, oy, dark, lights, skySlope(game.day));
+    // Above the dark: lamp glow, eyes, fireflies.
     g.save();
     g.translate(-ox, -oy);
+    if (dark > 0.2) drawLampGlow(g, game.tier, game.t);
     for (const p of game.predators) if (inView(p.x, p.y)) p.drawEyes(g, game.t);
     game.life.drawGlow(g);
     g.restore();

@@ -21,7 +21,7 @@ const steps = args
     return { kind: a.slice(2, i), val: a.slice(i + 1) };
   });
 
-const PORT = 5199;
+const PORT = Number(process.env.SHOT_PORT || 5199);
 let server = null;
 async function ensureServer() {
   try {

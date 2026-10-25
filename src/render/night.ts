@@ -9,7 +9,9 @@ export interface Light {
 }
 
 // Dusk and night: an ordered dither of plum pixels anchored to the world so
-// it does not crawl as the camera moves. Lights cut soft-edged holes.
+// it does not crawl as the camera moves. Lights cut soft-edged holes, a
+// little wider than tall because the ground is seen at a slant. `slope`
+// darkens one side of the screen (dawn and dusk come from one side).
 export class NightOverlay {
   private c: HTMLCanvasElement;
   private g: CanvasRenderingContext2D;
@@ -34,19 +36,20 @@ export class NightOverlay {
     this.buf = new Uint32Array(this.img.data.buffer);
   }
 
-  draw(g: CanvasRenderingContext2D, W: number, H: number, ox: number, oy: number, darkness: number, lights: Light[]) {
+  draw(g: CanvasRenderingContext2D, W: number, H: number, ox: number, oy: number, darkness: number, lights: Light[], slope = 0) {
     if (darkness < 1 / 16) return;
     this.ensure(W, H);
     const buf = this.buf, plum = U32.plum;
     const base = darkness * 16;
     const L = lights.filter((l) => l.x + l.r > 0 && l.x - l.r < W && l.y + l.r > 0 && l.y - l.r < H);
+    const SY = 1 / 0.78;
     for (let y = 0; y < H; y++) {
       const by = ((y + oy) & 3) * 4;
       for (let x = 0; x < W; x++) {
-        let level = base;
+        let level = base * (1 + slope * (0.5 - x / W) * 2);
         for (let i = 0; i < L.length; i++) {
           const l = L[i];
-          const dx = x - l.x, dy = y - l.y;
+          const dx = x - l.x, dy = (y - l.y) * SY;
           const d2 = dx * dx + dy * dy;
           if (d2 < l.r * l.r) {
             const k = 1 - Math.sqrt(d2) / l.r;

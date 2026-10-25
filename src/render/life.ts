@@ -5,6 +5,7 @@ import { critterSprites } from '../art/critters';
 import { chimneyTop } from '../art/buildings';
 import { hash2 } from '../rng';
 import { drift } from './wind';
+import { skyDarkness } from './sky';
 import { SHALLOW, TS, Ter, WORLD_H, WORLD_W, type SpeciesId } from '../world/map';
 import type { Game } from '../game';
 
@@ -63,7 +64,7 @@ export class Life {
   update(game: Game, dt: number) {
     this.t += dt;
     const v = game.view();
-    const dark = game.day.darkness();
+    const dark = skyDarkness(game.day);
     const night = game.day.phase === 'night';
     this.updateFlies(game, dt, v, dark, night);
     this.updateBirds(dt, v, dark);

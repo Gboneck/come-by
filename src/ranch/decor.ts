@@ -105,7 +105,22 @@ function drawDecor(g: CanvasRenderingContext2D, kind: DecorKind, x: number, y: n
   }
 }
 
-// Night light from decor (lanterns) in world pixels.
+// Night light from decor (lanterns) in world pixels: a pool on the ground
+// round the lantern's foot.
 export function decorLights(tier: number): { x: number; y: number; r: number }[] {
-  return DECOR.filter((d) => d.kind === 'lantern' && d.tier <= tier).map((d) => ({ x: d.x * TS + 4, y: d.y * TS - 6, r: 34 }));
+  return DECOR.filter((d) => d.kind === 'lantern' && d.tier <= tier).map((d) => ({ x: d.x * TS + 4, y: d.y * TS + 2, r: 36 }));
+}
+
+// The lit lanterns' own glow, drawn above the dark.
+export function drawLampGlow(g: CanvasRenderingContext2D, tier: number, t: number) {
+  for (const d of DECOR) {
+    if (d.kind !== 'lantern' || d.tier > tier) continue;
+    const x = d.x * TS + 4, y = d.y * TS + 6 - 12;
+    rect(g, x - 1, y - 1, 3, 3, C.butter);
+    if (Math.sin(t * 9 + d.x) > -0.6) {
+      px(g, x, y - 3, C.butter);
+      px(g, x - 3, y, C.butter);
+      px(g, x + 3, y, C.butter);
+    }
+  }
 }
