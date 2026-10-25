@@ -6,7 +6,7 @@ import type { View } from '../render/world';
 import { HostNet } from '../net/host';
 import { GuestNet, joining } from '../net/guest';
 import { dimView } from './feel';
-import { focusField, stopTyping, textField, typingId } from './textfield';
+import { focusField, stopTyping, takeEscape, textField, typingId } from './textfield';
 import { safeArea } from './safe';
 import { edgeArrow } from './hud';
 import { touchLayout } from './touch';
@@ -95,7 +95,9 @@ export function coopKeys(game: Game) {
     return;
   }
   if (typingId()) return;
-  if (inp.pressed('cancel') || inp.pressed('pause')) closeCoop(game);
+  // Esc in the code field: the field let go, and the screen goes too (it
+  // would only take the focus straight back).
+  if (takeEscape() || inp.pressed('cancel') || inp.pressed('pause')) closeCoop(game);
   else if (inp.pressed('confirm')) {
     if (ui.view === 'join') {
       if (!joining || joining.ended) startJoin();

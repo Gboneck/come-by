@@ -63,6 +63,7 @@ function ensure(): HTMLInputElement {
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === 'Escape') {
       e.preventDefault();
+      if (e.key === 'Escape') escaped = true;
       el?.blur();
     }
     e.stopPropagation();
@@ -75,10 +76,20 @@ function ensure(): HTMLInputElement {
   return el;
 }
 
+// Esc while typing leaves the field; a screen that focuses its field by
+// itself takes this to know the player meant to leave the screen too.
+let escaped = false;
+export function takeEscape() {
+  const e = escaped;
+  escaped = false;
+  return e;
+}
+
 // Start typing in a field (taps call this from the event; keys from the game).
 export function focusField(id: string) {
   const f = fields.get(id);
   if (!f) return;
+  escaped = false;
   const input = ensure();
   active = f;
   input.maxLength = f.max;
