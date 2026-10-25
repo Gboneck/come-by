@@ -27,7 +27,11 @@ import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
 import { Helper, HELPER_COSTS, HELPER_NAMES, type HelperMode } from './entities/helper';
 import { CALLS, type Sound } from './systems/audio';
-import { saveGame } from './systems/save';
+import { saveGame, saveInfo } from './systems/save';
+import { applyLook, defaultLook, readLook, type Look } from './ui/look';
+import { drawLook, lookKeys, type LookFrom } from './ui/lookui';
+import { decorDrawables, type PlacedDecor } from './ui/decorbuild';
+import { stopTyping } from './ui/textfield';
 import { drawPause, drawTitle, pauseKeys, titleKeys, type MenuState } from './ui/title';
 import { Feel } from './ui/feel';
 import { buzz } from './ui/settings';
@@ -44,7 +48,7 @@ import type { Drawable } from './art/buildings';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look';
 export type Request = 'new' | 'continue' | 'title' | null;
 
 export interface DayStats {
@@ -128,6 +132,12 @@ export class Game {
   won = false;
   predators: Predator[] = [];
   private quietT = 0;
+  // The player's choices (dog and ranch looks) and the decor they placed.
+  look: Look = defaultLook();
+  decor: PlacedDecor[] = [];
+  lookFrom: LookFrom = 'pause';
+  lookSel = 0;
+  private lookBack: Mode = 'play';
   tut = 0; // tutorial step
   tutT = 0;
   private tierCheckT = 0;
@@ -143,6 +153,9 @@ export class Game {
 
   constructor(public screen: Screen, public input: Input, opts: { demo?: boolean; audio?: Sound | null } = {}) {
     this.demo = !!opts.demo;
+    // Behind the title, the saved dog does the herding.
+    if (this.demo) this.look = readLook(saveInfo()?.look);
+    applyLook(this.look);
     this.audio = opts.audio ?? null;
     this.g = screen.g;
     this.ui = new UI(input);
@@ -408,6 +421,10 @@ export class Game {
     }
     if (this.mode === 'pause') {
       pauseKeys(this);
+      return;
+    }
+    if (this.mode === 'look') {
+      lookKeys(this);
       return;
     }
     if (this.mode === 'summary') {
@@ -751,6 +768,24 @@ export class Game {
     }
   }
 
+  // The dog's look screen: at a new game, from the kennel, from the pause menu.
+  openLook(from: LookFrom) {
+    this.lookFrom = from;
+    if (this.mode !== 'look') this.lookBack = this.mode;
+    this.mode = 'look';
+    this.lookSel = 0;
+    this.input.clearQueue();
+  }
+
+  closeLook() {
+    stopTyping();
+    if (!this.look.name.trim()) this.look.name = defaultLook().name;
+    applyLook(this.look);
+    this.mode = this.lookFrom === 'new' ? 'play' : this.lookBack;
+    this.input.clearQueue();
+    saveGame(this);
+  }
+
   // Title menu choice: fade out, then main.ts swaps in the new game.
   startGame(act: 'new' | 'continue') {
     this.fadeTo(() => (this.request = act));
@@ -914,7 +949,7 @@ export class Game {
 
   // Trial course, buyers' yards and carts, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return courseDrawables(this, g);
+    return [...courseDrawables(this, g), ...decorDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.
@@ -958,6 +993,8 @@ export class Game {
       if (this.build.drawUI(this, g, v.W, v.H) === 'exit') this.input.push('cancel');
     } else if (this.mode === 'ledger') {
       if (drawLedger(this, g, v.W, v.H)) this.input.push('ledger');
+    } else if (this.mode === 'look') {
+      drawLook(this, g, v.W, v.H);
     }
     this.feel.drawCover(g, v.W, v.H);
   }

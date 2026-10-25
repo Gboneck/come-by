@@ -146,7 +146,7 @@ function drawResult(game: Game, g: CanvasRenderingContext2D, W: number, H: numbe
   rows.push({ k: 'TOTAL', v: `${r.total}`, c: C.butter, gap: true, total: true });
   if (r.prize && !r.retired) {
     const table = [...r.rivals, { name: 'YOU', score: r.total }].sort((a, b) => b.score - a.score || (a.name === 'YOU' ? -1 : 1));
-    table.forEach((e, i) => rows.push({ k: `${ORD[i]}  ${e.name}`, v: `${e.score}`, c: e.name === 'YOU' ? C.butter : C.sage, gap: i === 0 }));
+    table.forEach((e, i) => rows.push({ k: `${ORD[i]}  ${e.name === 'YOU' ? `YOU + ${game.look.name}` : e.name}`, v: `${e.score}`, c: e.name === 'YOU' ? C.butter : C.sage, gap: i === 0 }));
     if (r.coins) {
       rows.push({ k: `${ORD[r.place - 1]} PLACE!`, c: C.butter, gap: true, big: true, place: true });
       rows.push({ k: `+${r.coins}$ AND A RIBBON`, c: C.butter });

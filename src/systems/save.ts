@@ -10,6 +10,8 @@ import { newTotals, type Totals } from './progression';
 import type { UpKey } from './economy';
 import { morningOrders, type Order } from './orders';
 import type { ClassId } from './trials';
+import { applyLook, readLook, type Look } from '../ui/look';
+import { PIECES, type PlacedDecor } from '../ui/decorbuild';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
 // goods waiting in the pens, upgrades and the lifetime record.
@@ -35,6 +37,9 @@ interface SaveData {
   orders?: Order[];
   nextOrder?: number;
   trials?: { won: ClassId[]; cups: number; last: number };
+  // Added with customization; older saves get the defaults.
+  look?: Partial<Look>;
+  decor?: PlacedDecor[];
 }
 
 function store(): Storage | null {
@@ -76,6 +81,8 @@ export function saveGame(game: Game) {
     orders: game.orders.list,
     nextOrder: game.orders.nextId,
     trials: { won: game.trials.won, cups: game.trials.cups, last: game.trials.lastPrizeDay },
+    look: game.look,
+    decor: game.decor,
   };
   try {
     store()?.setItem(KEY, JSON.stringify(data));
@@ -93,9 +100,9 @@ function read(): SaveData | null {
   }
 }
 
-export function saveInfo(): { day: number; tier: number } | null {
+export function saveInfo(): { day: number; tier: number; look?: Partial<Look> } | null {
   const d = read();
-  return d ? { day: d.day, tier: d.tier } : null;
+  return d ? { day: d.day, tier: d.tier, look: d.look } : null;
 }
 
 export function clearSave() {
@@ -154,6 +161,9 @@ export function loadInto(game: Game): boolean {
     game.trials.cups = d.trials.cups;
     game.trials.lastPrizeDay = d.trials.last;
   }
+  game.look = readLook(d.look);
+  applyLook(game.look);
+  game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
   game.ranch.restamp();
   const door = game.doorPoint();

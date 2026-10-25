@@ -267,10 +267,12 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const b = game.banner;
     const age = b.max - b.t;
     const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
-    const sc = textWidth(b.big, 2) <= W - 8 ? 2 : 1;
+    // The shepherd's call names the dog.
+    const big = b.big === "THAT'LL DO!" ? `THAT'LL DO, ${game.look.name}!` : b.big;
+    const sc = textWidth(big, 2) <= W - 8 ? 2 : 1;
     // Big moments land with a stamp: one size up for a few frames.
-    const stamp = b.big.endsWith('!') && age < 0.09 && textWidth(b.big, sc + 1) <= W - 8 ? 1 : 0;
-    text(g, b.big, W / 2, y - stamp * 3, C.butter, { align: 'center', scale: sc + stamp, shadow: C.plum });
+    const stamp = big.endsWith('!') && age < 0.09 && textWidth(big, sc + 1) <= W - 8 ? 1 : 0;
+    text(g, big, W / 2, y - stamp * 3, C.butter, { align: 'center', scale: sc + stamp, shadow: C.plum });
     if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, y + 7 * sc + 4 + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
   }
 }

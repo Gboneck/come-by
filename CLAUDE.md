@@ -116,7 +116,9 @@ stays unique.
 
 - `src/main.ts` boot + loop; `src/game.ts` state machine and orchestration.
 - `src/gfx/` screen scaling, sprites, font, pixel primitives.
-- `src/art/` sprite grids and procedural art (trees, rocks, buildings).
+- `src/art/` sprite grids and procedural art (trees, rocks, buildings);
+  the player's choices: `dogstyle.ts` (markings, neck piece),
+  `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
 - `src/world/` tile map, regions, terrain/canopy baking.
 - `src/entities/` dog, animals + species, predators, helpers.
 - `src/ranch/` buildings, pens, gates, build mode.
@@ -125,7 +127,9 @@ stays unique.
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
   weather state everything else reads: `game.weather`).
-- `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause.
+- `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
+  `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
+  pieces, `textfield.ts` typed names.
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
   wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.

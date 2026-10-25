@@ -1,4 +1,5 @@
 import { C } from '../palette';
+import { ROOFS, TRIMS, farmLook } from './ranchstyle';
 import { line, rect, px } from '../gfx/draw';
 import { text } from '../gfx/font';
 import { hash2 } from '../rng';
@@ -235,15 +236,15 @@ function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top: numbe
 
 // A window with a plum frame, mullions, sage shutters and a glint on the
 // glass by day; lit buttercup at night.
-function windowAt(g: CanvasRenderingContext2D, wx: number, wy: number, night: boolean, w = 5, h = 3, shutters = true) {
+function windowAt(g: CanvasRenderingContext2D, wx: number, wy: number, night: boolean, w = 5, h = 3, shutters = true, trim: string = C.sage) {
   rect(g, wx - 1, wy - 1, w + 2, h + 2, C.plum);
   rect(g, wx, wy, w, h, night ? C.butter : C.teal);
   rect(g, wx + (w >> 1), wy, 1, h, C.plum);
   if (h >= 3) rect(g, wx, wy + 1, w, 1, C.plum);
   if (!night) px(g, wx + w - 1, wy, C.wool);
   if (shutters) {
-    rect(g, wx - 2, wy - 1, 1, h + 2, C.sage);
-    rect(g, wx + w + 1, wy - 1, 1, h + 2, C.sage);
+    rect(g, wx - 2, wy - 1, 1, h + 2, trim);
+    rect(g, wx + w + 1, wy - 1, 1, h + 2, trim);
   }
 }
 
@@ -296,8 +297,9 @@ function drawFarmhouse(g: CanvasRenderingContext2D, b: Building, night: boolean,
   if (two) for (let x = x0 + 1; x < x1 - 1; x += 3) px(g, x, y1 - 1, C.plum);
   if (two) rect(g, x0 + 1, eave + 9, w - 2, 1, C.sage); // floor line
 
-  // Roof and chimneys.
-  hipRoof(g, x0 - 2, x1 + 2, roofTop, eave, two ? 7 : 5);
+  // Roof and chimneys (the roof and trim are the player's choice).
+  const roof = ROOFS[farmLook.roof], trim = TRIMS[farmLook.trim].color;
+  hipRoof(g, x0 - 2, x1 + 2, roofTop, eave, two ? 7 : 5, roof.base, roof.course);
   chimney(g, x1 - 12, roofTop - 5, 8);
   if (lvl >= 5) chimney(g, x0 + 7, roofTop - 4, 7);
   // Dormers on the bigger house.
@@ -321,7 +323,7 @@ function drawFarmhouse(g: CanvasRenderingContext2D, b: Building, night: boolean,
 
   // Door, its frame and step.
   const doorX = x0 + Math.floor(w / 2) - 3;
-  rect(g, doorX - 1, y1 - 10, 8, 10, C.sage);
+  rect(g, doorX - 1, y1 - 10, 8, 10, trim);
   rect(g, doorX, y1 - 9, 6, 9, C.plum);
   rect(g, doorX + 2, y1 - 8, 1, 7, C.teal);
   px(g, doorX + 4, y1 - 5, C.butter);
@@ -336,8 +338,8 @@ function drawFarmhouse(g: CanvasRenderingContext2D, b: Building, night: boolean,
   // Windows.
   const wy = y1 - 8;
   const lower = two ? [x0 + 5, x0 + 17, x1 - 22, x1 - 10] : [x0 + 5, x1 - 10];
-  for (const wx of lower) windowAt(g, wx, wy, night);
-  if (two) for (const wx of [x0 + 6, x0 + 18, x1 - 21, x1 - 9]) windowAt(g, wx, eave + 3, night, 4, 3);
+  for (const wx of lower) windowAt(g, wx, wy, night, 5, 3, true, trim);
+  if (two) for (const wx of [x0 + 6, x0 + 18, x1 - 21, x1 - 9]) windowAt(g, wx, eave + 3, night, 4, 3, true, trim);
   // Flower boxes.
   if (lvl >= 2) {
     for (const wx of lower) {

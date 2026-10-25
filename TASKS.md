@@ -177,6 +177,22 @@ Round two:
       desktop; UI friction fixed, pacing reported to the gameplay side
 - [x] Typecheck, build, shot, uitour, commit
 
+## M14 Customization
+- [x] The dog: a name (typed with the device's own keyboard, or a dice of
+      cozy names), coat flecks, face mask, saddle patch, tail tip, and a
+      bandana, neckerchief or collar, always in Bandana red
+- [x] The ranch: a name for the sign ("COME BY WILLOW CREEK"), the
+      farmhouse roof (slate, teal, moss, thatch) and trim
+- [x] Decor in a DECOR tab: flower bed, hay bale, dog bed, bench, signpost,
+      birdbath, scarecrow, ribbon board, trophy; opened by tier, the kennel
+      and trial ribbons and wins
+- [x] Offered at a new game (MEET YOUR HEELER), at the kennel (DOG tab),
+      in the pause menu, and in build mode (DECOR and RANCH tabs)
+- [x] The name in "THAT'LL DO, BLUE!", the kennel and the trial table; the
+      title screen shows your own dog
+- [x] Saved additively; old saves load with the defaults (`savetest.mjs`)
+- [x] Typecheck, build, shot, uitour, commit
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -567,3 +583,23 @@ Round two:
   rather than sprites in `src/art/`.
 - Build mode opens with the building a "BUILD A ..." goal asks for already
   picked, and its slot blinks in the bar.
+- Customization. The dog's markings are rewrites of the pose grids (in
+  `src/art/dogstyle.ts`; `makeDogSprites` takes the look), so every frame
+  of the trot, gallop, bark and lie picks them up: few or heavy flecks,
+  one eye patch or a pale face, a plum saddle, a wool tail tip. The neck
+  piece is always red: a collar is the one-pixel band, a neckerchief adds
+  a point at the chest (a knot at the nape from behind).
+- The farmhouse paint is read by the farmhouse drawing from
+  `src/art/ranchstyle.ts`; the ranch name replaces the tier name on the
+  sign by the road, so it reads "COME BY <NAME>". Left empty, the sign
+  names the tier as before.
+- Names are typed with the device's own keyboard through a hidden input
+  (`src/ui/textfield.ts`), focused from inside the tap so phones show it;
+  game keys are ignored while it has focus. Upper case, the font's letters
+  only, 10 for the dog and 12 for the ranch.
+- Decor is for looks only: it never blocks the stock or the dog, so it
+  cannot spoil a drive or trap a flock. It cannot overlap buildings, other
+  decor or the ranch's own touches; building over it clears it and gives
+  the money back, and picking it up refunds it in full.
+- A new game opens the dog's look screen before day one; Esc or LET'S GO
+  takes it as it is.

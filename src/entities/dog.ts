@@ -1,7 +1,8 @@
 import { C } from '../palette';
 import { ellipse } from '../gfx/draw';
 import { drawSpr, type Sprite } from '../gfx/sprite';
-import { makeDogSprites, RUN_BOB, SPRINT_BOB, type DogPoses, type DogSprites } from '../art/dog';
+import { RUN_BOB, SPRINT_BOB, type DogPoses } from '../art/dog';
+import { playerDogSprites } from '../art/dogstyle';
 import { fxSprites } from '../art/fx';
 import type { Input } from '../input';
 import { BLOCK_DOG, SHALLOW, type WorldMap } from '../world/map';
@@ -22,7 +23,6 @@ export const BASE_STATS: DogStats = { walk: 46, sprint: 80, stamina: 100, barkRa
 export type Facing = 'r' | 'l' | 'u' | 'd';
 export type DogEvent = 'bark' | 'nip';
 
-let SPRITES: DogSprites | null = null;
 
 const SETTLE_STEP = 0.07; // seconds per in-between pose when lying down
 const GET_UP = 0.12;
@@ -60,7 +60,6 @@ export class Dog {
   constructor(x: number, y: number) {
     this.x = x;
     this.y = y;
-    SPRITES ??= makeDogSprites('r');
   }
 
   get speed() {
@@ -205,7 +204,7 @@ export class Dog {
   }
 
   private poses(): DogPoses {
-    const P = SPRITES!.poses;
+    const P = playerDogSprites().poses; // dressed in the player's look
     return this.face === 'd' ? P.down : this.face === 'u' ? P.up : P.side;
   }
 

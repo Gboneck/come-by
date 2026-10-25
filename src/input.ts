@@ -1,4 +1,5 @@
 import type { Screen } from './gfx/screen';
+import { isTyping } from './ui/textfield';
 
 export type Action =
   | 'bark'
@@ -22,6 +23,8 @@ export type Action =
   | 'tab1'
   | 'tab2'
   | 'tab3'
+  | 'tab4'
+  | 'tab5'
   | 'any';
 
 const KEYMAP: Record<string, Action[]> = {
@@ -51,6 +54,8 @@ const KEYMAP: Record<string, Action[]> = {
   Digit1: ['tab1'],
   Digit2: ['tab2'],
   Digit3: ['tab3'],
+  Digit4: ['tab4'],
+  Digit5: ['tab5'],
   KeyW: ['up'],
   ArrowUp: ['up'],
   KeyS: ['down'],
@@ -115,6 +120,11 @@ export class Input {
 
   private onKey(e: KeyboardEvent, down: boolean) {
     if (e.metaKey || e.ctrlKey) return;
+    // A name is being typed: the keys are letters, not commands.
+    if (isTyping()) {
+      this.keys.clear();
+      return;
+    }
     const code = e.code;
     if (down) {
       if (!e.repeat) {

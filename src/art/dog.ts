@@ -1,4 +1,5 @@
 import { spr, type Sprite } from '../gfx/sprite';
+import { dressRows, type DogFacing, type DogLook } from './dogstyle';
 
 // Blue heeler: teal coat flecked with wool, plum mask and ear tips, and the
 // red bandana that marks the player. `y` (buttercup) swaps in for helpers.
@@ -310,8 +311,10 @@ function recolor(rows: string[], bandana: string): string[] {
   return bandana === 'r' ? rows : rows.map((r) => r.replace(/r/g, bandana));
 }
 
-export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
-  const S = (rows: string[], ax: number, ay: number) => spr(recolor(rows, bandana), ax, ay);
+// `look` dresses the player's dog (markings, neck piece; see dogstyle.ts).
+export function makeDogSprites(bandana: 'r' | 'y' = 'r', look?: DogLook): DogSprites {
+  let facing: DogFacing = 'side';
+  const S = (rows: string[], ax: number, ay: number) => spr(recolor(look ? dressRows(rows, facing, look) : rows, bandana), ax, ay);
   const side: DogPoses = {
     stand: S(SIDE_STAND, 6, 7),
     run: SIDE_RUN.map((f) => S(f, 6, 7)),
@@ -323,6 +326,7 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
     lieBreath: S(SIDE_LIE_BREATH, 6, 7),
     lieWag: S(SIDE_LIE_WAG, 6, 7),
   };
+  facing = 'down';
   const down: DogPoses = {
     stand: S(DOWN_STAND, 3, 8),
     run: DOWN_RUN.map((f) => S(f, 3, 8)),
@@ -334,6 +338,7 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
     lieBreath: S(DOWN_LIE_BREATH, 3, 8),
     lieWag: S(DOWN_LIE_WAG, 3, 8),
   };
+  facing = 'up';
   const up: DogPoses = {
     stand: S(UP_STAND, 3, 9),
     run: UP_RUN.map((f) => S(f, 3, 9)),
