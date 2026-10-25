@@ -147,6 +147,13 @@
 - [x] `scripts/audiotest.mjs`: offline renders with levels, peaks, tuning, music-theory checks, layer balance and CPU
 - [x] Typecheck, build, shot, commit
 
+Round two:
+- [x] Show Ground: a pipe-band march for trial runs, the judge's whistle at the start and finish, a cue for each gate cleared, a sour note for a bolt or a grip, applause scaled by score and placing
+- [x] Orders: a "sold" stinger and the buyer's cart rolling off; a sigh for an order missed
+- [x] Resting: a music-box lullaby while the day flies by, birdsong quicker; all back on the next note when the dog gets up
+- [x] Weather: rain and wind from `game.weather`, thunder in storms (published as `game.audio.lightning` for a flash), fog muffles far sounds and adds a damp reverb, the music shades with the sky
+- [x] audiotest: trial, lullaby, orders, weather, sfx levels, sky, live round-two checks
+
 ## M12 Day one pacing (from playtesting the merged branch)
 - [x] Resting: lie down on the ranch with no loose stock near and the day
       (and the pens' goods) runs up to x12; getting up ends it at once
@@ -503,6 +510,36 @@
   on time. No resting at night, during a trial run or under the bot.
   Measured: from 08:00 a rest reaches the end of day one in ~20s, with
   47$ in hand.
+- Sound, round two. The trial theme is a pipe-band march: A mixolydian
+  (the chanter's scale) in 4/4 at 96, the whistle as chanter over a full
+  drone, harp on the beats, bass drum and side drum always on. It plays
+  from the judge's whistle to the closed result card. The trial code
+  already whistles when a run starts, so the audio steps in there: the
+  judge's pea whistle first, then the handler's. Each gate or post judged
+  with points gets a rising cue (fuller when the whole flock went
+  through); the trial's own coin and deny sounds stay underneath (coin
+  pitches sit in A mixolydian). Bolts and grips get a sour, sagging
+  semitone, at most one a second. All in the pen: the judge's double
+  whistle. The crowd claps by score: a few polite claps, warm applause, or
+  applause and whistles for a win or 85 points and up.
+- Orders: filled gets the "sold" stinger after the gate and the whistle,
+  and the buyer's cart (wheels, axle, hooves, fading) when the stock is led
+  away; missed gets a sigh down to the tonic; partly filled a harp roll.
+- Resting (game.rest above 1.3) plays a music-box lullaby in G 6/8 at 40,
+  sometimes the main theme, harp rocking on every beat. Birdsong and
+  crickets run up to three times faster. Getting up switches back on the
+  next eighth note.
+- Weather: wind strength scales each region's windiness (clear skies are
+  a little calmer than before); rain comes from the sky or the old hook,
+  whichever is wetter. Storm: a strike every 7-21 s, mostly far off; the
+  thunder follows the (unseen) flash by up to 5 s, near ones crack first
+  and are brighter. `game.audio.lightning = { at, near }` is there for a
+  flash. Fog closes a filter on the ambience, muffles positional sounds by
+  distance and sends them to a small three-line reverb built only when fog
+  first comes. The music: rain and fog darken the pad, slow the tempo a
+  few percent and favour phrases that open on a minor chord (twice as often
+  in rain); fog hushes the tune and wets the reverb; wind lifts the drone; a
+  storm adds a little tension.
 - Weather is drawn render-side only (`src/render/weather.ts`, reading
   `game.weather`). The one dither pass in `render/night.ts` now carries the
   night, a storm's darker sky, fog and lightning. Rain does not dim the

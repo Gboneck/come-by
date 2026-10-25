@@ -12,6 +12,7 @@ import { FORD_Y0, FORD_Y1, RIVER_SPRING_Y, TS, riverX } from '../world/map';
 import { Bank } from './synth';
 import { Music, type MusicState, type PieceId, type StingerKind } from './music';
 import { Ambience, type AmbState, type HerdVoice } from './soundscape';
+import { PARTS, type Run, type TrialResult } from './trials';
 
 type Wave = OscillatorType;
 export type VolumeAction = `${'music' | 'sound'}${'-' | '+' | '~'}`;
@@ -47,13 +48,30 @@ export class Sound {
   private game: Game | null = null;
   private region = 'ranch';
   private scanT = 0;
-  private amb: AmbState = { region: 'ranch', phase: 'day', wind: 0.35, river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0 };
+  private amb: AmbState = { region: 'ranch', phase: 'day', wind: 0.35, river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, storm: 0, speed: 1 };
   private pumpAt = 0;
   private stepPh = 0;
   private stepI = 0;
   private lastMode = '';
   private lastSel = -1;
   private gates = new WeakMap<object, number>();
+  // Trials and orders, watched for what changed since the last frame.
+  private run: Run | null = null;
+  private runStep = 0;
+  private runFaults = 0;
+  private runPenned = false;
+  private result: TrialResult | null = null;
+  private sourAt = -1;
+  private orderState = new WeakMap<object, string>();
+  // Weather, as last read.
+  private fog = 0;
+  private ambLp!: BiquadFilterNode;
+  private fogIn: GainNode | null = null;
+  private ambIn!: GainNode;
+  private ambSend: GainNode | null = null;
+  // The latest lightning strike, for anyone drawing the flash: `at` is
+  // performance.now() of the flash, `near` 0..1; its thunder follows.
+  lightning: { at: number; near: number } | null = null;
   private moving = new WeakSet<object>();
 
   constructor(opts: { listen?: boolean } = {}) {
@@ -123,8 +141,14 @@ export class Sound {
       n.connect(this.sfx);
       this.pans.push(n);
     }
+    // The ambience goes through a filter that fog closes down.
     const amb = ctx.createGain();
-    amb.connect(this.sfx);
+    this.ambLp = ctx.createBiquadFilter();
+    this.ambLp.type = 'lowpass';
+    this.ambLp.frequency.value = 18000;
+    this.ambLp.Q.value = 0.5;
+    amb.connect(this.ambLp).connect(this.sfx);
+    this.ambIn = amb;
     this.bank = new Bank(ctx, rnd);
     this.music = new Music(ctx, this.musicBus, this.sting, this.bank, rnd);
     this.ambience = new Ambience(ctx, amb, this.bank, this, rnd);
@@ -216,10 +240,13 @@ export class Sound {
   // ---- Music ----
 
   // A musical flourish over the bed, which ducks out of its way.
-  stinger(kind: StingerKind) {
+  stinger(kind: StingerKind, opts: { delay?: number; amt?: number } = {}) {
     if (!this.ctx || this.muted) return;
-    const len = this.music.stinger(kind, this.ctx.currentTime + 0.02);
-    this.duckFor(0.3, len * 0.8);
+    const delay = opts.delay ?? 0;
+    const len = this.music.stinger(kind, this.ctx.currentTime + 0.02 + delay, opts.amt);
+    // Little cues (a trial gate, a sour note) only dip the music.
+    const small = kind === 'gate' || kind === 'sour';
+    this.duckFor(small ? 0.6 : 0.3, len * 0.8 + delay);
   }
 
   // A pen just shut: the shepherd's whistle, then a stinger as good as the
@@ -234,17 +261,61 @@ export class Sound {
 
   // ---- Building blocks ----
 
-  private out(vol: number, pan: number): AudioNode | null {
+  // `far` is 0 at the listener to 1 at the edge of hearing; in fog, far
+  // sounds lose their top and gain a damp tail.
+  private out(vol: number, pan: number, far = 0): AudioNode | null {
     if (!this.ctx) return null;
     const g = this.ctx.createGain();
     g.gain.value = vol;
+    let dest: AudioNode = this.sfx;
+    const muffle = this.fog * far;
+    if (muffle > 0.05) {
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 16000 * Math.pow(0.08, muffle);
+      lp.connect(this.sfx);
+      dest = lp;
+      g.connect(this.fogVerb()).connect(this.sfx);
+    }
     if (pan) {
       const p = this.ctx.createStereoPanner();
       p.pan.value = Math.max(-1, Math.min(1, pan));
       g.connect(p);
-      p.connect(this.sfx);
-    } else g.connect(this.sfx);
+      p.connect(dest);
+    } else g.connect(dest);
     return g;
+  }
+
+  // A small, cheap reverb for the sounds of the world, only built once fog
+  // first rolls in: three damped delay lines feeding each other. The loop
+  // gain stays well under one (3 x 0.24, filters without resonance).
+  private fogVerb(): AudioNode {
+    if (this.fogIn) return this.fogIn;
+    const c = this.ctx!;
+    const inp = c.createGain();
+    inp.gain.value = 0.35;
+    const mix = c.createGain();
+    const out = c.createGain();
+    out.gain.value = 0.5;
+    [0.037, 0.053, 0.071].forEach((t, i) => {
+      const d = c.createDelay(0.1);
+      d.delayTime.value = t;
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1500;
+      lp.Q.value = -6; // dB: no peak at the cutoff, so no runaway
+      const fb = c.createGain();
+      fb.gain.value = 0.24;
+      const p = c.createStereoPanner();
+      p.pan.value = [-0.7, 0, 0.7][i];
+      inp.connect(d);
+      mix.connect(d);
+      d.connect(lp).connect(fb).connect(mix);
+      lp.connect(p).connect(out);
+    });
+    out.connect(this.sfx);
+    this.fogIn = inp;
+    return inp;
   }
 
   private panBus(pan: number) {
@@ -253,7 +324,7 @@ export class Sound {
   }
 
   // A buffer from the sample bank through one of five shared pan buses.
-  sample(name: string, vol: number, pan: number, rate = 1, at?: number) {
+  sample(name: string, vol: number, pan: number, rate = 1, at?: number, lp?: number) {
     if (!this.ctx || this.muted || vol < 0.002) return;
     const b = this.bank.get(name);
     if (!b) return;
@@ -262,8 +333,21 @@ export class Sound {
     src.playbackRate.value = rate;
     const g = this.ctx.createGain();
     g.gain.value = vol;
-    src.connect(g).connect(this.panBus(pan));
+    let node: AudioNode = src;
+    if (lp) {
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = lp;
+      node = node.connect(f);
+    }
+    node.connect(g).connect(this.panBus(pan));
     src.start(at ?? this.ctx.currentTime);
+  }
+
+  // The soundscape calls this when lightning strikes (its thunder is
+  // already on the way, later the further off it struck).
+  strike(near: number) {
+    this.lightning = { at: performance.now(), near };
   }
 
   private tone(dest: AudioNode, wave: Wave, f0: number, f1: number, t0: number, dur: number, vol: number, opts: { vib?: number; vibDepth?: number; filter?: BiquadFilterType; ff?: number; q?: number; attack?: number; f2?: number } = {}) {
@@ -337,19 +421,28 @@ export class Sound {
     if (now - last < 0.06 && !opts.force) return;
     this.lastPlay.set(name, now);
     let vol = opts.vol ?? 1;
-    let pan = 0;
+    let pan = 0, far = 0;
     if (opts.x !== undefined && opts.y !== undefined) {
       const dx = opts.x - this.lx, dy = opts.y - this.ly;
       const d = Math.hypot(dx, dy);
       vol *= Math.max(0, 1 - d / 320);
       if (vol <= 0.01) return;
       pan = dx / 220;
+      far = Math.min(1, d / 250);
     }
     if (name === 'tierup') {
       this.stinger('tierup');
       return;
     }
-    const o = this.out(vol, pan);
+    // A trial run has just begun (startRun whistles): the judge's whistle
+    // first, then the handler sends the dog.
+    const run = this.game?.trials?.run;
+    if (name === 'thatlldo' && run && run.t === 0 && run.step === 0 && !opts.delay) {
+      this.play('judge', { force: true });
+      this.play('thatlldo', { delay: 0.75, force: true });
+      return;
+    }
+    const o = this.out(vol, pan, far);
     if (!o) return;
     const t = now + 0.005 + (opts.delay ?? 0);
     const r = (a: number, b: number) => a + Math.random() * (b - a);
@@ -381,6 +474,50 @@ export class Sound {
       case 'creak-long': {
         const f = r(380, 460);
         this.tone(o, 'sawtooth', f, f * 1.25, t, 1.4, 0.04, { f2: f * 0.9, vib: 14, vibDepth: f * 0.06, filter: 'bandpass', ff: 1200, q: 3, attack: 0.15 });
+        break;
+      }
+      case 'judge':
+      case 'judge2': {
+        // The judge's pea whistle: one long blast to start, two to finish.
+        const blasts = name === 'judge' ? [[0, 0.7]] : [[0, 0.22], [0.32, 0.6]];
+        for (const [at, len] of blasts) {
+          const c = this.ctx;
+          const osc = c.createOscillator();
+          osc.frequency.value = 2900;
+          const pea = c.createOscillator(); // the pea rattling in the barrel
+          pea.type = 'square';
+          pea.frequency.value = 27;
+          const depth = c.createGain();
+          depth.gain.value = 140;
+          pea.connect(depth).connect(osc.frequency);
+          const g = c.createGain();
+          g.gain.setValueAtTime(0, t + at);
+          g.gain.linearRampToValueAtTime(0.11, t + at + 0.02);
+          g.gain.setTargetAtTime(0.085, t + at + 0.02, 0.1);
+          g.gain.setTargetAtTime(0, t + at + len - 0.04, 0.015);
+          osc.connect(g).connect(o);
+          for (const n of [osc, pea]) {
+            n.start(t + at);
+            n.stop(t + at + len + 0.1);
+          }
+          this.noise(o, t + at, len, 0.035, 'bandpass', 3200, 2);
+        }
+        break;
+      }
+      case 'cart': {
+        // A buyer's cart rolling off with the stock.
+        const b = this.bank.get('cart');
+        if (!b) break;
+        const src = this.ctx.createBufferSource();
+        src.buffer = b;
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(4000, t);
+        lp.frequency.exponentialRampToValueAtTime(700, t + b.duration);
+        const g = this.ctx.createGain();
+        g.gain.value = 0.5;
+        src.connect(lp).connect(g).connect(o);
+        src.start(t);
         break;
       }
       case 'thatlldo':
@@ -482,6 +619,8 @@ export class Sound {
     if (this.muted) return;
     if (this.musicLevel > 0) this.music.update(this.musicState(g), dt);
     this.menuSounds(g);
+    this.watchTrial(g);
+    this.watchOrders(g);
     if (this.soundLevel === 0) return;
     if (g.mode === 'play') this.dogSteps(g, dt);
     if ((this.scanT -= dt) <= 0) {
@@ -498,9 +637,12 @@ export class Sound {
     const reg = g.map.regionAt(g.dog.x, g.dog.y);
     if (reg) this.region = reg.id; // corridors keep the last region's tune
     let piece: PieceId = REGION_PIECE[this.region] ?? 'ranch';
+    const tr = g.trials;
     if (mode === 'title') piece = 'title';
     else if (mode === 'summary' || mode === 'build') piece = 'ranch';
+    else if (tr.run || tr.result) piece = 'trial';
     else if (phase === 'night') piece = 'night';
+    else if (g.rest > 1.3) piece = 'lullaby'; // lying down on the ranch, the day flying by
     else if (phase === 'dusk') piece = 'dusk';
 
     const d = g.dog;
@@ -529,7 +671,15 @@ export class Sound {
       }
       tension = Math.max(tension, danger, out ? 0.15 : 0);
     }
-    return { piece, energy: Math.min(1, energy), tension, rest: mode === 'summary' || mode === 'build' || mode === 'ledger', muffle: mode === 'pause' };
+    if (tr.run && !tr.result && mode === 'play') energy = Math.max(energy, 0.65); // a trial is never idle
+    const w = g.weather;
+    if (w.sky === 'storm') tension = Math.max(tension, 0.4 * w.rain); // a storm unsettles everything
+    return {
+      piece, energy: Math.min(1, energy), tension,
+      rest: mode === 'summary' || mode === 'build' || mode === 'ledger' || !!tr.result,
+      muffle: mode === 'pause',
+      rain: w.rain, fog: w.fog, wind: w.wind,
+    };
   }
 
   // The dog's paws, in step with its run cycle: every other frame of the
@@ -555,8 +705,21 @@ export class Sound {
     const reg = g.map.regionAt(lx, ly);
     a.region = reg ? reg.id : null;
     a.phase = g.mode === 'title' ? 'day' : g.day.phase;
-    a.wind = reg ? WIND[reg.id] ?? 0.35 : 0.3;
-    a.rain = this.rain;
+    // The sky: wind strength scales the region's own windiness; rain from
+    // the weather (or the setRain hook); fog closes the ambience down.
+    const w = g.weather;
+    a.wind = (reg ? WIND[reg.id] ?? 0.35 : 0.3) * (0.45 + 1.1 * w.wind);
+    a.rain = Math.max(this.rain, w.rain);
+    a.storm = w.sky === 'storm' ? w.rain : 0;
+    a.speed = 1 + Math.min(2, Math.max(0, g.rest - 1) / 5.5);
+    this.fog = w.fog;
+    const now = this.ctx!.currentTime;
+    this.ambLp.frequency.setTargetAtTime(18000 * Math.pow(0.1, this.fog), now, 0.5);
+    if (this.fog > 0.05 && !this.ambSend) {
+      this.ambSend = this.ctx!.createGain();
+      this.ambIn.connect(this.ambSend).connect(this.fogVerb());
+    }
+    this.ambSend?.gain.setTargetAtTime(this.fog * 0.4, now, 0.5);
     // The river runs south from its spring; the ford is where it is shallow.
     const ty = ly / TS;
     const ry = Math.max(ty, RIVER_SPRING_Y);
@@ -618,6 +781,77 @@ export class Sound {
     }
     for (const f of g.ranch.fieldGates) check(f, f.swing, f.cx, f.cy);
     for (const r of g.ranch.regionGates) check(r, r.swing, r.cx, r.cy, true);
+  }
+
+  // The Show Ground: a cue for each gate cleared, a sour note for a bolt
+  // or a grip, the judge's whistle at the end, and the crowd.
+  private watchTrial(g: Game) {
+    const tr = g.trials;
+    const r = tr.run;
+    if (r !== this.run) {
+      this.run = r;
+      this.runStep = r ? r.step : 0;
+      this.runFaults = r ? r.bolts + r.grips : 0;
+      this.runPenned = false;
+    }
+    if (r) {
+      while (this.runStep < r.step) {
+        const k = this.runStep++;
+        const part = PARTS[k];
+        if (part.id === 'lift' || part.id === 'pen') continue;
+        const amt = r.scores[k] / part.max;
+        if (amt > 0) this.stinger('gate', { amt }); // a miss gets the trial's own 'deny'
+      }
+      const faults = r.bolts + r.grips;
+      if (faults > this.runFaults) {
+        this.runFaults = faults;
+        const now = this.ctx!.currentTime;
+        if (now - this.sourAt > 1) {
+          this.sourAt = now;
+          this.stinger('sour');
+        }
+      }
+      if (r.penned && !this.runPenned) {
+        this.runPenned = true;
+        this.play('judge2', { delay: 0.9, force: true }); // after the handler's "that'll do"
+      }
+    }
+    const res = tr.result;
+    if (res && res !== this.result) {
+      if (!this.runPenned) this.play('judge2', { force: true }); // time up, or retired
+      const placed = res.place >= 1 && res.place <= 3;
+      let level = res.retired ? 0.1 : (res.total / 100) * (res.place === 0 ? 0.75 : 1) + (placed ? 0.15 : 0);
+      if (res.place === 1) level = Math.max(level, 0.85);
+      this.applause(Math.min(1, level), res.place === 1 || res.total >= 85);
+    }
+    this.result = res;
+  }
+
+  // The crowd: a few polite claps, warm applause, or applause and whistles.
+  private applause(level: number, cheer: boolean) {
+    const t = this.ctx!.currentTime + 0.3, r = Math.random;
+    this.sample('applause-sparse', level < 0.7 ? 0.3 + 0.3 * level : 0.3, 0, 0.95 + 0.1 * r(), t);
+    if (level >= 0.35) this.sample('applause-full', 0.12 + 0.3 * Math.min(1, (level - 0.35) / 0.5), 0, 0.95 + 0.1 * r(), t + 0.15);
+    if (cheer) this.sample('cheer', 0.08, (r() - 0.5) * 0.8, 0.95 + 0.1 * r(), t + 0.7);
+  }
+
+  // Buyers' orders: a stinger when one is filled (and the cart rolls off
+  // with the stock), a sigh when the buyer gives up.
+  private watchOrders(g: Game) {
+    for (const o of g.orders.list) {
+      const prev = this.orderState.get(o);
+      this.orderState.set(o, o.state);
+      if (prev !== 'open' || o.state === 'open') continue;
+      const yard = g.ranch.yards.find((y) => y.site.id === o.yard);
+      const at = yard ? { x: (yard.site.cart.tx + 1) * TS, y: (yard.site.cart.ty + 1) * TS } : null;
+      if (o.state === 'done') {
+        this.stinger('sold', { delay: 0.75 }); // after the gate and the whistle
+        if (at) this.play('cart', { ...at, delay: 2.2, force: true });
+      } else {
+        this.stinger(o.got ? 'steady' : 'missed');
+        if (at && o.got) this.play('cart', { ...at, delay: 1.5, force: true });
+      }
+    }
   }
 
   // Menus: a tick when the selection moves, a page sound when a panel

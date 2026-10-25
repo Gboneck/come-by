@@ -19,7 +19,7 @@ const opt = (k, d) => {
 const flag = (k) => args.includes(`--${k}`);
 const SECS = Number(opt('secs', '24'));
 const SEED = Number(opt('seed', '1'));
-const ALL = ['bank', 'tuning', 'live', 'drive', 'balance', 'title', 'ranch', 'meadow', 'hills', 'rocky', 'ford', 'high', 'dusk', 'night', 'panic', 'prowl', 'stingers', 'ambience', 'mix'];
+const ALL = ['bank', 'tuning', 'sfx', 'live', 'live2', 'sky', 'drive', 'balance', 'title', 'ranch', 'meadow', 'hills', 'rocky', 'ford', 'high', 'dusk', 'night', 'panic', 'prowl', 'stingers', 'ambience', 'mix', 'trial', 'lullaby', 'orders', 'weather'];
 const only = args.filter((a) => !a.startsWith('--'));
 const cases = only.length ? only : ALL;
 
@@ -35,7 +35,7 @@ await page.goto(`http://localhost:${PORT}/?sprites=999`);
 
 const MODES = {
   title: [7, 'ion'], ranch: [7, 'ion'], meadow: [2, 'ion'], hills: [4, 'dor'], rocky: [9, 'dor'],
-  ford: [0, 'ion'], high: [2, 'mix'], dusk: [9, 'aeo'], night: [2, 'aeo'],
+  ford: [0, 'ion'], high: [2, 'mix'], dusk: [9, 'aeo'], night: [2, 'aeo'], trial: [9, 'mix'], lullaby: [7, 'ion'],
 };
 const SCALES = { ion: [0, 2, 4, 5, 7, 9, 11], dor: [0, 2, 3, 5, 7, 9, 10], mix: [0, 2, 4, 5, 7, 9, 10], aeo: [0, 2, 3, 5, 7, 8, 10] };
 const NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -129,6 +129,124 @@ for (const name of cases) {
     await lp.close();
     continue;
   }
+  if (name === 'sky') {
+    // How the sky shades the ranch tune: phrases that open on a minor
+    // chord, and the tempo, over a few minutes of each.
+    console.log('\n== sky (ranch tune, 4 minutes each)');
+    for (const [label, sky] of [['clear', {}], ['rain', { rain: 1 }], ['fog', { fog: 1 }]]) {
+      const r = await page.evaluate(async (sky) => {
+        localStorage.clear();
+        const { Sound } = await import('/src/systems/audio.ts');
+        const { mulberry32 } = await import('/src/rng.ts');
+        const sr = 8000, secs = 240;
+        const ctx = new OfflineAudioContext(1, sr * secs, sr);
+        const s = new Sound({ listen: false });
+        s.attach(ctx, mulberry32(5));
+        s.bank.generateAll();
+        const log = (s.music.log = []);
+        const st = { piece: 'ranch', energy: 0.5, tension: 0, rest: false, muffle: false, ...sky };
+        for (let i = 0; i < 40; i++) s.music.update(st, 0.5); // settle the sky
+        for (let t = 0.5; t < secs - 0.5; t += 0.5) ctx.suspend(t).then(() => { s.music.update(st, 0.5); ctx.resume(); });
+        await ctx.startRendering();
+        let minor = 0, n = 0, leads = 0;
+        log.forEach((e, i) => {
+          if (e.inst !== 'section') return;
+          n++;
+          if (!e.info.includes('lead=null')) leads++;
+          const c = log.slice(i).find((x) => x.inst === 'chord');
+          if (c && (Number(c.info.split(',')[1]) - c.midi + 12) % 12 === 3) minor++;
+        });
+        return { n, minor, leads };
+      }, sky);
+      console.log(`  ${label.padEnd(6)} ${r.n} sections, ${r.minor} open on a minor chord, ${r.leads} with a tune`);
+    }
+    continue;
+  }
+  if (name === 'live2') {
+    // Round two in the real game: resting, the sky, a trial run, an order.
+    const lp = await browser.newPage();
+    lp.on('pageerror', (e) => errors.push(e.message));
+    lp.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
+    await lp.goto(`http://localhost:${PORT}/?debug`);
+    await lp.waitForFunction(() => window.game);
+    await lp.keyboard.press('KeyD');
+    await lp.evaluate(() => {
+      const a = window.game.audio;
+      window.__calls = [];
+      for (const k of ['play', 'stinger']) {
+        const f = a[k].bind(a);
+        a[k] = (n, o) => { window.__calls.push(n); return f(n, o); };
+      }
+    });
+    const note = (what) => lp.evaluate((what) => {
+      const g = window.game, m = g.audio.music;
+      const calls = [...new Set(window.__calls.filter((c) => !/^(ui-|step|creak|click)/.test(c)))].join(' ');
+      window.__calls = [];
+      return `${what}: wants ${m.want}, rest x${g.rest.toFixed(1)}, sky ${g.weather.sky} (rain ${m.sky.rain.toFixed(2)} fog ${m.sky.fog.toFixed(2)})${calls ? '  sounds: ' + calls : ''}`;
+    }, what);
+    const out = [];
+    await lp.evaluate(() => { const d = window.game.doorPoint(); window.game.dog.x = d.x; window.game.dog.y = d.y + 20; });
+    await lp.waitForTimeout(500);
+    await lp.keyboard.down('KeyL');
+    await lp.waitForTimeout(4000);
+    out.push(await note('lying on the ranch'));
+    await lp.keyboard.up('KeyL');
+    await lp.waitForTimeout(1500);
+    out.push(await note('up again'));
+    await lp.evaluate(() => window.game.weather.force('storm'));
+    await lp.waitForTimeout(7000);
+    out.push(await note('storm') + `, lightning ${(await lp.evaluate(() => !!window.game.audio.lightning)) ? 'yes' : 'no'}`);
+    await lp.evaluate(() => window.game.weather.force('fog'));
+    await lp.waitForTimeout(2500);
+    out.push(await note('fog') + `, ambience filter ${await lp.evaluate(() => Math.round(window.game.audio.ambLp.frequency.value))} Hz`);
+    await lp.evaluate(() => window.game.weather.force('clear'));
+    await lp.evaluate(async () => {
+      const g = window.game;
+      g.setTier(2, false);
+      const p = g.ranch.course.post;
+      g.dog.x = p.x; g.dog.y = p.y + 4;
+      const { startRun } = await import('/src/systems/trials.ts');
+      startRun(g);
+    });
+    await lp.waitForTimeout(2500);
+    out.push(await note('trial run starts'));
+    await lp.evaluate(async () => {
+      const g = window.game, r = g.trials.run;
+      r.step = 2; r.scores[1] = 15; r.bolts = 1;
+    });
+    await lp.waitForTimeout(1200);
+    out.push(await note('fetch gate clean, one bolt'));
+    await lp.evaluate(async () => {
+      const { endRun } = await import('/src/systems/trials.ts');
+      const g = window.game;
+      g.trials.run.scores = [9, 15, 10, 15, 15, 20];
+      g.trials.run.penned = true;
+      endRun(g, false);
+    });
+    await lp.waitForTimeout(1500);
+    out.push(await note('run over') + ` (score ${await lp.evaluate(() => window.game.trials.result.total)})`);
+    await lp.evaluate(async () => { const { closeResult } = await import('/src/systems/trials.ts'); closeResult(window.game); });
+    await lp.evaluate(() => {
+      const g = window.game;
+      g.orders.list.push({ id: 99, yard: g.ranch.yards[0].site.id, species: 'duck', n: 2, due: 1e9, got: 0, paid: 0, state: 'open' });
+    });
+    await lp.waitForTimeout(300);
+    await lp.evaluate(() => { window.game.orders.list.at(-1).state = 'done'; });
+    await lp.waitForTimeout(1200);
+    out.push(await note('order filled'));
+    await lp.evaluate(() => {
+      const g = window.game;
+      g.orders.list.push({ id: 100, yard: g.ranch.yards[0].site.id, species: 'duck', n: 2, due: 1e9, got: 0, paid: 0, state: 'open' });
+    });
+    await lp.waitForTimeout(300);
+    await lp.evaluate(() => { window.game.orders.list.at(-1).state = 'gone'; });
+    await lp.waitForTimeout(800);
+    out.push(await note('order missed'));
+    console.log('\n== live2');
+    for (const s of out) console.log('  ' + s);
+    await lp.close();
+    continue;
+  }
   if (name === 'drive') {
     // The herding bot drives sheep home calmly, then rudely: what does the
     // music hear? (energy = working a flock, tension = its stress/panic)
@@ -155,6 +273,48 @@ for (const name of cases) {
       console.log(`  ${label.padEnd(18)} ${String(r.secs).padStart(2)}s  energy ${r.energy.toFixed(2)}  tension mean ${r.tension.toFixed(2)} peak ${r.peak.toFixed(2)}  tense ${(100 * r.tense).toFixed(0)}% of the time`);
     }
     await lp.close();
+    continue;
+  }
+  if (name === 'sfx') {
+    // Each sound effect alone, 3 s apart: peak and loudness, next to a bark.
+    const SFX = ['bark', 'coin', 'gate', 'thatlldo', 'judge', 'judge2', 'cart', 'creak', 'applause:0.15', 'applause:0.5', 'applause:0.95', 'crack', 'thunder:near', 'thunder:far', 'sold', 'missed', 'gate:1', 'sour'];
+    const rows = await page.evaluate(async (SFX) => {
+      localStorage.clear();
+      const { Sound } = await import('/src/systems/audio.ts');
+      const sr = 44100, gap = 3, secs = SFX.length * gap;
+      const ctx = new OfflineAudioContext(2, sr * secs, sr);
+      const s = new Sound({ listen: false });
+      s.attach(ctx);
+      s.bank.generateAll();
+      SFX.forEach((name, i) => {
+        ctx.suspend(i * gap + 0.05).then(() => {
+          const [n, arg] = name.split(':');
+          if (n === 'applause') s.applause(Number(arg), Number(arg) > 0.9);
+          else if (n === 'thunder') s.sample('thunder', arg === 'near' ? 0.32 : 0.12, 0, 1, undefined, arg === 'near' ? 3450 : 300);
+          else if (n === 'gate' && arg) s.stinger('gate', { amt: Number(arg) });
+          else if (['sold', 'missed', 'sour'].includes(n)) s.stinger(n);
+          else s.play(n, { x: 40, y: 0, force: true });
+          ctx.resume();
+        });
+      });
+      const b = await ctx.startRendering();
+      const L = b.getChannelData(0), R = b.getChannelData(1);
+      return SFX.map((name, i) => {
+        let pk = 0, e = 0;
+        const a = Math.floor(i * gap * sr), z = Math.floor((i + 1) * gap * sr);
+        for (let j = a; j < z; j++) { pk = Math.max(pk, Math.abs(L[j]), Math.abs(R[j])); e += L[j] * L[j] + R[j] * R[j]; }
+        // Loudness over the busiest half second.
+        let best = 0;
+        for (let w = a; w + sr / 2 < z; w += sr / 10) {
+          let x = 0;
+          for (let j = w; j < w + sr / 2; j += 4) x += L[j] * L[j] + R[j] * R[j];
+          best = Math.max(best, x);
+        }
+        return [name, pk, Math.sqrt(best / (sr / 4))];
+      });
+    }, SFX);
+    console.log('\n== sfx (alone, at the default volumes: peak / loudest half-second rms, dBFS)');
+    for (const [n, pk, rms] of rows) console.log(`  ${n.padEnd(14)} ${db(pk).padStart(6)}  ${db(rms).padStart(6)}`);
     continue;
   }
   if (name === 'balance') {
@@ -235,7 +395,7 @@ for (const name of cases) {
     const { Sound } = await import('/src/systems/audio.ts');
     const { mulberry32 } = await import('/src/rng.ts');
     const sr = 44100;
-    const secs = name === 'stingers' ? 18 : SECS;
+    const secs = name === 'stingers' ? 18 : name === 'weather' ? 32 : SECS;
     const ctx = new OfflineAudioContext(2, Math.floor(sr * secs), sr);
     const rnd = mulberry32(SEED);
     const s = new Sound({ listen: false });
@@ -244,7 +404,8 @@ for (const name of cases) {
     const log = [];
     s.music.log = log;
     const base = { piece: 'ranch', energy: 0.5, tension: 0, rest: false, muffle: false };
-    const amb = { region: 'ranch', phase: 'day', river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, wind: 0.3 };
+    const amb = { region: 'ranch', phase: 'day', river: 0, riverPan: 0, ford: 0, herd: [], murmur: 0, murmurStress: 0, murmurPan: 0, murmurSp: 'sheep', munch: 0, rain: 0, wind: 0.3, storm: 0, speed: 1 };
+    let strikes = 0;
     let musicOn = true, ambOn = false;
     let state = () => base;
     let ambState = () => amb;
@@ -281,6 +442,35 @@ for (const name of cases) {
         for (let t = 2.2; t < secs - 1; t += 3.1) events.push([t, 'sfx:quack']);
         events.push([6, 'calm'], [9, 'sfx:coin'], [9.05, 'sfx:gate'], [15, 'tierup']);
         break;
+      case 'trial':
+        // A run: the judge, the handler, two gates (one clean, one ragged), a
+        // grip, the pen, the judge again and a warm crowd.
+        state = (t) => ({ ...base, piece: 'trial', energy: 0.7, tension: t > 9 && t < 11 ? 0.5 : 0.05 });
+        events.push([1, 'sfx:judge'], [1.75, 'sfx:thatlldo'], [6, 'gate:1'], [9, 'sour'], [12, 'gate:0.6'], [17, 'sfx:gate'], [17.2, 'sfx:thatlldo'], [18, 'sfx:judge2']);
+        events.push([19.5, (s) => s.applause(0.9, true)]);
+        break;
+      case 'lullaby':
+        // Resting: the music box, and birds hurrying through the day.
+        ambOn = true;
+        state = () => ({ ...base, piece: 'lullaby', energy: 0.05 });
+        ambState = () => ({ ...amb, region: 'ranch', wind: 0.25, speed: 3, munch: 0.5, murmur: 2, murmurSp: 'duck' });
+        break;
+      case 'orders':
+        state = () => ({ ...base, piece: 'ranch', energy: 0.4 });
+        events.push([2, 'sfx:gate'], [2.18, 'sfx:thatlldo'], [2.75, 'sold'], [4.4, 'sfx:cart'], [11, 'missed'], [16, 'steady'], [19, (s) => s.applause(0.2, false)]);
+        break;
+      case 'weather': {
+        // Rain, then fog, then a storm with thunder; a bark in each.
+        ambOn = true;
+        const sky = (t) => (t < 9 ? { rain: 0.6, fog: 0.1, wind: 0.4, storm: 0 } : t < 16 ? { rain: 0, fog: 0.8, wind: 0.05, storm: 0 } : { rain: 1, fog: 0.2, wind: 1, storm: 1 });
+        state = (t) => ({ ...base, piece: 'ranch', energy: 0.4, ...sky(t), tension: t >= 16 ? 0.4 : 0 });
+        ambState = (t) => ({ ...amb, region: 'hills', ...sky(t), wind: 0.6 * (0.45 + 1.1 * sky(t).wind) });
+        s.ambience.thunderT = 1; // do not keep the test waiting for the first strike
+        const strike = s.strike.bind(s);
+        s.strike = (near) => { strikes++; strike(near); };
+        for (const t of [4, 12, 20]) events.push([t, (s) => { s.fog = sky(t).fog; s.lx = 0; s.play('bark', { x: 150, y: 0 }); }]);
+        break;
+      }
       default:
         state = (t) => ({ ...base, piece: name, energy: t < secs * 0.4 ? 0.25 : 0.8 });
     }
@@ -294,7 +484,9 @@ for (const name of cases) {
       if (ambOn) s.ambience.update(ambState(t), dt, 0, 0);
       while (ei < events.length && events[ei][0] <= t + 1e-6) {
         const ev = events[ei++][1];
-        if (ev.startsWith('sfx:')) s.play(ev.slice(4));
+        if (typeof ev === 'function') ev(s);
+        else if (ev.startsWith('sfx:')) s.play(ev.slice(4), { force: true });
+        else if (ev.startsWith('gate:')) s.stinger('gate', { amt: Number(ev.slice(5)) });
         else s.stinger(ev);
       }
     };
@@ -374,7 +566,7 @@ for (const name of cases) {
     }
     g.putImageData(img, 0, 0);
     const tot = bands.reduce((a, b) => a + b, 0) || 1;
-    return { peak, rms, clips, dc: dc / L.length / 2, win, log, png: cv.toDataURL('image/png'), secs, bands: [...bands].map((b) => b / tot), speed };
+    return { peak, rms, clips, dc: dc / L.length / 2, win, log, png: cv.toDataURL('image/png'), secs, bands: [...bands].map((b) => b / tot), speed, strikes };
   }, { name, SECS, SEED });
 
   writeFileSync(`shots/audio-${name}.png`, Buffer.from(r.png.split(',')[1], 'base64'));
@@ -384,17 +576,18 @@ for (const name of cases) {
   const bandStr = ['<120', '120-350', '350-1k', '1k-3k', '3k-8k', '8k+'].map((b, i) => `${b} ${(10 * Math.log10(r.bands[i] + 1e-9)).toFixed(0)}`).join('  ');
   console.log(`\n== ${name}  ${r.secs}s  peak ${db(r.peak)} dBFS  rms ${db(r.rms)} dBFS  1s-rms ${db(wmin)}..${db(wmax)}  clips ${r.clips}  dc ${r.dc.toExponential(1)}${bad ? '  << CLIPPING' : ''}`);
   console.log(`  spectrum dB (share of energy): ${bandStr}   rendered at ${r.speed.toFixed(0)}x real time`);
-  if (flag("windows")) console.log("  1s rms: " + r.win.map(db).join(" "));
+  if (flag("windows") || name === 'weather' || name === 'trial' || name === 'orders') console.log("  1s rms: " + r.win.map(db).join(" "));
+  if (name === 'weather') console.log(`  lightning strikes: ${r.strikes}`);
 
   // Music theory checks on the notes.
-  const mk = MODES[name] ?? MODES[{ panic: 'hills', prowl: 'night', stingers: 'ranch', mix: 'meadow' }[name]];
+  const mk = MODES[name] ?? MODES[{ panic: 'hills', prowl: 'night', stingers: 'ranch', mix: 'meadow', orders: 'ranch', weather: 'ranch' }[name]];
   if (!mk || !r.log.length) continue;
   const [key, mode] = mk;
   const scale = SCALES[mode].map((x) => (x + key) % 12);
   const chords = r.log.filter((n) => n.inst === 'chord');
   // Notes are humanised by a few ms, so look just after the onset.
   const chordAt = (t) => { let c = null; for (const x of chords) { if (x.t <= t + 0.012) c = x; else break; } return c; };
-  const leads = r.log.filter((n) => ['whistle', 'fiddle', 'harp-mel'].includes(n.inst));
+  const leads = r.log.filter((n) => ['whistle', 'fiddle', 'harp-mel', 'bell-mel'].includes(n.inst));
   const by = {};
   for (const n of r.log) by[n.inst] = (by[n.inst] ?? 0) + 1;
   console.log('  notes:', Object.entries(by).map(([k, v]) => `${k} ${v}`).join(', '));

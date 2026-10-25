@@ -68,6 +68,20 @@ export class Bank {
     this.add('frog', (c) => frog(c, r));
     this.add('owl', (c) => owl(c));
     this.add('drip', (c) => hit(c, { dur: 0.05, nAmp: 0.2, nDecay: 0.004, lo: 2500, hi: 7000, tAmp: 0.5, f0: 1900, f1: 2900, tDecay: 0.01 }, r));
+    // Round two: the Show Ground crowd, carts and storms.
+    this.add('applause-sparse', (c) => applause(c, 3.5, 9, 3.2, r));
+    this.add('applause-full', (c) => applause(c, 5, 34, 4.4, r));
+    this.add('cheer', (c) => cheer(c, r));
+    this.add('cart', (c) => cart(c, r));
+    this.add('crack', (c) => crack(c, r));
+    // Thunder is long: one channel per job, sharing the same swells.
+    const swells = thunderSwells(r);
+    this.add('thunder~', (c) => thunder(c.createBuffer(2, Math.floor(7 * c.sampleRate), c.sampleRate), 0, swells, r));
+    this.add('thunder', () => {
+      const b = this.bufs.get('thunder~')!;
+      this.bufs.delete('thunder~');
+      return thunder(b, 1, swells, r);
+    });
   }
 
   private add(name: string, gen: Gen) {
@@ -528,4 +542,132 @@ function owl(ctx: BaseAudioContext) {
   filt(out, bq('lp', 900, 0.7, sr));
   normalize(out, 0.7);
   return buf;
+}
+
+// A crowd clapping: each clapper has their own clap (a filtered noise
+// burst), their own pace and place in the stereo field; they join in over a
+// quarter second and drop out one by one.
+function applause(ctx: BaseAudioContext, secs: number, clappers: number, pace: number, r: Rand) {
+  const sr = ctx.sampleRate;
+  const n = Math.floor(secs * sr);
+  const b = ctx.createBuffer(2, n, sr);
+  const L = b.getChannelData(0), R = b.getChannelData(1);
+  const clapLen = Math.floor(0.03 * sr);
+  for (let k = 0; k < clappers; k++) {
+    const clap = new Float32Array(clapLen);
+    for (let i = 0; i < clapLen; i++) clap[i] = (r() * 2 - 1) * Math.exp(-i / sr / 0.006);
+    filt(clap, bq('bp', 800 + r() * 1800, 1.2, sr));
+    const pan = r() * 2 - 1, gl = Math.sqrt((1 - pan) / 2), gr = Math.sqrt((1 + pan) / 2);
+    const rate = pace * (0.8 + 0.4 * r());
+    const stop = secs * (0.45 + 0.55 * r());
+    const amp = 0.5 + 0.5 * r();
+    for (let t = r() * 0.25; t < stop; t += (1 / rate) * (0.85 + 0.3 * r())) {
+      const s0 = Math.floor(t * sr);
+      const g = amp * (0.7 + 0.3 * r()) * Math.min(1, (stop - t) / 0.6);
+      for (let i = 0; i < clapLen && s0 + i < n; i++) {
+        L[s0 + i] += clap[i] * g * gl;
+        R[s0 + i] += clap[i] * g * gr;
+      }
+    }
+  }
+  fadeEdges(L, sr, 0.005, 0.3);
+  fadeEdges(R, sr, 0.005, 0.3);
+  const k = 0.75 / Math.max(1e-6, ...[L, R].map((d) => d.reduce((m, v) => Math.max(m, Math.abs(v)), 0)));
+  for (const d of [L, R]) for (let i = 0; i < n; i++) d[i] *= k;
+  return b;
+}
+
+// A couple of the crowd whistling: two-finger whistles, up then down.
+function cheer(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 2.2);
+  sweep(out, sr, 0.1, 0.35, 1900 + r() * 200, 2700, 0.8, 25, 9);
+  sweep(out, sr, 0.48, 0.5, 2750, 2100, 0.7, 25, 9);
+  sweep(out, sr, 0.9, 0.3, 2300 + r() * 200, 3000, 0.5, 30, 11);
+  sweep(out, sr, 1.25, 0.55, 3000, 2400, 0.45, 30, 11);
+  normalize(out, 0.7);
+  return buf;
+}
+
+// A buyer's cart rolling away: wheels on a rutted track, a creaking axle
+// and the horse's hooves, fading as it goes.
+function cart(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 4.5);
+  const n = out.length;
+  const rumble = new Float32Array(n);
+  for (let i = 0; i < n; i++) rumble[i] = r() * 2 - 1;
+  filt(rumble, bq('lp', 260, 0.8, sr));
+  let bump = 0, next = 0;
+  for (let i = 0; i < n; i++) {
+    if (i >= next) { bump = 0.6 + 0.6 * r(); next = i + Math.floor((0.14 + 0.1 * r()) * sr); }
+    bump *= 0.9994;
+    out[i] = rumble[i] * (0.5 + bump);
+  }
+  // Hooves: a steady walk, two by two.
+  for (let t = 0.05; t < 4.4; t += 0.27 + 0.04 * r()) {
+    const s0 = Math.floor(t * sr), len = Math.floor(0.05 * sr);
+    for (let i = 0; i < len && s0 + i < n; i++) {
+      const e = Math.exp(-i / sr / 0.012);
+      out[s0 + i] += (Math.sin((2 * Math.PI * 520 * i) / sr) * 0.5 + Math.sin((2 * Math.PI * 1180 * i) / sr) * 0.3) * e;
+    }
+  }
+  // The axle creaks now and then.
+  for (let t = 0.4; t < 4; t += 0.9 + 0.6 * r()) sweep(out, sr, t, 0.25, 640 + r() * 80, 560, 0.18, 40, 23);
+  // Going away: quieter and duller towards the end.
+  for (let i = 0; i < n; i++) out[i] *= Math.pow(1 - i / n, 1.3);
+  fadeEdges(out, sr, 0.05, 0.3);
+  normalize(out, 0.75);
+  return buf;
+}
+
+// Thunder close by: the tearing crack before the roll.
+function crack(ctx: BaseAudioContext, r: Rand) {
+  const sr = ctx.sampleRate;
+  const [buf, out] = mono(ctx, 1.2);
+  for (let k = 0; k < 4; k++) {
+    const s0 = Math.floor((k ? 0.02 + r() * 0.25 : 0) * sr), a = k ? 0.3 + 0.4 * r() : 1;
+    const dec = 0.04 + 0.12 * r();
+    for (let i = 0; s0 + i < out.length; i++) out[s0 + i] += (r() * 2 - 1) * a * Math.exp(-i / sr / dec);
+  }
+  filt(out, bq('hp', 300, 0.7, sr));
+  filt(out, bq('lp', 5000, 0.7, sr));
+  fadeEdges(out, sr, 0.001, 0.3);
+  normalize(out, 0.8);
+  return buf;
+}
+
+// The long roll of thunder: deep noise in a few overlapping swells, each
+// one the echo off another hill. [start, length, loudness] per swell.
+function thunderSwells(r: Rand): [number, number, number][] {
+  const swells: [number, number, number][] = [];
+  let t = 0;
+  for (let k = 0; k < 5; k++) {
+    swells.push([t, 0.35 + r() * 0.9, (1 - k * 0.16) * (0.6 + 0.4 * r())]);
+    t += 0.5 + r() * 1.1;
+  }
+  return swells;
+}
+
+// Fills one channel of the thunder buffer.
+function thunder(b: AudioBuffer, c: number, swells: [number, number, number][], r: Rand) {
+  const sr = b.sampleRate, n = b.length;
+  // The envelope changes slowly: work it out every 64 samples.
+  const env = new Float32Array(Math.ceil(n / 64) + 1);
+  for (let j = 0; j < env.length; j++) {
+    const tt = (j * 64) / sr;
+    for (const [at, len, a] of swells) {
+      if (tt < at) continue;
+      const x = (tt - at) / len;
+      env[j] += a * Math.min(1, x * 4) * Math.exp(-x);
+    }
+  }
+  const d = b.getChannelData(c);
+  for (let i = 0; i < n; i++) d[i] = r() * 2 - 1;
+  filt(d, bq('lp', 140, 0.7, sr));
+  filt(d, bq('lp', 220, 0.6, sr));
+  for (let i = 0; i < n; i++) d[i] *= env[i >> 6];
+  fadeEdges(d, sr, 0.01, 0.8);
+  normalize(d, 0.85);
+  return b;
 }

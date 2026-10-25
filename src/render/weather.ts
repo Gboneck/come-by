@@ -19,7 +19,10 @@ export class WeatherFx {
   fogX = 0;
   t = 0; // weather clock (runs fast while resting)
   private flash = 0; // seconds of flash left
+  private flashNear = 1;
   private flashT = 6;
+  private seenAt = 0; // the last strike the audio announced
+  private sinceAudio = 99;
   private bolt: number[][] | null = null;
   private wc: HTMLCanvasElement | null = null;
   private wg: CanvasRenderingContext2D | null = null;
@@ -34,14 +37,26 @@ export class WeatherFx {
     this.cloudX += dl * (6 + w.wind * 34);
     this.cloudY += dl * (2 + w.wind * 10);
     this.fogX += dl * (3 + w.wind * 16);
-    if (w.sky === 'storm' && w.rain > 0.6) {
-      if ((this.flashT -= dt) <= 0) {
-        this.flashT = 5 + Math.random() * 9;
-        this.flash = 0.18;
-        this.bolt = null;
-      }
+    // Lightning follows the audio's strikes (its thunder comes after), or
+    // our own timer when there is no sound running.
+    const L = game.audio?.lightning;
+    this.sinceAudio += dt;
+    if (L && L.at !== this.seenAt) {
+      this.seenAt = L.at;
+      this.sinceAudio = 0;
+      this.strike(L.near);
+    } else if (w.sky === 'storm' && w.rain > 0.6 && this.sinceAudio > 25 && (this.flashT -= dt) <= 0) {
+      this.flashT = 5 + Math.random() * 9;
+      this.strike(Math.random());
     }
     if (this.flash > 0) this.flash -= dt;
+  }
+
+  // A strike: near ones flash bright with a bolt, far ones a dim flicker.
+  private strike(near: number) {
+    this.flashNear = near;
+    this.flash = near > 0.45 ? 0.18 : 0.1;
+    this.bolt = null;
   }
 
   // What the weather adds to the dither overlay.
@@ -54,7 +69,7 @@ export class WeatherFx {
       fog: Math.max(0, (w.fog - 0.25) / 0.75),
       fogNight: dark > 0.25,
       fogX: this.fogX,
-      flash: this.flash > 0.11 ? 10 : this.flash > 0.04 ? 4 : this.flash > 0 ? 1 : 0,
+      flash: this.flashNear > 0.45 ? (this.flash > 0.11 ? 10 : this.flash > 0.04 ? 4 : this.flash > 0 ? 1 : 0) : this.flash > 0.05 ? 3 : this.flash > 0 ? 1 : 0,
     };
   }
 
@@ -161,7 +176,7 @@ export class WeatherFx {
         for (let k = 0; k < len; k++) g.fillRect(x + Math.round(k * slant), y + k, 1, 1);
       }
     }
-    if (this.flash > 0.08) {
+    if (this.flash > 0.08 && this.flashNear > 0.45) {
       if (!this.bolt) {
         // A jagged bolt from the top of the screen, with one fork.
         const pts: number[][] = [];
