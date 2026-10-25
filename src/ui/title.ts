@@ -1,8 +1,7 @@
 import { C } from '../palette';
 import { panel, rect } from '../gfx/draw';
 import { text, textWidth } from '../gfx/font';
-import { drawSpr } from '../gfx/sprite';
-import { playerDogSprites } from '../art/dogstyle';
+import { drawTitleArt } from '../art/title';
 import type { Game } from '../game';
 import { saveInfo } from '../systems/save';
 import { tierOf } from '../systems/progression';
@@ -30,8 +29,6 @@ export type TitleAction = 'continue' | 'new' | 'join' | null;
 const titleItems = (hasSave: boolean): Exclude<TitleAction, null>[] => (hasSave ? ['continue', 'new', 'join'] : ['new', 'join']);
 
 export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H: number, m: MenuState): TitleAction {
-  // The saved dog, dressed as the player left it (the demo game read it).
-  const dogSpr = playerDogSprites(game.look.dog);
   const ui = game.ui;
   const info = saveInfo();
   const items: { id: TitleAction; label: string }[] = [];
@@ -43,16 +40,13 @@ export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const touch = game.input.touchMode;
   const scale = W >= 300 ? 6 : 5;
   const ly = Math.round(S.top + (H - S.top) * 0.16);
+  // The illustration along the bottom: the heeler on its knoll, by season.
+  const menuEnd = Math.round(H * 0.5) + items.length * (touch ? 21 : 15);
+  drawTitleArt(g, W, H, menuEnd + 4, H - S.bottom - 34, game.season.season, game.t);
   logo(g, 'COME BY', W / 2, ly, scale);
+  const sw = textWidth('A HERDING GAME') + 8;
+  rect(g, Math.round(W / 2 - sw / 2), ly + scale * 5 + 6, sw, 9, C.plum); // reads on snow too
   text(g, 'A HERDING GAME', W / 2, ly + scale * 5 + 8, C.wool, { align: 'center', shadow: C.plum });
-  // The heeler, trotting beside the title.
-  const run = dogSpr.side;
-  const f = Math.floor(game.t * 8) % run.length;
-  const lw = textWidth('COME BY', scale);
-  const sp = run[f];
-  const dx = Math.round(W / 2 + lw / 2 + 6), dy = Math.round(ly + scale * 5 - sp.h * 2 + 2);
-  if (dx + sp.w * 2 < W - 2) g.drawImage(sp.img, dx, dy, sp.w * 2, sp.h * 2);
-  else drawSpr(g, sp, W / 2, ly - 4);
 
   // Menu.
   let result: TitleAction = null;

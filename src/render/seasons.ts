@@ -71,11 +71,12 @@ function buildGround(bk: Baked, [c, g]: [HTMLCanvasElement, CanvasRenderingConte
           // Paths trodden through: only a thin dusting stays.
           if ((px === meadow || px === moss) && h < s * 0.3) px = wool;
         } else if (px === meadow || px === butter) {
-          // A little old grass shows through at random, so the snow has
-          // texture and pale things standing on it still read.
-          if (h < s * 0.84 || (px === butter && s > 0.5)) px = wool;
+          // Old grass pokes through here and there in small tufts, so the
+          // snow has texture and pale things standing on it still read.
+          const tuft = hash2(x >> 1, y >> 1, 606);
+          if (tuft < s * 0.93 || h < s * 0.6 || (px === butter && s > 0.5)) px = wool;
         } else if (px === moss) {
-          if (h < s * 0.7) px = wool;
+          if (hash2(x >> 1, y >> 1, 607) < s * 0.85 || h < s * 0.5) px = wool;
         } else if (px === sage) {
           if (t < s * 3) px = wool;
         } else if (px === teal && s > 0.7 && so !== 3) px = wool;
@@ -106,15 +107,18 @@ function buildCanopy(bk: Baked, [c, g]: [HTMLCanvasElement, CanvasRenderingConte
         // Blossom: little clusters of wool petals, a buttercup heart.
         // Some trees are in full flower, most only touched with it.
         const cl = hash2(x >> 1, y >> 1, 612);
+        // (The deep woods only flower in patches; the trees at their edges
+        // and in the groves carry the most.)
         const full = vnoise(x / 12, y / 12, 614) > 0.55;
-        if (cl < b * (full ? 0.32 : 0.04)) px = h < 0.25 ? butter : wool;
+        if (cl < b * (full ? (k === 2 ? 0.32 : 0.14) : k === 2 ? 0.04 : 0)) px = h < 0.25 ? butter : wool;
       }
       if (broad && l > 0 && (px === teal || px === sage)) {
         // Each crown turns its own way: buttercup, plum-brown, or late green.
         const n = vnoise(x / 13, y / 13, 613);
-        if (n < 0.4) px = h < l * 0.6 ? butter : h < l * 0.7 ? plum : px;
-        else if (n < 0.65) px = h < l * 0.35 ? plum : h < l * 0.6 ? sage : px;
-        else px = h < l * 0.15 ? sage : h < l * 0.2 ? butter : px;
+        const a = k === 2 ? l : l * 0.6; // the deep woods turn more quietly
+        if (n < 0.4) px = h < a * 0.6 ? butter : h < a * 0.7 ? plum : px;
+        else if (n < 0.65) px = h < a * 0.35 ? plum : h < a * 0.6 ? sage : px;
+        else px = h < a * 0.15 ? sage : h < a * 0.2 ? butter : px;
       }
       if (s > 0 && px !== plum) {
         // Snow on top of every clump and tier, a dusting through the rest.

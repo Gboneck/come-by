@@ -75,9 +75,21 @@ const GRIDS = {
 function build(rows: string[], look: Look): Sprite {
   const map: Record<string, string> = { H: look.H, F: 'w', E: 'p', R: look.R ?? 'p', C: look.C, L: look.L, B: 'p', T: 's', P: 'p' };
   const h = rows.length, w = Math.max(...rows.map((r) => r.length));
+  // Lit from the upper right like everything else: coats, legs and hat
+  // brims are a shade darker down their left side, and a coat catches a
+  // rim of light down its right.
+  const DARK: Record<string, string> = { w: 's', y: 'o', t: 'p', s: 't', o: 's', m: 'o' };
+  const LIGHT: Record<string, string> = { t: 's', p: 't', s: 'o', o: 'm', y: 'w' };
+  const tpl = (x: number, y: number) => rows[y]?.[x] ?? '.';
   const cell = (x: number, y: number) => {
-    const ch = rows[y]?.[x];
-    return ch && ch !== '.' ? map[ch] ?? ch : null;
+    const ch = tpl(x, y);
+    if (ch === '.') return null;
+    const c = map[ch] ?? ch;
+    if (ch === 'C' || ch === 'L' || (ch === 'H' && tpl(x, y + 1) !== 'H')) {
+      if (tpl(x - 1, y) !== ch && DARK[c]) return DARK[c];
+      if (ch === 'C' && tpl(x + 1, y) !== ch && LIGHT[c]) return LIGHT[c];
+    }
+    return c;
   };
   const out: string[] = [];
   for (let y = -1; y <= h; y++) {
