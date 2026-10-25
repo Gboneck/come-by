@@ -13,6 +13,21 @@ await server.listen();
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
 const errors = [];
+const seedArg = process.argv.find((x) => x.startsWith('--seed='));
+if (seedArg) {
+  // Exact runs: seeded Math.random and no live frame loop.
+  await page.addInitScript((seed) => {
+    window.requestAnimationFrame = () => 0;
+    let a = seed >>> 0;
+    Math.random = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, Number(seedArg.slice(7)));
+}
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto('http://localhost:5213/?debug');
