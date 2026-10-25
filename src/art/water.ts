@@ -85,6 +85,27 @@ export function makeWaterAnim(src: WaterSrc, x0: number, y0: number, w: number, 
         if (on) buf[yy * w + xx] = U32.wool;
       }
     }
+    // Rings spreading near the banks, where insects touch down by the reeds.
+    for (let cy = Math.floor(y0 / 9); cy * 9 < y0 + h; cy++)
+      for (let cx = Math.floor(x0 / 11); cx * 11 < x0 + w; cx++) {
+        if (hash2(cx, cy, 380) > 0.3) continue;
+        const px = cx * 11 + Math.floor(hash2(cx, cy, 381) * 11), py = cy * 9 + Math.floor(hash2(cx, cy, 382) * 9);
+        if (px < x0 || py < y0 || px >= x0 + w || py >= y0 + h) continue;
+        const wd = wdist[py * W + px];
+        if (!water[py * W + px] || wd < 2 || wd > (flowing ? 3 : 5)) continue;
+        const ph = (f + Math.floor(hash2(cx, cy, 383) * WATER_FRAMES)) % WATER_FRAMES;
+        if (ph >= 6) continue;
+        const r = 1 + (ph >> 1), ry = Math.max(1, r >> 1);
+        for (let a = 0; a < 12; a++) {
+          if (ph >= 4 && a % 2) continue;
+          const ang = (a / 12) * Math.PI * 2;
+          const x = Math.round(px + Math.cos(ang) * r), y = Math.round(py + Math.sin(ang) * ry);
+          const xx = x - x0, yy = y - y0;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          const i = y * W + x;
+          if (water[i] && !skip[i] && ground[i] !== U32.plum) buf[yy * w + xx] = U32.wool;
+        }
+      }
     // Ripples trailing downstream of each stepping stone.
     for (const s of stones) {
       const k = (f >> 1) % 4;

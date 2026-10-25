@@ -225,15 +225,45 @@ function recoat(id: SpeciesId, coat: Coat, rows: string[]): string[] {
   return rows;
 }
 
+// Sunlight from the upper right: the coat's top edge catches a rim of light
+// on the sunny side. On white coats the rim is a sparse buttercup glint, on
+// plum a teal sheen, on sage moss. (The undersides are already in shade.)
+export function rimLight(rows: string[], body: string, rim: string, sparse: boolean): string[] {
+  const W = Math.max(...rows.map((r) => r.length));
+  return rows.map((row, y) =>
+    [...row.padEnd(W, '.')]
+      .map((ch, x) => {
+        if (ch !== body || x < W * 0.35 || y > rows.length * 0.62) return ch;
+        const up = y > 0 ? rows[y - 1][x] ?? '.' : '.';
+        if (up !== '.') return ch;
+        if (sparse && (x + y) % 2) return ch;
+        return rim;
+      })
+      .join(''),
+  );
+}
+
+const RIM: Partial<Record<SpeciesId, Record<number, [string, string, boolean]>>> = {
+  sheep: { 0: ['w', 'y', true] },
+  goat: { 0: ['w', 'y', true], 1: ['s', 'o', false] },
+  cow: { 0: ['p', 't', true], 1: ['p', 't', true] },
+  pony: { 0: ['w', 'y', true], 1: ['s', 'o', false], 2: ['p', 't', true] },
+};
+
 function build(id: SpeciesId, coat: Coat): AnimalSprites {
   const G = GRIDS[id];
   const [ax, axv] = AX[id];
-  const side = (rows: string[]) => {
+  const rim = RIM[id]?.[coat];
+  const look = (rows: string[]) => {
     const r = recoat(id, coat, rows);
+    return rim ? rimLight(r, ...rim) : r;
+  };
+  const side = (rows: string[]) => {
+    const r = look(rows);
     return spr(r, ax, r.length - 1);
   };
   const vert = (rows: string[]) => {
-    const r = recoat(id, coat, rows);
+    const r = look(rows);
     return spr(r, axv, r.length - 1);
   };
   return {

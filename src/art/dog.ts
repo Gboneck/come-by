@@ -1,5 +1,6 @@
 import { C } from '../palette';
 import { drawSpr, spr, type Sprite } from '../gfx/sprite';
+import { rimLight } from './animals';
 
 // Blue heeler: teal coat flecked with wool, plum mask and ear tips, and the
 // red bandana that marks the player. `y` (buttercup) swaps in for helpers.
@@ -312,7 +313,8 @@ function recolor(rows: string[], bandana: string): string[] {
 }
 
 export function makeDogSprites(bandana: 'r' | 'y' = 'r'): DogSprites {
-  const S = (rows: string[], ax: number, ay: number) => spr(recolor(rows, bandana), ax, ay);
+  // The sun catches the top of the coat on the far side: a sage rim.
+  const S = (rows: string[], ax: number, ay: number) => spr(rimLight(recolor(rows, bandana), 't', 's', false), ax, ay);
   const side: DogPoses = {
     stand: S(SIDE_STAND, 6, 7),
     run: SIDE_RUN.map((f) => S(f, 6, 7)),
@@ -381,7 +383,7 @@ const CURL_BREATH = curlRows('..ttttt.ttt..');
 let curl: Sprite[] | null = null;
 
 export function drawSleepingDog(g: CanvasRenderingContext2D, x: number, y: number, flip: boolean, t: number) {
-  curl ??= [spr(CURL, 6, 7), spr(CURL_BREATH, 6, 7)];
+  curl ??= [spr(rimLight(CURL, 't', 's', false), 6, 7), spr(rimLight(CURL_BREATH, 't', 's', false), 6, 7)];
   drawSpr(g, curl[t % 2.4 > 1.6 ? 1 : 0], x, y + 2, flip);
 }
 
