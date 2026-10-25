@@ -1043,3 +1043,11 @@ novice trial with a calm handler scores 99-100 with or without the change.
   savetest included, pass as before.
 - In headless Chromium a second Tab press never reaches the page, so
   cooptest opens and closes the Ledger with G.
+- The relay is deployed to the user's Cloudflare account as `come-by-relay`
+  (https://come-by-relay.gboneck.workers.dev); the Pages workflow reads it
+  from the repository variable `RELAY_URL`. cooptest passes through it.
+- On Cloudflare a quick reconnect can reach the room before the old
+  socket's close is handled, so the relay checks for a newer socket for the
+  same player after its storage read, not before, and says nothing about a
+  drop that was already mended. A host who is back before the relay notices
+  never shows guests the waiting card; guests just get a fresh world.

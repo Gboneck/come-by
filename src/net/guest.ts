@@ -105,6 +105,7 @@ export class GuestNet {
   private home: { x: number; y: number } | null = null;
   private lastTier = 0;
   private lastSnap = 0;
+  fulls = 0; // whole snapshots received (one on joining, one after any drop)
   private id = playerId();
   readonly look: Look; // our own dog, from our own save
   readonly base_: string | null = relayBase();
@@ -207,6 +208,7 @@ export class GuestNet {
 
   private onSnap(s: Snap) {
     if (s.full) {
+      this.fulls++;
       this.base = new Map(s.animals.map((a) => [a.id, a]));
       this.frames = [];
       this.evq = [];

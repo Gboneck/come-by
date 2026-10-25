@@ -254,10 +254,12 @@ export class Room extends DurableObject<Env> {
     const s = this.seat(ws);
     this.shut(ws, code === 1000 || (code >= 3000 && code < 5000) ? code : 1000, reason);
     if (!s || code === REPLACED) return;
-    // Replaced by a newer socket for the same player: nothing has changed.
+    const m = await this.meta();
+    // Replaced by a newer socket for the same player (a quick reconnect can
+    // arrive before this close does): nothing has changed. Checked after
+    // the read above, so a reconnect during it counts too.
     const others = this.ctx.getWebSockets(s.role).filter((o) => o !== ws);
     if (s.role === 'host' ? others.length > 0 : others.some((o) => this.seat(o)?.id === s.id)) return;
-    const m = await this.meta();
     if (!m) return;
     if (s.role === 'host') {
       if (code === CLOSED) {

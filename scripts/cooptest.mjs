@@ -6,19 +6,21 @@
 // left alone; then a bark and a nip from the guest, a dropped line and a
 // reconnect, the guest leaving, the host closing the ranch, snapshot size
 // and rate, and the drive again with lag on the guest's line.
-//   node scripts/cooptest.mjs [--lag=150] [--shots] [--keep]
+//   node scripts/cooptest.mjs [--lag=150] [--shots] [--relay=https://...]
+// --relay plays through a deployed relay instead of starting wrangler dev.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
 
-const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).split('=')[1];
+const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).split('=').slice(1).join('=');
 const LAG = Number(arg('lag', 150));
 const SHOTS = process.argv.includes('--shots');
 const VITE_PORT = Number(process.env.COOP_VITE_PORT ?? 5232);
 const RELAY_PORT = Number(process.env.COOP_RELAY_PORT ?? 8790);
-const RELAY = `http://127.0.0.1:${RELAY_PORT}`;
+const REMOTE = arg('relay', '');
+const RELAY = REMOTE || `http://127.0.0.1:${RELAY_PORT}`;
 const root = fileURLToPath(new URL('..', import.meta.url));
 mkdirSync(`${root}shots/coop`, { recursive: true });
 
@@ -30,11 +32,11 @@ const check = (label, ok, info = '') => {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- The relay ----
-const relay = spawn('npx', ['wrangler', 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], { cwd: `${root}server`, stdio: ['ignore', 'pipe', 'pipe'] });
+const relay = REMOTE ? null : spawn('npx', ['wrangler', 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], { cwd: `${root}server`, stdio: ['ignore', 'pipe', 'pipe'] });
 let relayLog = '';
-relay.stdout.on('data', (d) => (relayLog += d));
-relay.stderr.on('data', (d) => (relayLog += d));
-const stopRelay = () => { try { relay.kill('SIGTERM'); } catch { /* gone */ } };
+relay?.stdout.on('data', (d) => (relayLog += d));
+relay?.stderr.on('data', (d) => (relayLog += d));
+const stopRelay = () => { try { relay?.kill('SIGTERM'); } catch { /* gone */ } };
 process.on('exit', stopRelay);
 let up = false;
 for (let i = 0; i < 60 && !up; i++) {
@@ -303,17 +305,20 @@ await host.waitForFunction(() => [...window.game.net.seats.values()][0]?.away > 
 const away = await host.evaluate(() => ({ away: [...window.game.net.seats.values()][0]?.away > 0, dogs: window.game.net.dogs.length }));
 check('host sees the guest drop (dog waits)', away.away && away.dogs === 1, JSON.stringify(away));
 await guest.waitForFunction(() => window.game.net.status === 'playing' && window.game.net.ready, null, { timeout: 15000 }).catch(() => {});
+await wait(300);
 const back = await guest.evaluate(() => ({ status: window.game.net.status, slot: window.game.net.slot, animals: window.game.animals.length }));
 const hostBack = await host.evaluate(() => ({ dogs: window.game.net.dogs.length, away: [...window.game.net.seats.values()][0]?.away }));
 check('guest reconnects into the same slot', back.status === 'playing' && back.slot === 1 && hostBack.dogs === 1 && !hostBack.away, JSON.stringify({ ...back, ...hostBack }));
 
-// ---- The host's line drops: the guest waits, then carries on ----
+// ---- The host's line drops: the guest waits (unless the host is back
+// before the relay even notices), then carries on with a fresh world ----
+const fullsBefore = await guest.evaluate(() => window.game.net.fulls);
+await guest.evaluate(() => { window.__sawAway = false; const n = window.game.net; const f = () => { if (n.status === 'away') window.__sawAway = true; requestAnimationFrame(f); }; f(); });
 await host.evaluate(() => window.game.net.dropLine());
-await guest.waitForFunction(() => window.game.net.status === 'away', null, { timeout: 5000 }).catch(() => {});
-const gAway = await guest.evaluate(() => window.game.net.status);
-await guest.waitForFunction(() => window.game.net.status === 'playing' && window.game.net.ready, null, { timeout: 15000 }).catch(() => {});
-const gBack = await guest.evaluate(() => window.game.net.status);
-check('host drops and comes back: guest waits, then plays on', gAway === 'away' && gBack === 'playing', `${gAway} -> ${gBack}`);
+await host.waitForFunction(() => window.game.net.status === 'open' && window.game.net.dogs.length === 1, null, { timeout: 15000 }).catch(() => {});
+await guest.waitForFunction((n) => window.game.net.status === 'playing' && window.game.net.fulls > n && !window.game.net.stale, fullsBefore, { timeout: 15000 }).catch(() => {});
+const hBack = await guest.evaluate(() => ({ status: window.game.net.status, fresh: window.game.net.fulls, sawAway: window.__sawAway, stale: window.game.net.stale }));
+check('host drops and comes back: the guest plays on with a fresh world', hBack.status === 'playing' && hBack.fresh > fullsBefore && !hBack.stale, JSON.stringify(hBack));
 
 // ---- The guest leaves: their dog trots off ----
 await guest.evaluate(() => window.game.net.leave(window.game));
