@@ -2,7 +2,7 @@ import type { Animal } from '../entities/animal';
 import { BLOCK_ANIMAL, CW, CH, MH, MW, REGIONS, TS, YARDS, type WorldMap } from '../world/map';
 import { Building, Farmhouse, Pen, RegionGate, type BuildingKind, type Rot } from './buildings';
 import { FieldGate } from './structures';
-import { Course, Yard, type Fixture } from './fixtures';
+import { Course, Ring, Yard, type Fixture } from './fixtures';
 import { setPenPrice } from './catalog';
 import { placementProblem, roadMask } from './road';
 
@@ -18,6 +18,7 @@ export class Ranch {
   // Out in the valley: buyers' yards and the Show Ground's trial course.
   yards: Yard[];
   course: Course;
+  ring: Ring; // the autumn fair's judging ring
   fixtures: Fixture[];
   // The drove road through the clearing (tiles), kept free of building.
   road: Uint8Array;
@@ -26,7 +27,8 @@ export class Ranch {
     this.road = roadMask(map);
     this.yards = YARDS.map((s) => new Yard(s));
     this.course = new Course();
-    this.fixtures = [...this.yards, this.course];
+    this.ring = new Ring();
+    this.fixtures = [...this.yards, this.course, this.ring];
     for (const r of REGIONS) {
       if (!r.gate) continue;
       const span = this.gateSpan(r.gate.x, r.gate.y, r.gate.vertical);

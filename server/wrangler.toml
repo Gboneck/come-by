@@ -4,7 +4,9 @@
 # Deploy:  npx wrangler login, then npm run deploy
 name = "come-by-relay"
 main = "src/index.ts"
-compatibility_date = "2026-10-24"
+# Not newer than the local runtime that wrangler dev runs (older installs
+# refuse a date they do not know yet).
+compatibility_date = "2026-09-25"
 
 [[durable_objects.bindings]]
 name = "ROOMS"

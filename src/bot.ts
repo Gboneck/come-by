@@ -32,14 +32,16 @@ export function botStep(game: Game, o: BotOpts, t: number): BotCmd {
   const trial = !!game.trials.run;
   const flock: Animal[] = (o.flock ?? game.animals).filter((a) => !a.pen && !a.gone && !a.carried && a.trial === trial);
   if (!flock.length) return { x: 0, y: 0, sprint: false, lie: false, bark: false };
+  // Lambs keep to their mothers: read the flock by the grown animals.
+  const grown = flock.some((a) => !a.young) ? flock.filter((a) => !a.young) : flock;
   let cx = 0, cy = 0;
-  for (const a of flock) { cx += a.x; cy += a.y; }
-  cx /= flock.length;
-  cy /= flock.length;
-  const sp = flock[0].sp;
-  const fN = sp.nbr * 0.55 * Math.sqrt(flock.length);
-  let far = flock[0], fd = 0;
-  for (const a of flock) {
+  for (const a of grown) { cx += a.x; cy += a.y; }
+  cx /= grown.length;
+  cy /= grown.length;
+  const sp = grown[0].sp;
+  const fN = sp.nbr * 0.55 * Math.sqrt(grown.length);
+  let far = grown[0], fd = 0;
+  for (const a of grown) {
     const dd = Math.hypot(a.x - cx, a.y - cy);
     if (dd > fd) { fd = dd; far = a; }
   }
@@ -90,8 +92,8 @@ export function botStep(game: Game, o: BotOpts, t: number): BotCmd {
     // Get right behind the rearmost animal and nip it on.
     const gx = o.goalX - cx, gy = o.goalY - cy;
     const gl = Math.hypot(gx, gy) || 1;
-    let rear = flock[0], rd = 1e9;
-    for (const a of flock) { const p = (a.x - cx) * gx / gl + (a.y - cy) * gy / gl; if (p < rd) { rd = p; rear = a; } }
+    let rear = grown[0], rd = 1e9;
+    for (const a of grown) { const p = (a.x - cx) * gx / gl + (a.y - cy) * gy / gl; if (p < rd) { rd = p; rear = a; } }
     const bx = rear.x - (gx / gl) * (rear.sp.r + 6), by = rear.y - (gy / gl) * (rear.sp.r + 6);
     const nx = bx - d.x, ny = by - d.y, nl = Math.hypot(nx, ny);
     const close = Math.hypot(rear.x - d.x, rear.y - d.y) < rear.sp.r + 9;

@@ -9,6 +9,7 @@ import type { Game } from './game';
 import { runSim, type BotOpts } from './bot';
 import type { SpeciesId } from './world/map';
 import { SKIES, type Sky } from './systems/weather';
+import { SEASON_LIST, type Season } from './systems/season';
 
 declare global {
   interface Window {
@@ -25,6 +26,9 @@ export function installDebug(game: Game) {
   // ?debug&weather=rain (fog, wind, storm) holds that sky.
   const sky = new URLSearchParams(location.search).get('weather') as Sky | null;
   if (sky && SKIES.includes(sky)) game.weather.force(sky);
+  // ?debug&season=winter (spring, summer, autumn) holds that season.
+  const season = new URLSearchParams(location.search).get('season') as Season | null;
+  if (season && SEASON_LIST.includes(season)) game.season.force(season);
   window.resetFlock = (species, x, y, n, dogX, dogY) => {
     game.animals.length = 0;
     game.mode = 'play';
@@ -47,6 +51,7 @@ function buildSheet() {
   return [
     { label: 'DOG SIDE', sprites: [d.sideStand, ...d.side, d.sideBark, d.sideLie] },
     { label: 'DOG GALLOP', sprites: d.gallop },
+    { label: 'DOG IDLE', sprites: [...(d.poses.side.sniff ?? []), ...(d.poses.side.scratch ?? []), ...(d.poses.side.shake ?? [])] },
     { label: 'DOG DOWN', sprites: [d.downStand, ...d.down, d.downBark, d.downLie] },
     { label: 'DOG UP', sprites: [d.upStand, ...d.up, d.upLie] },
     { label: 'HELPER', sprites: [h.sideStand, h.downStand, h.upStand] },

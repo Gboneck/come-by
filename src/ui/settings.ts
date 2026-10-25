@@ -1,5 +1,7 @@
 // Player settings from the pause menu, remembered in localStorage.
 // (Sound on/off lives in the Sound object, which stores its own.)
+import type { QualitySetting } from '../gfx/quality';
+
 const KEY = 'comeby-settings';
 
 export type ZoneMode = 'lying' | 'always';
@@ -8,9 +10,10 @@ export interface Settings {
   shake: boolean; // camera kicks on bark, nip, gate and tier-up
   zones: ZoneMode; // when the nearest flock's flight zone ring shows
   haptics: boolean; // navigator.vibrate on phones that have it
+  quality: QualitySetting; // GRAPHICS: auto, or a level (gfx/quality.ts)
 }
 
-const DEFAULTS: Settings = { shake: true, zones: 'lying', haptics: true };
+const DEFAULTS: Settings = { shake: true, zones: 'lying', haptics: true, quality: 'auto' };
 
 function load(): Settings {
   try {

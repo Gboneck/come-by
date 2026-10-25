@@ -77,7 +77,7 @@ export class Predator {
       if (a.pen || a.gone || a.carried) continue;
       const ca = ctx.claimed.get(a);
       if (ca && ca !== this) continue;
-      const d = Math.hypot(a.x - this.x, a.y - this.y) * (a.stray ? 0.5 : 1);
+      const d = Math.hypot(a.x - this.x, a.y - this.y) * (a.stray ? 0.5 : 1) * (a.young ? 0.6 : 1); // strays and lambs first
       if (d < best) { best = d; this.target = a; this.pen = null; }
     }
     for (const p of ctx.pens) {

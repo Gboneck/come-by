@@ -6,19 +6,21 @@
 // left alone; then a bark and a nip from the guest, a dropped line and a
 // reconnect, the guest leaving, the host closing the ranch, snapshot size
 // and rate, and the drive again with lag on the guest's line.
-//   node scripts/cooptest.mjs [--lag=150] [--shots] [--keep]
+//   node scripts/cooptest.mjs [--lag=150] [--shots] [--relay=https://...]
+// --relay plays through a deployed relay instead of starting wrangler dev.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 
-const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).split('=')[1];
+const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).split('=').slice(1).join('=');
 const LAG = Number(arg('lag', 150));
 const SHOTS = process.argv.includes('--shots');
 const VITE_PORT = Number(process.env.COOP_VITE_PORT ?? 5232);
 const RELAY_PORT = Number(process.env.COOP_RELAY_PORT ?? 8790);
-const RELAY = `http://127.0.0.1:${RELAY_PORT}`;
+const REMOTE = arg('relay', '');
+const RELAY = REMOTE || `http://127.0.0.1:${RELAY_PORT}`;
 const root = fileURLToPath(new URL('..', import.meta.url));
 mkdirSync(`${root}shots/coop`, { recursive: true });
 
@@ -30,11 +32,15 @@ const check = (label, ok, info = '') => {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- The relay ----
-const relay = spawn('npx', ['wrangler', 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], { cwd: `${root}server`, stdio: ['ignore', 'pipe', 'pipe'] });
+if (!REMOTE && !existsSync(`${root}server/node_modules/.bin/wrangler`)) {
+  console.log('FAIL the relay\'s packages are not installed: run (cd server && npm install) first');
+  process.exit(1);
+}
+const relay = REMOTE ? null : spawn('npx', ['wrangler', 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], { cwd: `${root}server`, stdio: ['ignore', 'pipe', 'pipe'] });
 let relayLog = '';
-relay.stdout.on('data', (d) => (relayLog += d));
-relay.stderr.on('data', (d) => (relayLog += d));
-const stopRelay = () => { try { relay.kill('SIGTERM'); } catch { /* gone */ } };
+relay?.stdout.on('data', (d) => (relayLog += d));
+relay?.stderr.on('data', (d) => (relayLog += d));
+const stopRelay = () => { try { relay?.kill('SIGTERM'); } catch { /* gone */ } };
 process.on('exit', stopRelay);
 let up = false;
 for (let i = 0; i < 60 && !up; i++) {
@@ -54,9 +60,13 @@ const site = `http://localhost:${VITE_PORT}`;
 // Two browsers, not two tabs: nothing shared, and neither is a background tab.
 const launch = () => chromium.launch({ args: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--autoplay-policy=no-user-gesture-required'] });
 const hostB = await launch(), guestB = await launch();
+// One context per player, as one phone each: a guest's later visit sees
+// what the earlier one stored (their travels).
+const hostCtx = await hostB.newContext({ viewport: { width: 960, height: 600 } });
+const guestCtx = await guestB.newContext({ viewport: { width: 390, height: 844 } });
 const errors = [];
 async function open(browser, url, viewport, who) {
-  const page = await browser.newPage({ viewport });
+  const page = await (browser === hostB ? hostCtx : guestCtx).newPage();
   page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && !/WebSocket|ERR_CONNECTION|Failed to load resource/.test(m.text()) && errors.push(`${who}: ${m.text()}`));
   await page.goto(url);
@@ -297,23 +307,217 @@ const nipRes = await (async () => {
 })();
 check("a guest's nip moves the host's cow", nipRes.after.commit > 0.5 && nipRes.after.stress > nipRes.before.stress, JSON.stringify(nipRes.after));
 
+// ---- Seasons and round three's shared ranch state reach the guest ----
+await guest.evaluate(async () => {
+  const sh = await import('/src/net/shared.ts');
+  sh.SHARED.push({ key: 'cooptest', get: (g) => g.__cooptest ?? null, set: (g, v) => (g.__cooptest = v) });
+});
+await host.evaluate(async () => {
+  const sh = await import('/src/net/shared.ts');
+  sh.SHARED.push({ key: 'cooptest', get: (g) => g.__cooptest ?? null, set: (g, v) => (g.__cooptest = v) });
+  window.game.__cooptest = { hay: 3 };
+  window.game.season.force('winter');
+});
+await guest.waitForFunction(() => window.game.season.season === 'winter' && window.game.season.snow > 0.9 && window.game.__cooptest?.hay === 3, null, { timeout: 5000 }).catch(() => {});
+const seas = await guest.evaluate(() => ({ season: window.game.season.season, snow: +window.game.season.snow.toFixed(2), shared: window.game.__cooptest }));
+check('the season (and shared ranch state) reaches the guest', seas.season === 'winter' && seas.snow > 0.9 && seas.shared?.hay === 3, JSON.stringify(seas));
+// Lambs, winter hay and the fair (gameplay's shared fields) reach the guest.
+const r3 = await host.evaluate(async () => {
+  const g = window.game;
+  const Z = await import('/src/systems/seasonal.ts');
+  const A = await import('/src/entities/animal.ts');
+  const B = await import('/src/ui/build.ts');
+  const K = await import('/src/ranch/catalog.ts');
+  const ewe = new A.Animal('sheep', g.dog.x + 30, g.dog.y + 20);
+  const lamb = Z.lambFor(ewe);
+  g.animals.push(ewe, lamb);
+  const h = B.makeBuilding(K.defOf('hay'), 81, 104, 0);
+  g.ranch.add(h);
+  h.bales = 13;
+  g.seasonal.loft = 4;
+  g.seasonal.fair = [{ species: 'sheep', score: 70, place: 2, prize: 20, rivals: [], rare: false }];
+  return { lamb: lamb.id, ewe: ewe.id };
+});
+await guest.waitForFunction((ids) => {
+  const g = window.game;
+  const l = g.animals.find((a) => a.id === ids.lamb), e = g.animals.find((a) => a.id === ids.ewe);
+  return l?.young && e && !e.young && g.seasonal.loft === 4 && g.ranch.buildings.some((b) => b.kind === 'haystack' && b.bales === 13);
+}, r3, { timeout: 6000 }).catch(() => {});
+const r3g = await guest.evaluate((ids) => {
+  const g = window.game;
+  const l = g.animals.find((a) => a.id === ids.lamb), e = g.animals.find((a) => a.id === ids.ewe);
+  return { lamb: !!l?.young, ewe: !!e && !e.young, loft: g.seasonal.loft, bales: g.ranch.buildings.filter((b) => b.kind === 'haystack').map((b) => b.bales), fair: g.seasonal.fair.length, dusk: g.day.duskAt, year: g.season.year, drag: +g.dog.drag.toFixed(2) };
+}, r3);
+check('lambs, hay, the fair and the winter day reach the guest', r3g.lamb && r3g.ewe && r3g.loft === 4 && r3g.bales.includes(13) && r3g.fair === 1 && r3g.dusk < 0.75 && r3g.year >= 1 && r3g.drag > 0.05, JSON.stringify(r3g));
+await host.evaluate(() => { window.game.season.forced = false; window.game.season.set('summer'); window.game.season.snap(); });
+
+// ---- Pings, both ways ----
+await guest.evaluate(() => { window.__heard = []; });
+await host.evaluate(() => window.game.net.sendPing(window.game, 'here'));
+await guest.waitForFunction(() => window.game.net.pings.list.some((p) => p.slot === 0 && p.kind === 'here'), null, { timeout: 3000 }).catch(() => {});
+const gotPing = await guest.evaluate(() => ({ pings: window.game.net.pings.list.map((p) => `${p.name}:${p.kind}`), heard: window.__heard.filter((n) => n.startsWith('ping')) }));
+check("the host's ping shows (and sounds) on the guest's screen", gotPing.pings.includes('BLUE:here') && gotPing.heard.includes('ping-here'), JSON.stringify(gotPing));
+// The guest holds F and presses up: HOLD.
+await guest.keyboard.down('KeyF');
+await wait(450);
+await guest.keyboard.down('ArrowUp');
+await wait(120);
+await guest.keyboard.up('ArrowUp');
+await guest.keyboard.up('KeyF');
+await host.waitForFunction(() => window.game.net.pings.list.some((p) => p.slot === 1 && p.kind === 'hold'), null, { timeout: 3000 }).catch(() => {});
+const hostPing = await host.evaluate(() => window.game.net.pings.list.map((p) => `${p.name}:${p.kind}`));
+check("the guest's held F + up says HOLD on the host's screen", hostPing.includes('ZIGGY:hold'), JSON.stringify(hostPing));
+await wait(700);
+// A tap of F: over here.
+await guest.keyboard.down('KeyF');
+await wait(80);
+await guest.keyboard.up('KeyF');
+await host.waitForFunction(() => window.game.net.pings.list.some((p) => p.slot === 1 && p.kind === 'here'), null, { timeout: 3000 }).catch(() => {});
+check("a tap of F says OVER HERE", await host.evaluate(() => window.game.net.pings.list.some((p) => p.slot === 1 && p.kind === 'here')));
+if (SHOTS) {
+  await wait(200);
+  await host.screenshot({ path: `${root}shots/coop/host-pings.png` });
+  await guest.screenshot({ path: `${root}shots/coop/guest-pings.png` });
+}
+
+// ---- The guest finds a hidden place and a keepsake: theirs to keep ----
+const place = await guest.evaluate(async () => {
+  const { placeById } = await import('/src/world/places.ts');
+  const g = window.game, p = placeById('orchard');
+  g.dog.x = p.cx * 8;
+  g.dog.y = p.cy * 8;
+  return { item: p.item };
+});
+await guest.waitForFunction(() => window.game.net.travels.found.has('orchard'), null, { timeout: 3000 }).catch(() => {});
+await guest.evaluate(({ item }) => { window.game.dog.x = item[0]; window.game.dog.y = item[1] + 4; }, place);
+await guest.waitForFunction(() => window.game.net.travels.keep.has('bell'), null, { timeout: 3000 }).catch(() => {});
+const trav = await guest.evaluate(() => {
+  const t = JSON.parse(localStorage.getItem('comeby-travels-v1') || '{}');
+  return { found: t.found, keep: t.keep, coins: t.coins, stamps: (t.stamps || []).map((s) => s.ranch), fog: (t.fog || '').length > 10, save: localStorage.getItem('comeby-save-v1') };
+});
+check('the guest finds the Old Orchard and its bell for their own travels', trav.found?.includes('orchard') && trav.keep?.includes('bell') && trav.coins >= 5 && trav.fog, JSON.stringify({ ...trav, save: undefined }));
+check('the visit is stamped', trav.stamps?.includes("BLUE'S RANCH"), JSON.stringify(trav.stamps));
+check("the host's ranch did not find it (their exploring, not the host's)", !(await host.evaluate(() => window.game.discovery.found.has('orchard'))));
+check("the guest's save is still not written while visiting", trav.save === guestSave);
+
+// ---- A brace: both dogs at the post, ten sheep, scored together ----
+// A trial day, so the brace runs for prizes (a new day number sends every
+// dog home to the door first, so wait for that).
+await host.evaluate(() => { window.game.day.day = 3; window.game.day.t = 30; });
+await wait(600);
+await host.evaluate(() => {
+  const g = window.game, p = g.ranch.course.post;
+  g.input.override = { x: 0, y: 0, sprint: false, lie: false };
+  g.dog.x = p.x - 8;
+  g.dog.y = p.y + 4;
+});
+await guest.evaluate(() => {
+  const g = window.game, p = g.ranch.course.post;
+  g.input.override = { x: 0, y: 0, sprint: false, lie: false };
+  g.dog.x = p.x + 8;
+  g.dog.y = p.y + 4;
+});
+await host.evaluate(async () => { window.__trials = await import('/src/systems/trials.ts'); });
+await host.waitForFunction(() => window.__trials.braceReady(window.game), null, { timeout: 4000 }).catch(() => {});
+await wait(200);
+const braceHint = await guest.evaluate(() => window.game.hint());
+if (process.env.COOP_DEBUG) {
+  console.log('host', JSON.stringify(await host.evaluate(() => { const g = window.game, p = g.ranch.course.post; return { post: [p.x, p.y], dog: [g.dog.x, g.dog.y], coop: g.coop.map((d) => [Math.round(d.x), Math.round(d.y)]), ready: window.__trials.braceReady(g), role: g.net?.role, tier: g.tier }; })));
+  console.log('guest', JSON.stringify(await guest.evaluate(() => { const g = window.game, p = g.ranch.course.post; return { post: [p.x, p.y], dog: [g.dog.x, g.dog.y], st: g.net.status, waiting: g.net.waiting, mode: g.mode }; })));
+}
+await host.evaluate(() => window.game.input.push('nip'));
+await guest.waitForFunction(() => window.game.trials.run?.cls.id === 'brace', null, { timeout: 4000 }).catch(() => {});
+const brace = await guest.evaluate(() => ({ cls: window.game.trials.run?.cls.id, flock: window.game.animals.filter((a) => a.trial).length }));
+const hostBrace = await host.evaluate(() => ({ cls: window.game.trials.run?.cls.id, n: window.game.trials.run?.flock.length }));
+check('both dogs at the post start a BRACE (host and guest see it)', hostBrace.cls === 'brace' && hostBrace.n === 10 && brace.cls === 'brace' && brace.flock === 10, JSON.stringify({ hostBrace, brace, braceHint }));
+if (SHOTS) {
+  await wait(300);
+  await guest.screenshot({ path: `${root}shots/coop/guest-brace.png` });
+}
+// The judge scores it; a placing is a ribbon for the guest's own shelf too.
+await host.evaluate(async () => {
+  const tr = await import('/src/systems/trials.ts');
+  const r = window.game.trials.run;
+  r.scores = [10, 15, 10, 15, 15, 20];
+  r.penned = true;
+  tr.endRun(window.game, false);
+});
+await guest.waitForFunction(() => window.game.trials.result?.cls.id === 'brace', null, { timeout: 4000 }).catch(() => {});
+await wait(300);
+const judged = await guest.evaluate(() => ({ place: window.game.trials.result?.place, ribbons: JSON.parse(localStorage.getItem('comeby-travels-v1') || '{}').ribbons }));
+check('the brace placing is a ribbon for the guest too', judged.place >= 1 && judged.place <= 3 && judged.ribbons === 1, JSON.stringify(judged));
+if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-brace-result.png` });
+await host.evaluate(async () => {
+  const tr = await import('/src/systems/trials.ts');
+  tr.closeResult(window.game);
+  window.game.input.override = { x: 0, y: 0, sprint: false, lie: true };
+  window.game.dog.x = window.game.doorPoint().x - 40;
+  window.game.dog.y = window.game.doorPoint().y + 4;
+});
+await guest.evaluate(() => {
+  const g = window.game, d = g.doorPoint();
+  g.input.override = null;
+  g.dog.x = d.x + 20;
+  g.dog.y = d.y + 20;
+});
+await wait(500);
+
+// ---- Screens going off: each side is told ----
+const hide = (page, on) => page.evaluate((on) => {
+  if (on) {
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+  } else {
+    delete document.hidden;
+    delete document.visibilityState;
+  }
+  document.dispatchEvent(new Event('visibilitychange'));
+}, on);
+await hide(guest, true);
+await host.waitForFunction(() => window.game.net.isAway(window.game.net.dogs[0]) && window.game.net.dogs[0].lying, null, { timeout: 3000 }).catch(() => {});
+const nap = await host.evaluate(() => ({ away: window.game.net.isAway(window.game.net.dogs[0]), lying: window.game.net.dogs[0].lying, banner: window.game.banner?.big }));
+check("the guest's screen goes off: the host sees their dog nap", nap.away && nap.lying, JSON.stringify(nap));
+await hide(guest, false);
+await host.waitForFunction(() => !window.game.net.isAway(window.game.net.dogs[0]), null, { timeout: 3000 }).catch(() => {});
+check('...and wake when they are back', await host.evaluate(() => !window.game.net.isAway(window.game.net.dogs[0])));
+await hide(host, true);
+await guest.waitForFunction(() => window.game.net.hostBg, null, { timeout: 3000 }).catch(() => {});
+const hb = await guest.evaluate(() => window.game.net.hostBg);
+if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-host-away.png` });
+await hide(host, false);
+await guest.waitForFunction(() => !window.game.net.hostBg, null, { timeout: 3000 }).catch(() => {});
+check("the host's screen goes off: the guest is told, then it goes on", hb && (await guest.evaluate(() => !window.game.net.hostBg)));
+
+// ---- A line that dies without a word (Wi-Fi to mobile data) ----
+const fulls0 = await guest.evaluate(() => window.game.net.fulls);
+await guest.evaluate(() => {
+  window.game.net.link.silence();
+  window.dispatchEvent(new Event('online'));
+});
+await guest.waitForFunction((n) => window.game.net.status === 'playing' && window.game.net.fulls > n && !window.game.net.stale, fulls0, { timeout: 15000 }).catch(() => {});
+const redial = await guest.evaluate(() => ({ status: window.game.net.status, fulls: window.game.net.fulls }));
+check('a dead line after a network change: the guest notices and dials again', redial.status === 'playing' && redial.fulls > fulls0, JSON.stringify(redial));
+
 // ---- The guest's line drops for a moment, then comes back ----
 await guest.evaluate(() => window.game.net.dropLine());
 await host.waitForFunction(() => [...window.game.net.seats.values()][0]?.away > 0, null, { timeout: 5000 }).catch(() => {});
 const away = await host.evaluate(() => ({ away: [...window.game.net.seats.values()][0]?.away > 0, dogs: window.game.net.dogs.length }));
 check('host sees the guest drop (dog waits)', away.away && away.dogs === 1, JSON.stringify(away));
 await guest.waitForFunction(() => window.game.net.status === 'playing' && window.game.net.ready, null, { timeout: 15000 }).catch(() => {});
+await wait(300);
 const back = await guest.evaluate(() => ({ status: window.game.net.status, slot: window.game.net.slot, animals: window.game.animals.length }));
 const hostBack = await host.evaluate(() => ({ dogs: window.game.net.dogs.length, away: [...window.game.net.seats.values()][0]?.away }));
 check('guest reconnects into the same slot', back.status === 'playing' && back.slot === 1 && hostBack.dogs === 1 && !hostBack.away, JSON.stringify({ ...back, ...hostBack }));
 
-// ---- The host's line drops: the guest waits, then carries on ----
+// ---- The host's line drops: the guest waits (unless the host is back
+// before the relay even notices), then carries on with a fresh world ----
+const fullsBefore = await guest.evaluate(() => window.game.net.fulls);
+await guest.evaluate(() => { window.__sawAway = false; const n = window.game.net; const f = () => { if (n.status === 'away') window.__sawAway = true; requestAnimationFrame(f); }; f(); });
 await host.evaluate(() => window.game.net.dropLine());
-await guest.waitForFunction(() => window.game.net.status === 'away', null, { timeout: 5000 }).catch(() => {});
-const gAway = await guest.evaluate(() => window.game.net.status);
-await guest.waitForFunction(() => window.game.net.status === 'playing' && window.game.net.ready, null, { timeout: 15000 }).catch(() => {});
-const gBack = await guest.evaluate(() => window.game.net.status);
-check('host drops and comes back: guest waits, then plays on', gAway === 'away' && gBack === 'playing', `${gAway} -> ${gBack}`);
+await host.waitForFunction(() => window.game.net.status === 'open' && window.game.net.dogs.length === 1, null, { timeout: 15000 }).catch(() => {});
+await guest.waitForFunction((n) => window.game.net.status === 'playing' && window.game.net.fulls > n && !window.game.net.stale, fullsBefore, { timeout: 15000 }).catch(() => {});
+const hBack = await guest.evaluate(() => ({ status: window.game.net.status, fresh: window.game.net.fulls, sawAway: window.__sawAway, stale: window.game.net.stale }));
+check('host drops and comes back: the guest plays on with a fresh world', hBack.status === 'playing' && hBack.fresh > fullsBefore && !hBack.stale, JSON.stringify(hBack));
 
 // ---- The guest leaves: their dog trots off ----
 await guest.evaluate(() => window.game.net.leave(window.game));
@@ -334,7 +538,7 @@ await host.evaluate(async () => {
   const gp = g.ranch.pens[0].gatePoint(10);
   for (let i = 0; i < 6; i++) g.animals.push(new Animal('sheep', gp.x - 60 + (i % 3) * 9 - 9, gp.y + 80 + Math.floor(i / 3) * 9 - 4));
 });
-guest = await joinGuest(`&lag=${LAG}`);
+guest = await joinGuest(`&lag=${LAG}&jitter=40&loss=0.05`);
 // The host pauses: with a friend here, the world goes on.
 await host.keyboard.press('Escape');
 await host.waitForFunction(() => window.game.mode === 'pause');
@@ -346,7 +550,7 @@ await guest.evaluate(({ f }) => {
 const lagRes = await drive(guest, setup.pen, 120);
 await wait(1500);
 const lagPenned = await host.evaluate(() => window.game.ranch.pens[0].animals.length);
-check(`with ${LAG}ms each way on the guest's line (host paused), the drive still pens them`, lagPenned === 6, `${lagPenned}/6 in ${lagRes.t}s`);
+check(`with ${LAG}ms each way, jitter and 5% packet loss on the guest's line (host paused), the drive still pens them`, lagPenned === 6, `${lagPenned}/6 in ${lagRes.t}s`);
 
 // ---- The host's game stops (a phone asleep): the guest is told to wait ----
 await host.evaluate(() => { window.requestAnimationFrame = () => 0; });
@@ -363,6 +567,15 @@ await guest.keyboard.press('Enter');
 await guest.waitForFunction(() => window.game?.mode === 'title', null, { timeout: 5000 }).catch(() => {});
 check('...and goes back to their title', await guest.evaluate(() => window.game.mode === 'title'));
 check("the guest's own save is still untouched", (await guest.evaluate(() => localStorage.getItem('comeby-save-v1'))) === guestSave);
+
+// ---- Home again: the guest's own ranch gets what they found ----
+await guest.keyboard.press('Enter'); // CONTINUE
+await guest.waitForFunction(() => window.game && !window.game.demo && window.game.mode === 'play', null, { timeout: 8000 }).catch(() => {});
+const home = await guest.evaluate(() => {
+  const g = window.game, d = JSON.parse(localStorage.getItem('comeby-save-v1'));
+  return { orchard: g.discovery.found.has('orchard'), bell: g.discovery.keepsakes.has('bell'), coins: g.coins, saved: d.discovery?.found?.includes('orchard'), tip: g.tip?.text, travels: localStorage.getItem('comeby-travels-v1')?.slice(0, 200) };
+});
+check("their own ranch now has the Old Orchard, the bell and the reward", home.orchard && home.bell && home.coins === 128 && home.saved, JSON.stringify(home));
 
 check('no console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
 await hostB.close();

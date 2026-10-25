@@ -1,7 +1,7 @@
 import { spr, type Sprite } from '../gfx/sprite';
 import type { BuildingKind, Rot } from './buildings';
 
-export type ItemId = 'pen' | 'fence' | 'trough' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill';
+export type ItemId = 'pen' | 'fence' | 'trough' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill' | 'hay';
 
 export interface BuildDef {
   id: ItemId;
@@ -53,6 +53,11 @@ export const CATALOG: BuildDef[] = [
     upgrade: { cost: 70, tier: 3, desc: 'SHELTERS A WIDER RING' },
     desc: 'PENS INSIDE ITS RING ARE SAFE AT NIGHT.',
     icon: icon('barn', ['....p....', '..ppppp..', '.ppppppp.', 'ppppppppp', '.wwwwwww.', '.wpwwwpw.', '.wwpwpww.']),
+  },
+  {
+    id: 'hay', kind: 'haystack', name: 'HAY', cost: 40, tier: 2, w: 2, h: 2, rotates: false,
+    desc: 'WINTER FEED: 20 BALES. IN A BARN\'S RING THE SNOW CANNOT SPOIL IT.',
+    icon: icon('hay', ['.........', '...yyy...', '..yyyyy..', '.yyoyyoy.', '.yoyyyoy.', 'yyyyyyyyy', 'sssssssss']),
   },
   {
     id: 'gate', kind: 'gate', name: 'GATE', cost: 6, tier: 3, w: 2, h: 1, rotates: true,

@@ -274,8 +274,28 @@ const UP_LIE = upLie('.ttwtt.', '...tt..');
 const UP_LIE_BREATH = upLie('tttwttt', '...tt..');
 const UP_LIE_WAG = upLie('.ttwtt.', '..tt...');
 
+// ---- Idles (side view): nose to the ground; sitting for a scratch; the
+// shake-off after a swim or a shower, ears and tail flung out. ----
+const SNIFF = [
+  ['.............', '.t...........', '..ttttwtr.p.p', '..twttwtrrttt', '..ttwttttttpt', '...tttttt.tww', '...tt...tt..p', '...pp...pp...'],
+  ['.............', '..t..........', '..ttttwtr.p.p', '..twttwtrrttt', '..ttwttttttpt', '...tttttt.twp', '...tt...tt...', '...pp...pp...'],
+];
+const SCRATCH = [
+  ['........p.p..', '........ttt..', '.......trtpt.', '......ttrttwp', '..t..ttttw...', '.ttttttt.....', '.ptttttt.....', '..pp..pp.....'],
+  ['........p.p..', '........ttt..', '.....p.trtpt.', '....p.ttrttwp', '..tt.ttttw...', '.ttttttt.....', '.tttttttt....', '..pp..pp.....'],
+  ['........p.p..', '........ttt..', '.......trtpt.', '....ppttrttwp', '..tt.ttttw...', '.ttttttt.....', '.tttttttt....', '..pp..pp.....'],
+];
+const SHAKE = [
+  ['........p...p', '.t.......ttt.', '.tttttwtrtpt.', '..twttwtrttwp', '..ttwtttttw..', '..ttttttt....', '...tt...tt...', '...pp...pp...'],
+  ['..........pp.', '.........ttt.', '..tttttwrtpt.', '.ttwttwtrttwp', 't.ttwtttttw..', '...tttttt....', '...tt...tt...', '...pp...pp...'],
+];
+
 // One facing's full set of poses.
 export interface DogPoses {
+  // Side view only: idles and the shake-off.
+  sniff?: Sprite[];
+  scratch?: Sprite[]; // sitting, then the hind leg at the ear (two frames)
+  shake?: Sprite[];
   stand: Sprite;
   run: Sprite[];
   sprint: Sprite[];
@@ -329,6 +349,9 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r', look?: DogLook): DogSpr
     lie: S(SIDE_LIE, 6, 7),
     lieBreath: S(SIDE_LIE_BREATH, 6, 7),
     lieWag: S(SIDE_LIE_WAG, 6, 7),
+    sniff: SNIFF.map((f) => S(f, 6, 7)),
+    scratch: SCRATCH.map((f) => S(f, 6, 7)),
+    shake: SHAKE.map((f) => S(f, 6, 7)),
   };
   facing = 'down';
   const down: DogPoses = {

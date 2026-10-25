@@ -1,8 +1,7 @@
 import { C } from '../palette';
 import { panel, rect } from '../gfx/draw';
 import { text, textWidth } from '../gfx/font';
-import { drawSpr } from '../gfx/sprite';
-import { playerDogSprites } from '../art/dogstyle';
+import { drawTitleArt } from '../art/title';
 import type { Game } from '../game';
 import { saveInfo } from '../systems/save';
 import { tierOf } from '../systems/progression';
@@ -10,6 +9,9 @@ import { canVibrate, saveSettings, settings } from './settings';
 import { dimView } from './feel';
 import { safeArea } from './safe';
 import { coopLeave, coopRowLabel, openCoop } from './coop';
+import { drawInstallHint } from './install';
+import { openTransfer } from './transfer';
+import { LEVELS, quality } from '../gfx/quality';
 
 
 // Big chunky letters: the 3x5 font scaled up, with a plum outline.
@@ -25,34 +27,30 @@ export interface MenuState {
   confirmNew: boolean;
 }
 
-export type TitleAction = 'continue' | 'new' | 'join' | null;
+export type TitleAction = 'continue' | 'new' | 'join' | 'move' | null;
 
-const titleItems = (hasSave: boolean): Exclude<TitleAction, null>[] => (hasSave ? ['continue', 'new', 'join'] : ['new', 'join']);
+const titleItems = (hasSave: boolean): Exclude<TitleAction, null>[] => (hasSave ? ['continue', 'new', 'join', 'move'] : ['new', 'join', 'move']);
 
 export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H: number, m: MenuState): TitleAction {
-  // The saved dog, dressed as the player left it (the demo game read it).
-  const dogSpr = playerDogSprites(game.look.dog);
   const ui = game.ui;
   const info = saveInfo();
   const items: { id: TitleAction; label: string }[] = [];
   if (info) items.push({ id: 'continue', label: `CONTINUE  DAY ${info.day}  ${tierOf(info.tier).name}` });
   items.push({ id: 'new', label: info ? 'NEW RANCH' : 'START' });
   items.push({ id: 'join', label: 'JOIN A FRIEND' });
+  items.push({ id: 'move', label: 'MOVE A RANCH' }); // a save from another device (ui/transfer.ts)
 
   const S = safeArea(game.screen);
   const touch = game.input.touchMode;
   const scale = W >= 300 ? 6 : 5;
   const ly = Math.round(S.top + (H - S.top) * 0.16);
+  // The illustration along the bottom: the heeler on its knoll, by season.
+  const menuEnd = Math.round(H * 0.5) + items.length * (touch ? 21 : 15);
+  drawTitleArt(g, W, H, menuEnd + 4, H - S.bottom - 34, game.season.season, game.t);
   logo(g, 'COME BY', W / 2, ly, scale);
+  const sw = textWidth('A HERDING GAME') + 8;
+  rect(g, Math.round(W / 2 - sw / 2), ly + scale * 5 + 6, sw, 9, C.plum); // reads on snow too
   text(g, 'A HERDING GAME', W / 2, ly + scale * 5 + 8, C.wool, { align: 'center', shadow: C.plum });
-  // The heeler, trotting beside the title.
-  const run = dogSpr.side;
-  const f = Math.floor(game.t * 8) % run.length;
-  const lw = textWidth('COME BY', scale);
-  const sp = run[f];
-  const dx = Math.round(W / 2 + lw / 2 + 6), dy = Math.round(ly + scale * 5 - sp.h * 2 + 2);
-  if (dx + sp.w * 2 < W - 2) g.drawImage(sp.img, dx, dy, sp.w * 2, sp.h * 2);
-  else drawSpr(g, sp, W / 2, ly - 4);
 
   // Menu.
   let result: TitleAction = null;
@@ -99,6 +97,7 @@ export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const cy = H - 8 - S.bottom - lines.length * 7;
   rect(g, 0, cy - 5, W, H - cy + 5, C.plum);
   lines.forEach((l, i) => text(g, l, W / 2, cy + i * 7, i === lines.length - 1 && game.input.touchMode ? C.butter : C.wool, { align: 'center' }));
+  if (!m.confirmNew) drawInstallHint(game, g, W, my + items.length * (touch ? 21 : 15), cy - 5);
   return result;
 }
 
@@ -163,10 +162,21 @@ export const PAUSE_ITEMS: PauseItem[] = [
   // Volumes, 0-10: left/right or the < > ends step them, confirm steps round.
   { id: 'music', label: () => 'MUSIC', act: (g, dir) => g.audio?.stepMusic(dir), level: (g) => g.audio?.musicVol ?? 0, steps: 10, show: (g) => !!g.audio },
   { id: 'sfx', label: () => 'SOUND', act: (g, dir) => g.audio?.stepSound(dir), level: (g) => g.audio?.soundVol ?? 0, steps: 10, show: (g) => !!g.audio },
+  // AUTO thins the weather and critters when frames run long (gfx/quality.ts).
+  {
+    id: 'quality',
+    label: () => `GRAPHICS: ${settings.quality === 'auto' ? `AUTO (${quality.level.toUpperCase()})` : settings.quality.toUpperCase()}`,
+    act: (_g, dir) => {
+      const all = ['auto', ...LEVELS] as const;
+      settings.quality = all[(all.indexOf(settings.quality) + (dir || 1) + all.length) % all.length];
+      saveSettings();
+    },
+  },
   { id: 'dog', label: (g) => `${g.look.name}'S LOOK`, act: (g, dir) => { if (dir === 0) g.openLook('pause'); }, show: (g) => g.net?.role !== 'guest' },
   // Co-op: invite a friend (or see who is here), or leave a friend's ranch.
   { id: 'coop', label: (g) => coopRowLabel(g), act: (g, dir) => { if (dir === 0) openCoop(g, 'invite'); }, show: (g) => g.net?.role !== 'guest' },
   { id: 'leave', label: (g) => coopRowLabel(g), act: (g, dir) => { if (dir === 0) coopLeave(g); }, show: (g) => g.net?.role === 'guest' },
+  { id: 'move', label: () => 'MOVE THIS RANCH', act: (g, dir) => { if (dir === 0) openTransfer(g); }, show: (g) => g.net?.role !== 'guest' },
   // Keep this last (savetest presses Up from RESUME to reach it).
   { id: 'quit', label: () => 'SAVE AND QUIT', act: (g, dir) => { if (dir === 0) g.quitToTitle(); }, show: (g) => g.net?.role !== 'guest' },
 ];
@@ -194,7 +204,12 @@ export function drawPause(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const ui = game.ui;
   const touch = game.input.touchMode;
   const rows = pauseRows(game);
-  const rh = touch ? 15 : 12, gap = touch ? 4 : 3;
+  let rh = touch ? 15 : 12, gap = touch ? 4 : 3;
+  // A phone on its side is short: tighter rows, so every one fits.
+  while (36 + rows.length * (rh + gap) > H - 8 && rh > 11) {
+    if (gap > 2) gap--;
+    else rh--;
+  }
   const pw = Math.min(W - 16, 150), ph = 36 + rows.length * (rh + gap);
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
   dimView(g, game.view());

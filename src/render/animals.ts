@@ -1,7 +1,9 @@
 import { C } from '../palette';
 import { ellipse, rect } from '../gfx/draw';
-import { drawSpr, type Sprite } from '../gfx/sprite';
+import { drawSpr, tint, type Sprite } from '../gfx/sprite';
+import { seasonLook } from '../art/seasonlook';
 import { animalSprites } from '../art/animals';
+import { lambSprites } from '../art/young';
 import { hash2 } from '../rng';
 import type { Animal } from '../entities/animal';
 import type { SpeciesId } from '../world/map';
@@ -42,16 +44,24 @@ const SHADOW: Record<SpeciesId, [number, number]> = {
 
 export function drawAnimalShadow(g: CanvasRenderingContext2D, a: Animal, sun = 0) {
   if (a.inWater) return;
-  const [rx, ry] = SHADOW[a.sp.id];
+  const [rx, ry] = a.young ? [3, 1] : SHADOW[a.sp.id];
   const side = a.face === 'l' || a.face === 'r';
   const lying = (poses.get(a)?.rest ?? 0) > (poses.get(a)?.lieAfter ?? 1e9);
   ellipse(g, a.x - 1 + sun, a.y + 1, side || lying ? rx + (lying ? 1 : 0) : Math.max(2, rx - 2), ry, C.sage);
 }
 
+const OUT = [[-1, 0], [1, 0], [0, -1]];
+const outlines = new Map<Sprite, Sprite>();
+function outline(s: Sprite): Sprite {
+  let o = outlines.get(s);
+  if (!o) outlines.set(s, (o = tint(s, C.sage)));
+  return o;
+}
+
 const cyc = (arr: Sprite[], f: number) => arr[((Math.floor(f) % arr.length) + arr.length) % arr.length];
 
 export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, night = false) {
-  const S = animalSprites(a.sp.id, a.coat);
+  const S = a.young ? lambSprites(a.coat) : animalSprites(a.sp.id, a.coat);
   const speed = Math.hypot(a.vx, a.vy);
   const moving = speed > 2;
   const running = moving && (speed > a.sp.walk * 1.3 || a.panicT > 0);
@@ -72,7 +82,15 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, ni
     if (moving) s = running ? cyc(S.run, a.phase) : cyc(S.side, a.phase);
     else if (wary) s = S.alert;
     else if (a.grazeMode === 'eat' && a.pressure < 0.03 && a.panicT <= 0) s = S.grazing[hash2(a.id, Math.floor(t * 1.4 + seed), 7) < 0.6 ? 0 : 1];
-    else s = S.stand[hash2(a.id, Math.floor(t / 2.2 + seed), 9) < 0.3 ? 1 : 0];
+    else {
+      // Idle: mostly standing, now and then a look round, and each kind's
+      // habit: a tail flick (often, for cattle), a wing stretch, a goat
+      // lowering its horns at a neighbour, a pony stamping.
+      const slot = Math.floor(t / (a.sp.id === 'cow' ? 1.3 : 2.2) + seed);
+      const k = hash2(a.id, slot, 9);
+      const habit = a.sp.id === 'cow' ? k < 0.35 && (t / 1.3 + seed) % 1 < 0.35 : k > 0.82;
+      s = S.stand[habit && S.stand[2] ? 2 : k < 0.3 ? 1 : 0];
+    }
   } else {
     const arr = a.face === 'd' ? S.down : S.up;
     if (moving) s = cyc(arr, a.phase);
@@ -80,6 +98,11 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, ni
   }
 
   if (!a.inWater) {
+    // On snow a pale coat would vanish: a sage outline keeps the shape.
+    if (seasonLook.snow > 0.45) {
+      const o = outline(s);
+      for (const [dx, dy] of OUT) drawSpr(g, o, x + dx, y + dy, flip);
+    }
     drawSpr(g, s, x, y, flip);
     return;
   }

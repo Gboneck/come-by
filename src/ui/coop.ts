@@ -6,11 +6,12 @@ import type { View } from '../render/world';
 import { HostNet } from '../net/host';
 import { GuestNet, joining } from '../net/guest';
 import { dimView } from './feel';
-import { focusField, stopTyping, textField, typingId } from './textfield';
+import { focusField, stopTyping, takeEscape, textField, typingId } from './textfield';
 import { safeArea } from './safe';
 import { edgeArrow } from './hud';
 import { touchLayout } from './touch';
 import { tierOf } from '../systems/progression';
+import { drawPings, pingArrows, pingControls } from '../net/ping';
 
 // The co-op screens. A host opens INVITE A FRIEND from the pause menu: a
 // room code and a link to send. A guest opens JOIN A FRIEND on the title
@@ -94,7 +95,9 @@ export function coopKeys(game: Game) {
     return;
   }
   if (typingId()) return;
-  if (inp.pressed('cancel') || inp.pressed('pause')) closeCoop(game);
+  // Esc in the code field: the field let go, and the screen goes too (it
+  // would only take the focus straight back).
+  if (takeEscape() || inp.pressed('cancel') || inp.pressed('pause')) closeCoop(game);
   else if (inp.pressed('confirm')) {
     if (ui.view === 'join') {
       if (!joining || joining.ended) startJoin();
@@ -228,43 +231,57 @@ function summaryCard(game: Game, g: CanvasRenderingContext2D, W: number, H: numb
 // and the co-op screens ('ui', over it).
 export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer: 'world' | 'ui') {
   const { W, H } = v;
+  const net = game.net;
   if (layer === 'world') {
     if (game.mode === 'title' || game.mode === 'summary' || game.mode === 'build') return;
     for (const d of game.coop) {
       if (!d.tag) continue;
       const sx = Math.round(d.x - v.ox), sy = Math.round(d.y - v.oy);
       if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
-      const w = textWidth(d.tag);
+      const tag = net?.isAway(d) ? `${d.tag} ZZZ` : d.tag;
+      const w = textWidth(tag);
       rect(g, sx - Math.ceil(w / 2) - 1, sy - 19, w + 3, 7, C.plum);
-      text(g, d.tag, sx + 1, sy - 18, C.butter, { align: 'center' });
+      text(g, tag, sx + 1, sy - 18, C.butter, { align: 'center' });
     }
+    if (net) drawPings(game, net, g, v);
     return;
   }
   if (game.mode === 'coop') {
     drawPanel(game, g, W, H);
     return;
   }
-  const net = game.net;
-  // Off-screen friends get an arrow with their name, so you can find each other.
-  if (game.mode === 'play' && net && net.dogs.length) {
-    const S = safeArea(game.screen);
-    const top = game.input.touchMode ? touchLayout(game, W, H).top : H - 12 - S.bottom;
-    const M = { top: S.top + 24, bottom: H - top + 10, left: S.left, right: S.right };
+  const together = !!net && game.mode === 'play' && (net.role === 'guest' || net.dogs.length > 0);
+  const S = safeArea(game.screen);
+  const TL = game.input.touchMode ? touchLayout(game, W, H) : null;
+  // Off-screen friends get an arrow with their name, so you can find each
+  // other; so do pings out of sight.
+  if (together && net) {
+    const top = TL ? TL.top : H - 12 - S.bottom;
+    // Clear of the HUD's cards down the top left.
+    const M = { top: S.top + 34, bottom: H - top + 10, left: S.left, right: S.right };
     for (const d of net.dogs) if (d.tag) edgeArrow(g, game, d.x, d.y, C.wool, d.tag, M);
+    pingArrows(game, net, g, M);
   }
-  if (!(net instanceof GuestNet)) return;
-  const host = net.hostName;
-  if (net.ended) {
-    card(game, g, W, H, net.ended.title, [net.ended.line, '', game.input.touchMode ? 'TAP TO GO BACK' : 'PRESS ENTER']);
-    if (game.ui.captureAll('coop-ended')) game.input.push('confirm');
-    return;
+  if (net instanceof GuestNet) {
+    const host = net.hostName;
+    if (net.ended) {
+      card(game, g, W, H, net.ended.title, [net.ended.line, '', game.input.touchMode ? 'TAP TO GO BACK' : 'PRESS ENTER']);
+      if (game.ui.captureAll('coop-ended')) game.input.push('confirm');
+      return;
+    }
+    if (net.status === 'reconnecting') return card(game, g, W, H, 'RECONNECTING...', ['THE LINE TO YOUR FRIEND DROPPED. HANG ON.'], false);
+    if (net.status === 'away') return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR CONNECTION DROPPED. THE RANCH WAITS FOR THEM A WHILE.']);
+    if (!net.ready) return card(game, g, W, H, 'WALKING OVER...', [`TO ${host}'S RANCH`]);
+    if (net.hostBg) return card(game, g, W, H, `${host} STEPPED AWAY`, ['THEIR SCREEN IS OFF, SO THE RANCH IS WAITING. IT WILL GO ON WHEN THEY ARE BACK.']);
+    if (net.stale) return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR GAME HAS STOPPED FOR A MOMENT. MAYBE THEIR SCREEN WENT TO SLEEP.']);
+    const m = net.hostMode;
+    if (m === 'summary') return summaryCard(game, g, W, H, host);
+    if (m === 'build') return card(game, g, W, H, `${host} IS BUILDING`, [`${tierOf(game.tier).name}: ${game.coins}$ IN THE PURSE`, 'THE HERD WAITS TILL THEY ARE DONE.']);
+    if (m === 'result') return void text(g, `WAITING FOR ${host}...`, W / 2, H - 14 - S.bottom, C.wool, { align: 'center', shadow: C.plum });
   }
-  if (net.status === 'reconnecting') return card(game, g, W, H, 'RECONNECTING...', ['THE LINE TO YOUR FRIEND DROPPED. HANG ON.'], false);
-  if (net.status === 'away') return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR CONNECTION DROPPED. THE RANCH WAITS A LITTLE FOR THEM.']);
-  if (!net.ready) return card(game, g, W, H, 'WALKING OVER...', [`TO ${host}'S RANCH`]);
-  if (net.stale) return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR GAME HAS STOPPED FOR A MOMENT. MAYBE THEIR SCREEN WENT TO SLEEP.']);
-  const m = net.hostMode;
-  if (m === 'summary') summaryCard(game, g, W, H, host);
-  else if (m === 'build') card(game, g, W, H, `${host} IS BUILDING`, [`${tierOf(game.tier).name}: ${game.coins}$ IN THE PURSE`, 'THE HERD WAITS TILL THEY ARE DONE.']);
-  else if (m === 'result') text(g, `WAITING FOR ${host}...`, W / 2, H - 14 - safeArea(game.screen).bottom, C.wool, { align: 'center', shadow: C.plum });
+  // Pings: F, or the PING button by the thumb buttons.
+  if (together && net && !game.trials.result) {
+    const btn = TL ? { x: TL.bark.x + 2, y: TL.lie.y - 13, r: 10 } : null;
+    pingControls(game, net, g, W, H, btn);
+  }
 }

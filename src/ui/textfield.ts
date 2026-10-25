@@ -63,6 +63,7 @@ function ensure(): HTMLInputElement {
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === 'Escape') {
       e.preventDefault();
+      if (e.key === 'Escape') escaped = true;
       el?.blur();
     }
     e.stopPropagation();
@@ -75,10 +76,20 @@ function ensure(): HTMLInputElement {
   return el;
 }
 
+// Esc while typing leaves the field; a screen that focuses its field by
+// itself takes this to know the player meant to leave the screen too.
+let escaped = false;
+export function takeEscape() {
+  const e = escaped;
+  escaped = false;
+  return e;
+}
+
 // Start typing in a field (taps call this from the event; keys from the game).
 export function focusField(id: string) {
   const f = fields.get(id);
   if (!f) return;
+  escaped = false;
   const input = ensure();
   active = f;
   input.maxLength = f.max;
@@ -90,6 +101,22 @@ export function focusField(id: string) {
 
 export function stopTyping() {
   el?.blur();
+}
+
+// A game pad types too (ui/pad.ts): +1 / -1 turns the last letter through
+// the alphabet, 'add' puts a letter on the end, 'del' takes one off.
+const PAD_ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ';
+export function padType(op: 1 | -1 | 'add' | 'del') {
+  if (!el || !active) return;
+  let v = el.value;
+  if (op === 'del') v = v.slice(0, -1);
+  else if (op === 'add' || !v) v = v.length < active.max ? v + 'A' : v;
+  else {
+    const i = Math.max(0, PAD_ABC.indexOf(v[v.length - 1]));
+    v = v.slice(0, -1) + PAD_ABC[(i + op + PAD_ABC.length) % PAD_ABC.length];
+  }
+  el.value = v;
+  el.dispatchEvent(new Event('input'));
 }
 
 if (typeof window !== 'undefined') {

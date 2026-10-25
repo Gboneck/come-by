@@ -1,5 +1,5 @@
 import { CS, GATE, PEN, SOLID, TS, type SpeciesId, type WorldMap } from '../world/map';
-import type { Animal, Enclosure } from '../entities/animal';
+import { spaceOf, type Animal, type Enclosure } from '../entities/animal';
 import { SPECIES } from '../entities/species';
 
 export type BuildingKind =
@@ -12,6 +12,7 @@ export type BuildingKind =
   | 'kennel'
   | 'market'
   | 'windmill'
+  | 'haystack'
   | 'regiongate';
 
 // Pens open on one side: 0 = south, 1 = west, 2 = north, 3 = east.
@@ -76,6 +77,7 @@ export class Pen extends Building implements Enclosure {
   goodsFrac = 0;
   hasTrough = false;
   sheltered = false; // within a barn's protection
+  hungry = false; // went without hay last winter night: no goods today
   letOut = false; // gate held open so the stock can be driven out
   letOutQuiet = 0; // time with the dog gone and the gateway clear
 
@@ -88,12 +90,12 @@ export class Pen extends Building implements Enclosure {
   }
 
   get used() {
-    return this.animals.reduce((s, a) => s + a.sp.space, 0);
+    return this.animals.reduce((s, a) => s + spaceOf(a), 0);
   }
 
   hasRoomFor(a: Animal) {
     if (a.trial) return false;
-    return this.used + a.sp.space <= this.capacity && (this.species === null || this.species === a.sp.id);
+    return this.used + spaceOf(a) <= this.capacity && (this.species === null || this.species === a.sp.id);
   }
 
   get full() {

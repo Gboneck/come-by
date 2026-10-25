@@ -5,7 +5,7 @@ import { UI } from './ui/ui';
 import { drawTouchControls, touchLayout } from './ui/touch';
 import { Particles } from './systems/particles';
 import { Dog } from './entities/dog';
-import { Animal, barkAt, findGroups, nipFrom, updateHerd, type Group, type HerdCtx, type PressureSource } from './entities/animal';
+import { Animal, barkAt, findGroups, nipFrom, updateHerd, valueOf, type Group, type HerdCtx, type PressureSource } from './entities/animal';
 import { WORLD_H, WORLD_W, WorldMap, type RegionDef, type SpeciesId } from './world/map';
 import { bake, type Baked } from './world/terrain';
 import { Ranch, type RanchEvent } from './ranch/ranch';
@@ -42,6 +42,9 @@ import { botStep } from './bot';
 import { clamp, damp } from './util';
 import { Orders } from './systems/orders';
 import { Weather } from './systems/weather';
+import { Seasons } from './systems/season';
+import { Seasonal, seasonalEvening } from './systems/seasonal';
+import { fairDrawables } from './art/fair';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
 import { Trials, closeResult, trialNip } from './systems/trials';
@@ -52,10 +55,11 @@ import type { Drawable } from './art/buildings';
 import type { HostNet } from './net/host';
 import type { GuestNet } from './net/guest';
 import { coopKeys, drawCoop, openCoop } from './ui/coop';
+import { drawTransfer, openTransfer, transferKeys } from './ui/transfer';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop' | 'transfer';
 export type Request = 'new' | 'continue' | 'title' | 'join' | null;
 
 export interface DayStats {
@@ -156,6 +160,8 @@ export class Game {
   trials = new Trials();
   feel = new Feel();
   weather = new Weather();
+  season = new Seasons();
+  seasonal = new Seasonal(); // lambs, the shearer, the fair, winter hay
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
@@ -364,7 +370,7 @@ export class Game {
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     for (const a of this.animals) a.stress *= 0.3;
-    if (spawn) this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => this.isUnlocked(r)));
+    if (spawn) this.animals.push(...spawnMorning(this.map, this.animals, this.day.day, this.tier, (r) => this.isUnlocked(r), this.season.on(this.day.day), (a) => this.discovery.tracked.has(a)));
     this.animals = this.animals.filter((a) => !a.gone);
     for (const p of this.ranch.pens) if (!p.full) p.open = true;
     for (const [i, h] of this.helpers.entries()) {
@@ -388,6 +394,7 @@ export class Game {
       for (const p of this.predators) p.dropCarry();
     }
     this.predators = [];
+    seasonalEvening(this); // winter hay, the fair packs up
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
@@ -470,6 +477,12 @@ export class Game {
       this.coopWorld(dt);
       return;
     }
+    if (this.mode === 'transfer') {
+      transferKeys(this);
+      if (this.demo) this.updateDemo(dt);
+      else this.coopWorld(dt);
+      return;
+    }
     if (this.mode === 'summary') {
       this.fx.update(dt);
       // A beat before the card takes input, so a bark held through dusk
@@ -550,6 +563,7 @@ export class Game {
   private stepWorld(dt: number, control: boolean) {
     this.updateRest(dt);
     this.weather.update(dt);
+    this.season.update(dt);
     const dayEv = this.trials.run ? null : this.day.update(dt * this.rest); // the clock waits for a trial run
     if (dayEv === 'dusk') {
       this.showBanner('DUSK', this.tier >= 2 ? 'GET THEM HOME. COYOTES COME AT NIGHT' : 'GET THEM HOME, THE LIGHT IS GOING', 2.8);
@@ -609,7 +623,7 @@ export class Game {
     if (reg && reg !== this.lastRegion) {
       this.place = { text: reg.name.toUpperCase(), t: 2.4 };
       this.lastRegion = reg;
-      const tip = REGION_TIPS[reg.id];
+      const tip = (this.net?.role === 'guest' ? this.net.regionTip(reg.id) : undefined) ?? REGION_TIPS[reg.id];
       if (tip && !this.tipsSeen.has(reg.id) && reg.tier <= this.tier) {
         this.tipsSeen.add(reg.id);
         this.tip = { text: this.input.touchMode ? tip.replace(' (E)', '') : tip, t: 8 };
@@ -759,7 +773,7 @@ export class Game {
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
     gates.push(...jobGates(this));
-    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather, dogs: this.coop.length ? this.coop : undefined };
+    return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather, snow: this.season.snow, dogs: this.coop.length ? this.coop : undefined };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
@@ -809,7 +823,7 @@ export class Game {
         return;
       }
       const { mult } = calmRating(a.peakStress);
-      const value = Math.max(1, Math.round(a.sp.value * mult));
+      const value = Math.max(1, Math.round(valueOf(a) * mult));
       a.deliveryValue = value;
       this.earn(value);
       this.stats.deliveredValue += value;
@@ -860,8 +874,9 @@ export class Game {
   }
 
   // Title menu choice: fade out, then main.ts swaps in the new game.
-  startGame(act: 'new' | 'continue' | 'join') {
+  startGame(act: 'new' | 'continue' | 'join' | 'move') {
     if (act === 'join') openCoop(this, 'join');
+    else if (act === 'move') openTransfer(this);
     else this.fadeTo(() => (this.request = act));
   }
 
@@ -954,7 +969,10 @@ export class Game {
   hint(): string | null {
     if (this.rest > 1.5) return 'RESTING... THE PENS KEEP MAKING GOODS.';
     if (this.tip) return this.tip.text;
-    if (this.net?.role === 'guest') return this.net.hint(this);
+    if (this.net) {
+      const h = this.net.hint(this);
+      if (h || this.net.role === 'guest') return h;
+    }
     const jh = jobsHint(this);
     if (jh) return jh;
     const touch = this.input.touchMode;
@@ -1025,7 +1043,7 @@ export class Game {
 
   // Trial course, buyers' yards and carts, hidden places, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.
@@ -1073,6 +1091,8 @@ export class Game {
       if (drawLedger(this, g, v.W, v.H)) this.input.push('ledger');
     } else if (this.mode === 'look') {
       drawLook(this, g, v.W, v.H);
+    } else if (this.mode === 'transfer') {
+      drawTransfer(this, g, v.W, v.H);
     }
     drawCoop(this, g, v, 'ui');
     this.feel.drawCover(g, v.W, v.H);

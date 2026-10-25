@@ -3,6 +3,7 @@ import type { Animal } from '../entities/animal';
 import type { Pen } from '../ranch/buildings';
 import { SPECIES_ORDER } from '../entities/species';
 import { SKIES } from '../systems/weather';
+import { SEASON_LIST } from '../systems/season';
 import { FACES, HOST_MODES, K_SNAP, Reader, Writer, faceId, type HostMode } from './protocol';
 
 // One moment of the host's world, as the guests see it. Everything is kept
@@ -13,7 +14,7 @@ import { FACES, HOST_MODES, K_SNAP, Reader, Writer, faceId, type HostMode } from
 // drops or reorders, so a change list is enough), plus the ids that left.
 // A guest arriving gets one full snapshot of the same moment first.
 
-export interface AnimalRec { id: number; sc: number; x: number; y: number; vx: number; vy: number; fl: number; st: number; pr: number; pen: number }
+export interface AnimalRec { id: number; sc: number; x: number; y: number; vx: number; vy: number; fl: number; st: number; pr: number; pen: number; ex: number }
 export interface DogRec { slot: number; x: number; y: number; vx: number; vy: number; fl: number }
 export interface HelperRec { x: number; y: number; vx: number; vy: number; fl: number }
 export interface PredRec { k: number; x: number; y: number; vx: number; vy: number; dig: number }
@@ -37,6 +38,11 @@ export interface Snap {
   wind: number;
   dirX: number;
   dirY: number;
+  season: number; // index into SEASON_LIST
+  sprog: number; // season progress, byte
+  bloom: number;
+  leaves: number;
+  snow: number;
   dogs: DogRec[];
   helpers: HelperRec[];
   preds: PredRec[];
@@ -64,9 +70,22 @@ export const POSES = ['stand', 'walk', 'carry', 'work', 'crouch', 'sit', 'wave']
 const q8 = (v: number) => Math.round(v * 8);
 const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
 
-// Every pen an animal can be in: the ranch's, the buyers' yards', the trial pen.
+// Every pen an animal can be in: the ranch's, the buyers' yards', the trial
+// pen, the fair's show ring.
 export function allPens(game: Game): Pen[] {
-  return [...game.ranch.pens, ...game.ranch.yards.map((y) => y.pen), game.ranch.course.pen];
+  return [...game.ranch.pens, ...game.ranch.yards.map((y) => y.pen), game.ranch.course.pen, game.ranch.ring.pen];
+}
+
+// Round three's per-animal state (a lamb, an age band, a breed beyond the
+// coat): one byte, filled in here by whoever adds it and read back on a
+// guest's screen in applyAnimalExtra (guest.ts). Zero means nothing extra.
+// Bit 0: a lamb (drawn small, at its mother's side).
+export function animalExtra(a: Animal): number {
+  return a.young ? 1 : 0;
+}
+
+export function applyAnimalExtra(a: Animal, v: number) {
+  a.young = (v & 1) !== 0;
 }
 
 export function animalRec(a: Animal, pens: Pen[]): AnimalRec {
@@ -91,15 +110,16 @@ export function animalRec(a: Animal, pens: Pen[]): AnimalRec {
     st: byte(a.stress),
     pr: byte(Math.min(1, a.pressure)),
     pen: a.pen ? pens.indexOf(a.pen as Pen) + 1 : 0,
+    ex: animalExtra(a),
   };
 }
 
 export const sameAnimal = (a: AnimalRec, b: AnimalRec) =>
-  a.x === b.x && a.y === b.y && a.vx === b.vx && a.vy === b.vy && a.fl === b.fl && a.st === b.st && a.pr === b.pr && a.pen === b.pen && a.sc === b.sc;
+  a.x === b.x && a.y === b.y && a.vx === b.vx && a.vy === b.vy && a.fl === b.fl && a.st === b.st && a.pr === b.pr && a.pen === b.pen && a.sc === b.sc && a.ex === b.ex;
 
 // Everything but the animals and the events, read from the host's game.
 export function worldRecs(game: Game, mode: HostMode, dogs: DogRec[]): Omit<Snap, 't' | 'full' | 'animals' | 'removed' | 'events'> {
-  const d = game.day, w = game.weather;
+  const d = game.day, w = game.weather, se = game.season;
   const pens = allPens(game);
   return {
     day: d.day,
@@ -115,6 +135,11 @@ export function worldRecs(game: Game, mode: HostMode, dogs: DogRec[]): Omit<Snap
     wind: byte(w.wind),
     dirX: Math.round(w.dirX * 127),
     dirY: Math.round(w.dirY * 127),
+    season: Math.max(0, SEASON_LIST.indexOf(se.season)),
+    sprog: byte(se.progress),
+    bloom: byte(se.bloom),
+    leaves: byte(se.leaves),
+    snow: byte(se.snow),
     dogs,
     helpers: game.helpers.map((h) => ({ x: q8(h.x), y: q8(h.y), vx: q8(h.vx), vy: q8(h.vy), fl: faceId(h.face) | (h.lying ? D_LYING : 0) | (h.barkAnim > 0 ? D_BARK : 0) })),
     preds: game.predators
@@ -158,6 +183,11 @@ export function encodeSnap(w: Writer, route: number, s: Snap) {
   w.u8(s.wind);
   w.i8(s.dirX);
   w.i8(s.dirY);
+  w.u8(s.season);
+  w.u8(s.sprog);
+  w.u8(s.bloom);
+  w.u8(s.leaves);
+  w.u8(s.snow);
   w.u8(s.dogs.length);
   for (const d of s.dogs) {
     w.u8(d.slot);
@@ -225,6 +255,7 @@ export function encodeSnap(w: Writer, route: number, s: Snap) {
     w.u8(a.st);
     w.u8(a.pr);
     w.u8(a.pen);
+    w.u8(a.ex);
   }
   w.u16(s.removed.length);
   for (const id of s.removed) w.u32(id);
@@ -237,6 +268,7 @@ export function decodeSnap(r: Reader): Snap {
   const day = r.u16(), dayT = r.u16(), phase = r.u8(), nightT = r.u16(), rest = r.u8();
   const mode = HOST_MODES[r.u8()] ?? 'play';
   const sky = r.u8(), forecast = r.u8(), rain = r.u8(), fog = r.u8(), wind = r.u8(), dirX = r.i8(), dirY = r.i8();
+  const season = r.u8(), sprog = r.u8(), bloom = r.u8(), leaves = r.u8(), snow = r.u8();
   const dogs: DogRec[] = [];
   for (let i = 0, n = r.u8(); i < n; i++) dogs.push({ slot: r.u8(), x: r.i16(), y: r.i16(), vx: r.i16(), vy: r.i16(), fl: r.u8() });
   const helpers: HelperRec[] = [];
@@ -255,12 +287,12 @@ export function decodeSnap(r: Reader): Snap {
   for (let i = 0, n = r.u8(); i < n; i++) rgates.push(r.u8());
   const hurdle = r.u8();
   const animals: AnimalRec[] = [];
-  for (let i = 0, n = r.u16(); i < n; i++) animals.push({ id: r.u32(), sc: r.u8(), x: r.i16(), y: r.i16(), vx: r.i16(), vy: r.i16(), fl: r.u16(), st: r.u8(), pr: r.u8(), pen: r.u8() });
+  for (let i = 0, n = r.u16(); i < n; i++) animals.push({ id: r.u32(), sc: r.u8(), x: r.i16(), y: r.i16(), vx: r.i16(), vy: r.i16(), fl: r.u16(), st: r.u8(), pr: r.u8(), pen: r.u8(), ex: r.u8() });
   const removed: number[] = [];
   for (let i = 0, n = r.u16(); i < n; i++) removed.push(r.u32());
   const ev = r.str();
   const events = ev ? (JSON.parse(ev) as unknown[]) : [];
-  return { t, full, day, dayT, phase, nightT, rest, mode, sky, forecast, rain, fog, wind, dirX, dirY, dogs, helpers, preds, folk, sites, pens, fgates, rgates, hurdle, animals, removed, events };
+  return { t, full, day, dayT, phase, nightT, rest, mode, sky, forecast, rain, fog, wind, dirX, dirY, season, sprog, bloom, leaves, snow, dogs, helpers, preds, folk, sites, pens, fgates, rgates, hurdle, animals, removed, events };
 }
 
 export const faceOf = (fl: number) => FACES[fl & 3];

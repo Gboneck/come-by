@@ -409,6 +409,241 @@ novice trial with a calm handler scores 99-100 with or without the change.
       150ms each way; tune.mjs before/after; the existing loop tests
 - [ ] BRACE class at the Show Ground for two dogs (optional, not started)
 
+## M22 Seasons: lambing, the shearer, the fair, winter (gameplay, round three)
+- [x] A calendar: four days a season from the first day of spring, a year
+      counter; autumn days run a little quicker and winter's quicker still,
+      with an earlier dusk (`src/systems/season.ts`)
+- [x] Spring: ewes in your pens lamb over the first two mornings (from
+      tier 2), wild ewes on the hills come with lambs at foot. A lamb keeps
+      to its mother and keeps her pace; a ewe cut off from her lamb turns
+      back for it and both fret, so a flock with lambs is driven as pairs.
+      Lambs take one place in a pen, make no goods, are a fox's first
+      choice, and grow up when autumn comes
+- [x] Summer: the shearer waits at the drover's (or the mill's) yard on the
+      first morning; each sheep brought pays a wool bonus (calm ones more,
+      rare ones half again) and comes back out shorn to be walked home
+- [x] Autumn fair on the second day at the Show Ground: a show ring (gate
+      to the north) judges one animal of each kind against three of the
+      valley's, calm counting for most; ribbons pay 40/20/10$. The sale yard
+      is a breeders' pen that day: stand by a breed at the fence, E buys it
+- [x] Rare breeds (new coats, drawn in `src/art/young.ts`): call duck 30$,
+      black sheep 70$, pygmy goat 90$, Highland cow 180$. Worth double at
+      sale and to buyers, goods half again, a boost at the fair
+- [x] Winter: snow slows loose stock and the dog a little, one wild flock
+      fewer per region, short days, and every night each pen eats a bale
+      for every four places of stock: the farmhouse loft first (10 bales,
+      filled each autumn), then haystacks (a new building: 20 bales, 40$,
+      80$ in winter). A stack out of a barn's ring loses 2 bales a night to
+      the snow. A pen that goes hungry makes no goods next day and is
+      restless (nobody starves)
+- [x] Legacy: raise 10 lambs, a winter with no pen hungry, best in class at
+      the fair, buy a rare breed
+- [x] Seasons and lambs in the save (lambs find their mothers again, hay,
+      hungry pens, the fair's results); old saves load as spring, year 1
+- [x] The pace bot stocks hay before winter (in a barn's ring), takes its
+      sheep to the shearer and home, and buys and shows a breed at the fair;
+      `pacetest.mjs --year`
+- [x] `scripts/seasontest.mjs`, `scripts/lambtest.mjs`; tune.mjs
+      `--season=winter`; tune before = after for every species in clear
+
+Herding, seeded (`--seed=1`), 3 runs each. Clear weather is identical
+before and after for all five species (the lamb and snow code only acts
+on lambs, their mothers and snow). In snow, everything gets home as often
+as in clear weather, a little slower, and calm still beats barking:
+
+| species | style | clear: home, time, peak stress | snow |
+|---|---|---|---|
+| duck | calm walk | 3/3 25s 0.00 | 3/3 20s 0.00 |
+| duck | bark every 0.8s | 3/3 7s 1.00, 6 panics | 3/3 15s 1.00, 5 panics |
+| sheep | calm walk | 3/3 11s 0.00 | 3/3 16s 0.00 |
+| sheep | bark every 0.8s | 3/3 22s 1.00, 5 panics | 3/3 6s 1.00, 6 panics |
+| goat | nip heels | 3/3 13s 0.00 | 3/3 16s 0.00 |
+| goat | bark every 0.8s | 3/3 5s 0.99 | 2/3 49s 0.85, 4 panics |
+| cow | nip heels | 1/3 116s 0.17 | 1/3 119s 0.26 |
+| pony | calm walk | 3/3 7s 0.01 | 3/3 9s 0.00 |
+| pony | bark every 0.8s | 3/3 6s 0.37 | 3/3 8s 0.50 |
+
+Lambs (`scripts/lambtest.mjs`, eight ewes, five with a lamb, seed 1):
+
+| style | home | time | mean stress | pairs together at the end | seconds lambs spent cut off |
+|---|---|---|---|---|---|
+| calm walk | 3/3 | 11s (11s with no lambs) | 0.00 | 5/5 | 0 |
+| keyboard, close | 3/3 | 8s | 0.01 | 5/5 | 0 |
+| bark every 2s | 3/3 | 7s | 0.18 | 5/5 | 0 |
+| bark every 0.8s | 1/3 | 82s | 0.23, 17 panics | 4.7/5 | 10 |
+| chase (sprint) | 0/3 | - | 0.50, 17 panics | 3.7/5 | 12 |
+
+The first lamb code made calm drives stall (0-1 of 3 home): a lamb tucked
+inside its mother's personal space, she stepped away, it followed, and each
+pair wandered off on its own. Ewes now neither flock with nor step away
+from lambs (bodies still never overlap), and lambs aim where their mother
+is going and keep her pace. The herding bot (and so the helper dogs) reads
+a flock by its grown animals.
+
+Pacing to the valley thriving (`pacetest.mjs`, seeds 1-3) is unchanged:
+days 7, 8, 7 (before: 9, 8, 7), the same per-tier days, minutes and
+purse within a little (tier 4 earns 696$/day against 765$, tier 5 975$
+against 1020$: the shearer's morning and autumn's shorter days).
+
+Across a year (`pacetest.mjs --year --days=22`, seeds 1-3, averages):
+
+| season | earned $ | spent $ | haystacks bought | hungry pen-nights | wild stock out (morning) | what happened |
+|---|---|---|---|---|---|---|
+| year 1 spring | 1142 | 1065 | 0 | 0 | 27 | tiers 1-2; no sheep penned yet, so no lambs |
+| year 1 summer | 3537 | 430 | 0 | 0 | 97 | shearer: 8/8 at the drover's; at the mill 0/8 and 4/8 missed |
+| year 1 autumn | 4175 | 587 | 13.7 | 0 | 120 | fair day: no breed bought (pens full, no land) |
+| year 1 winter | 3680 | 120 | 1.3 (at 80$) | 0 | 92 | winter sends a quarter of the wild stock away |
+| year 2 spring | 5074 | 27 | 0 | 0 | 127 | 32 lambs born in the pens |
+| year 2 summer | 2545 | 0 | 0 | 0 | 138 | shearer: 8/8, 8/8, 2/8 |
+
+Hay comes to about 600$ a winter for a tier-5 ranch of ~130 head, an
+eighth of a season's income; nobody went hungry. An earlier run, before
+the bot waited for autumn, bought hay in summer, and lambs were logged on
+the day before the morning they arrived (fixed in pacetest). In an earlier
+run one seed bought the Highland cow at the fair and won first with it.
+Land, not coin, is what runs out late ("no room for a pen" is the top
+stall at tier 5), so the purse still grows (about 18,000$ by day 23): see
+Decisions on land.
+
+## M23 Co-op, round three: pings, brace, travels, phones
+- [x] Pings: F (or the PING button by the thumb buttons, only with friends
+      here): a tap says OVER HERE with a flag where your dog stands; hold
+      it and pick HOLD, COME BY or AWAY (a direction, or slide the thumb),
+      said over your dog. Every screen sees it and hears its whistle
+      (`ping-here`, `ping-hold`, `ping-come`, `ping-away`, with `who`, the
+      player's slot, so each dog whistles and barks at its own pitch; the
+      Sound session makes them and chimes on its own when `game.net.players`
+      changes); off screen, an arrow with the name
+- [x] BRACE class at the Show Ground: a friend's dog at the post with
+      yours makes the run a brace, ten sheep for two dogs, scored as one;
+      either dog leaving the field retires it; prizes on trial days
+- [x] Guests keep what they find: hidden places (with the usual reward,
+      paid into their own ranch), keepsakes, the map their dog walks, a
+      stamp for each ranch visited and brace ribbons; folded into their
+      own save the next time they load or start a ranch; RANCHES VISITED
+      in the Ledger
+- [x] Seasons reach guests (season, progress, bloom, leaves, snow); two
+      hooks for the rest of round three: `src/net/shared.ts` (JSON ranch
+      state) and `animalExtra` / `applyAnimalExtra` in snapshot.ts (a byte
+      per animal, e.g. a lamb)
+- [x] Phones: quiet lines pinged every 3s, a line silent for 9s (or 3s
+      after a change of network) dialled again; a screen going off tells
+      the others (a guest's dog naps, a host's guests wait on a card);
+      a dropped host's room waits 4 minutes, a guest's slot 5; guests keep
+      trying for 2 minutes on screen
+- [x] First-time hints for host and guest (what a friend's dog does, how
+      to ping, whose pay it is, that finds are theirs); a guest's Show
+      Ground tip
+- [x] cooptest: pings both ways (API and keys), seasons and shared state,
+      the brace and its ribbon, a place and a keepsake for the guest (and
+      in their own save afterwards), screens off on both sides, a dead line
+      after a network change, the drive with lag, jitter and 5% loss
+## M24 Graphics round three: seasons, character, the title
+- [x] Spring: blossom on the broadleaf trees (some in full flower), fresh
+      flowers in the grass, petals drifting
+- [x] Autumn: crowns turn buttercup, plum and sage (pines stay green),
+      leaf litter, dry grass, leaves falling and blowing on the wind
+- [x] Winter: snow on the ground with sage shade under the trees, trodden
+      paths, ice along the banks, snow on treetops and pine tiers, roofs,
+      chimneys, fences and decor, icicles, snowfall instead of rain, breath
+      puffs, prints everywhere, grass buried, sage outlines on pale animals
+- [x] The dog: sniffs, sits for a scratch, shakes off after the ford or rain
+- [x] Animals: cattle flick their tails, ducks stretch a wing, goats lower
+      their horns, ponies stamp
+- [x] Townsfolk shaded and rim-lit
+- [x] Title screen: the heeler sitting up on a knoll over the valley,
+      following the season
+- [x] Screenshot + console check per season, commit
+## M25 Sound, round three (seasons, lambs, the fair, co-op, long sessions)
+- [x] Seasons in the soundscape: a dawn chorus and a cuckoo in spring, lighter showers; insects all summer day and crickets from dusk; dry leaves rattling and rooks in autumn; the winter hush, a robin, a howling wind, snow underfoot, ice on the river and wolves far off
+- [x] The music shades with the season: spring a little quicker and brighter (more whistle, more ornaments); autumn leans on the fiddle and minor openings; winter slower and darker, tunes on a music box, the harp thinned, no bodhran, more drone and reverb
+- [x] Lambs: a lamb cut off from its ewe calls and she answers from where she is, both carrying further than other calls; the longer apart, the more urgent; a soft word from each when they are together again
+- [x] The fair: the crowd's babble near it, the auctioneer's chant in bursts, the gavel and a smattering of applause for each sale
+- [x] Co-op: a chime when a friend arrives or heads home; each player's bark and whistle at their own pitch; whistle pings for "over here", "hold", "come by" and "away to me"
+- [x] Long sessions: stinger variants (never the same twice running), a little life in the handler's whistle, the main theme rarer, and a rest every five to nine minutes where the music stops and the valley carries on
+- [x] audiotest: spring, summer, autumn, winter, lambs, fair, coop, hour (an hour scheduled), hourlevels (an hour rendered), live3
+## M26 Platform: an installable app, phone performance, game pads, moving a save
+- [x] Installable (PWA): `manifest.webmanifest` (Come By, plum theme,
+      standalone with full screen preferred, any rotation), icons drawn by
+      the game's own sprite code at build time (`src/pwa/icon.ts`: the heeler
+      and a sheep on a patch of meadow; `scripts/pwa.mjs` runs it under Node
+      with a tiny stand-in canvas and writes PNGs; no image files in the
+      repo), apple-touch-icon and the iOS meta tags
+- [x] Service worker (`sw.js`, generated per build): keeps every file of the
+      build under a cache named for its contents; index.html network first,
+      so a new deploy shows on the next launch; the page asks for a new
+      worker on every launch; anything on another origin (the co-op relay)
+      goes straight to the network
+- [x] "Add to home screen" card on the title, phones only: INSTALL (Chrome's
+      own dialog) or Safari's Share steps on an iPhone; X hides it for good
+- [x] Phone performance, measured first (`scripts/perftest.mjs`, a real
+      tier-5 ranch the pace bot built: `scripts/fixtures/tier5.json`), then
+      the hot spots fixed (table below)
+- [x] GRAPHICS in the pause menu: AUTO (steps down when frames run long and
+      back up when there is time to spare), HIGH, MEDIUM, LOW. Lower levels
+      thin only mood: rain, splashes, butterflies and fireflies, cloud
+      shadows and the wet-ground dither, grass bending in gusts
+- [x] Less work when idle: a quiet menu or build mode draws 30 frames a
+      second, a 120Hz screen draws every other frame; a hidden tab already
+      gets no frames and its sound suspends
+- [x] Game pads (Gamepad API): play, every menu, build mode, the Ledger,
+      the look screen and its name, the co-op screens and the join code;
+      prompts switch to pad buttons while a pad is in use
+      (`scripts/padtest.mjs`, a simulated pad)
+- [x] Moving a save: MOVE A RANCH (title) / MOVE THIS RANCH (pause): copy a
+      save code, save a file (the share sheet on phones), paste a code or
+      load a file; checked before anything is touched, and replacing a ranch
+      asks first with NO picked (`scripts/transfertest.mjs`)
+- [x] Checks: `pwatest` (installable, offline, a new deploy), `installtest`,
+      `padtest`, `transfertest`, `picturetest`; typecheck, build, shot and
+      the existing loop tests including cooptest
+
+Performance: work per frame (update and render, every frame's drawing
+finished), best of 9 batches of 60 stepped frames, seeded, at 390x844@3
+(234x507 internal) in headless Chromium, which draws canvas in software:
+
+| scene | CPU | before | after (HIGH) | after (LOW) |
+|---|---|---|---|---|
+| title (attract mode) | 1x | 2.6 ms | 0.9 ms | |
+| day: tier-5 ranch, clear summer | 1x | 4.0 ms | 1.7 ms | |
+| worst: same ranch, winter storm night, predators, 2 helpers | 1x | 7.1 ms | 4.0 ms | |
+| title | 4x | 11.6 ms | 4.1 ms | 2.7 ms |
+| day | 4x | 17.7 ms | 7.5 ms | 6.1 ms |
+| worst | 4x | 29.5 ms | 10.8 ms | 9.0 ms |
+| title | 6x | 17.2 ms | 6.2 ms | 4.2 ms |
+| day | 6x | 25.1 ms | 12.2 ms | 9.6 ms |
+| worst | 6x | 43.8 ms | 16.7 ms | 13.7 ms |
+
+At 60fps a frame has 16.7 ms. Live (the page's own loop, AUTO): 4x day
+holds 60fps on HIGH; at 6x AUTO steps down to LOW and the worst case runs
+52 fps (from 16 fps before).
+
+Where the time went, and what changed:
+- The copy up to the screen: every frame the 234x507 buffer was drawn at
+  3x onto a 1170x2535 canvas, about 6 ms at 4x. Now the game draws straight
+  into a canvas of its own size and CSS (`image-rendering: pixelated`)
+  scales it by the same whole number on the GPU (`src/gfx/screen.ts`; the
+  old copy stays for browsers without `pixelated`).
+- The night overlay (27% of the worst case): every pixel was tested against
+  every light. Each light's hole is now stamped over its own box only;
+  the output is identical (`src/render/night.ts`, surgical).
+- Buildings, fences and props drawn a pixel at a time, ~5,000 fillRect calls
+  a frame on a built-up ranch: a recorder keeps each one's drawing as a
+  bitmap and redraws it only when the art asks for something different
+  (`src/gfx/picture.ts`, hooked in `src/render/world.ts`); ~4 ms at 6x,
+  pixel for pixel the same (`scripts/picturetest.mjs`).
+- Rain streaks: one rect per straight run instead of per pixel
+  (`src/render/weather.ts`).
+- Not hot after all: grass sway (~500 pixels a frame, under 1%), the herd's
+  neighbour loops (~3%), music scheduling (not in the top 15). Left alone.
+
+PWA checks (`scripts/pwatest.mjs`, against two real builds served by
+`vite preview`): Chrome reports no installability errors; with the server
+switched off after one visit the game starts from the kept build; a new
+deploy's bundle is running after one relaunch, its files are kept and the
+old build's cache is deleted, and it then plays offline too; requests to
+another origin are never answered from the cache.
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1043,3 +1278,182 @@ novice trial with a calm handler scores 99-100 with or without the change.
   savetest included, pass as before.
 - In headless Chromium a second Tab press never reaches the page, so
   cooptest opens and closes the Ledger with G.
+- The relay is deployed to the user's Cloudflare account as `come-by-relay`
+  (https://come-by-relay.gboneck.workers.dev); the Pages workflow reads it
+  from the repository variable `RELAY_URL`. cooptest passes through it.
+- On Cloudflare a quick reconnect can reach the room before the old
+  socket's close is handled, so the relay checks for a newer socket for the
+  same player after its storage read, not before, and says nothing about a
+  drop that was already mended. A host who is back before the relay notices
+  never shows guests the waiting card; guests just get a fresh world.
+- Pings are whistles, not a chat: four words a handler would use. COME BY
+  is clockwise round the flock and AWAY anticlockwise, as on a trial field.
+  A tap is OVER HERE because that is the one you need in a hurry.
+- The brace is not a rung on the class ladder: it runs whenever a friend's
+  dog stands at the post with the host's (`braceReady`), so it never gets
+  in the way of single player. Ten sheep, 240s, prizes 70/40/20.
+- A guest's finds go to `comeby-travels-v1`, not straight into their save:
+  their own game is not running while they visit (and they may not have a
+  ranch yet). `mergeTravels` folds them in on the next load or new game;
+  the found-place rewards are paid once and zeroed.
+- On a friend's ranch the Ledger shows what both of you know: the host's
+  places, fog and keepsakes with the guest's own laid over them.
+- A dead socket is noticed by silence, not by a close (phones often send
+  none): the relay answers pings without waking the room, so asking every
+  3s costs nothing. Hidden pages never give up a line (their timers lie).
+- `&loss=0.05` models packet loss as TCP does: the lost message and all
+  behind it arrive 200-500ms late, never out of order.
+- Relay change waiting to deploy: grace times (host 4 min, guest slot 5
+  min, were 30s / 90s). The live relay still has the old ones.
+- Seasons (gameplay, round three): four days a season, so a year is 16
+  days and a decent player sees the first winter around tier 4-5. Day 1 is
+  the first of spring, year 1; the calendar follows from the day number, so
+  old saves load as spring, year 1 (with a full loft) without a new field.
+  Autumn days run at 1.1x with dusk at 0.76, winter's at 1.25x with dusk at
+  0.7 (`DAY_PACE` in season.ts). No season banner on a new game's first
+  morning (it would talk about lambing to someone with five ducks).
+- Lambing only in ranch pens and only from tier 2 (sheep arrive at tier 2;
+  in year one spring has passed by then, so the first pen lambs come in
+  year two). Half the ewes lamb on spring's first morning, nearly all the
+  rest on the second, 15% twins. Wild ewes: 40% have a lamb in spring's
+  morning spawns, never in a region's opening spawn (the first sheep a
+  player meets are plain). Lambs are worth 2$, take one pen place, make no
+  goods, cannot go to buyers, the shearer or the fair, and a fox would
+  rather take a lamb. Lambing ignores pen room: a pen can end up over full, which
+  shows on its sign and is a reason to build or upgrade.
+- A ewe feels a lamb only by touch (no flocking, no personal space) and a
+  lamb aims 0.4s ahead of its mother and keeps her pace; any looser and
+  each pair drifts off on its own. Ewes turn back past 36px apart, lambs
+  run to her past 6px; parted ewes fret at 0.2/s, lambs 0.26/s.
+- The shearer comes on summer's first morning (tier 2+, three or more
+  grown unshorn sheep penned) at the drover's, or the mill's if the drover
+  already has an order; up to eight; 6$ a head times the calm multiplier,
+  1.5x for a rare breed; once a year per sheep. They come back out of the
+  yard's gate (not led away) and are yours to walk home.
+- The fair is on autumn's second day from tier 2, in a 6x5 show ring (gate
+  north, towards the Home Meadow) east of the trial course. Score = a base
+  per kind + 34 x calm + 14 for a rare breed, +-4; three seeded rivals that
+  get 3 better each year (to +12). Ribbons pay 40/20/10$. Entries go home at
+  the day's end by themselves (to a pen of their kind with room, else by
+  the farmhouse door): the drive there is the work. The sale yard takes no
+  order that day; its breeders' pen holds each rare breed your tier allows,
+  and you buy the one you stand by at the fence (E), not the one nearest
+  the gate (you could not choose). Unsold breeds leave at the day's end.
+- Rare breeds are new coats of existing species (call duck = duck coat 1,
+  black sheep = sheep 1, pygmy goat = goat 2, Highland cow = cow 2), so
+  they travel in co-op and saves as they are. The black sheep found at the
+  stone circle is the same coat and now counts as rare too. No pony breed.
+  Rare: double value at the market and to buyers, goods 1.5x.
+- Winter feed: a bale a night per four pen places (rounded up per pen),
+  from the farmhouse loft (10 bales, refilled each autumn), then stacks in
+  a barn's ring, then the rest; stacks outside a barn's ring lose 2 bales a
+  night; empty stacks are cleared away. Haystack: 2x2, tier 2, 20 bales,
+  40$ (80$ in winter). A pen without hay makes no goods the next day and
+  its stock starts the day at +0.25 stress. Nothing dies of hunger: calm
+  beats chaos, and a hungry pen is warning enough.
+- Snow slows loose animals by 12% and the dog by 8% at full cover.
+  Winter keeps one wild flock fewer per region (never under one, and a
+  region that has just opened still gets its two): wild stock above that
+  goes down the valley on a winter morning, smallest flocks first, a big
+  flock only thinned; never your own strays or a hidden place's flock.
+- Not done: more land to buy. The year run shows land, not coin, is what
+  runs out at tier 5 ("no room for a pen" is the commonest stall), so a
+  land deed would be the late game's best sink; it needs build.ts (Feel and
+  UI) to let bought parcels count as ranch.
+- Co-op: `src/net` is left to Co-op. Their hooks (`animalExtra` in
+  snapshot.ts, `SHARED` in shared.ts) carry lambs (bit 0), the loft, hungry
+  nights and the fair (`seasonal`), and haystack bales (`hay`); the show
+  ring joins `allPens`, and the guest sets the calendar's year and day,
+  winter's dusk and the snow's drag on its own dog. The patch (tested on a
+  merge with coop-r3: cooptest passes, with a new check) is in the shared
+  notes as `gameplay-r3-coop-hooks.patch`.
+- Seasons are drawn by recolouring the baked ground and canopy into
+  seasonal copies (`src/render/seasons.ts`). The levels are stepped in
+  quarters and a copy is rebuilt only when a step changes (~45ms on a
+  desktop, a few times while a season turns), so a frame costs no more than
+  in summer. Summer draws the original bake. Everything drawn each frame
+  (roofs, fences, decor, sway) reads `seasonLook` (`src/art/seasonlook.ts`),
+  set once a frame from `game.season`.
+- Winter snow lets old grass poke through in small 2x2 tufts (~7%), so the
+  snow has texture and pale things standing on it still read; pale coats
+  get a sage outline on snow. Shade under trees stays sage: the snow has
+  shadows. Paths keep only a thin dusting: they look trodden.
+- Rain falls as snow when there is snow on the ground; puddles, splashes,
+  the wet ground and cloud shadows are off in the snow.
+- The dog's idles (`src/render/dogidle.ts`) are render-only: standing still
+  a few seconds it sniffs or scratches, leaving the ford (or after a while
+  in the rain) it shakes off with spray. Any move ends them at once.
+- The title illustration (`src/art/title.ts`) is painted once per size and
+  season into a canvas; only the tail, the falling things, butterflies and
+  breath draw each frame. It replaces the small trotting dog by the logo.
+- Sound, round three. The soundscape reads `game.season` (bloom, leaves,
+  snow, eased) and first light (the first 12% of the day). Birds: a dawn
+  chorus up to four times as busy in spring, half as busy in summer; six
+  songbirds, a cuckoo now and then in spring, a lone robin in the snow.
+  Insects are a looped bed by day in summer; crickets from dusk in summer
+  and fewer in spring and autumn, none in snow. Autumn adds a dry-leaf
+  rattle that follows the wind and rooks (more at dusk). Winter narrows
+  the wind's upper band into a moan, closes the top of the ambience (a
+  hush), swaps every footstep for a crunch, adds ice pings and groans near
+  the river and a wolf chorus far off at night (not the predators).
+- Music by season: phrases opening on a minor chord are favoured with
+  autumn and (more) winter as with rain; the lead's voice leans to the
+  whistle in spring, the fiddle in autumn and a music box in snow (never
+  for the trial march or the title theme); tempo +3% spring, -3% autumn,
+  -8% winter; in snow the harp thins and a music box sparkles over it.
+- Lambs and the fair are read loosely until the gameplay side lands
+  them: a lamb is an animal with `lamb: true` and `mother`; the fair is
+  `game.fair` with `on`, optionally `x`/`y` (default the Show Ground) and a
+  `sold` counter. A separated lamb (more than 60 px from its mother, or a
+  fence between them) calls every 1.8-4 s, answered 0.5-0.8 s later; at
+  most three pairs call at once; lost-lamb calls carry 480 px instead of
+  320.
+- Co-op sounds, agreed with the co-op session: `play('bark', { who })`
+  (who = player slot, 0 the host) and four whistle pings, each under half a
+  second and pitched per player: `ping-here` (two quick notes up),
+  `ping-hold` (one level note: stop), `ping-come` (rising: go round
+  clockwise), `ping-away` (falling: anticlockwise). Join and leave chimes
+  come from the audio diffing `game.net.players` itself, on each side.
+- Long sessions, measured: an hour of varied play (ten days, the seasons
+  turning) scheduled in about a second: 250-260 sections, 95% of tunes
+  open differently, the main theme 5-8 times (it was 11 before the ranch
+  quoted it less), the same chords twice running 1-4 times. Rendered at
+  8 kHz: every minute between -32 and -27 dBFS, peaks under -9, no drift
+  from the first ten minutes to the last. The "that'll do" stinger has
+  three variants, "steady", the end of day and "sold" two each.
+- The screen scale-up moved to CSS (`image-rendering: pixelated`): the
+  canvas is the internal size and its CSS size is a whole multiple of it in
+  device pixels, so it stays crisp and nearest-neighbour; browsers without
+  `pixelated` keep the old drawImage copy.
+- Icons are drawn at build time by the game's own sprite code under Node,
+  with a stand-in canvas that does only fillRect and drawImage (all the
+  sprite code needs), rather than Playwright: the Pages build needs no
+  browser, and the icons match the sprites exactly.
+- The service worker keeps everything the build made and nothing else
+  (the relay is a WebSocket, which workers never see). It skips waiting:
+  the build is one hashed bundle loaded at start, so a page running the old
+  build never asks for an old file after the new worker clears its cache.
+- Performance is measured with stepped, seeded frames and the best of
+  several batches: five sessions share this machine, and live frame rates
+  swung 3x between identical runs. Each stepped frame reads one pixel back,
+  so the new direct-to-screen drawing pays for its raster like the old copy.
+- Quality levels never touch the night, the herd or anything you play with;
+  the dither overlay is gameplay (darkness, lamps). AUTO judges our own work
+  per frame (12 ms budget, 6 ms to step up), not the frame rate, so a
+  30fps power-saving mode does not look like a slow phone.
+- Pad mapping follows the brief (A bark, B nip, X hold lie down, Y helpers,
+  START pause, SELECT Ledger, triggers or RB sprint) plus LB for build mode;
+  in build mode LB/RB pick, LT/RT change tab, X removes, Y upgrades the
+  building under the cursor or turns the one being placed.
+- Pad prompts are one table of keyboard phrases (`src/ui/pad.ts` PROMPTS)
+  applied to drawn text while a pad is in use, through a hook in the font,
+  rather than edits to the fifteen screens that write prompts. A new
+  keyboard prompt needs a line there to read right on a pad.
+- Pad typing (names, the join code): up/down turn the last letter, right
+  adds one, left deletes. B on the join screen leaves it, since that screen
+  takes the keyboard back to its code field every frame.
+- A save code is the save's JSON deflated (CompressionStream) in URL-safe
+  base64 behind `COMEBY1.`; a tier-5 ranch is about 3,100 letters, which
+  is fine to copy and paste but not to type, so a file is offered too.
+  Codes may arrive broken over lines; plain save JSON also loads.
+

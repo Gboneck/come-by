@@ -24,9 +24,12 @@ import { DurableObject } from 'cloudflare:workers';
 const LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
 const CODE_LEN = 4;
 const MAX_GUESTS = 3; // four dogs with the host's
-const HOST_GRACE_MS = 30_000; // a host who drops may come back this quickly
+// Phones: a locked screen or a trip to another app can cut a socket for a
+// few minutes, so a dropped host's room waits four, and a dropped guest
+// keeps their slot five.
+const HOST_GRACE_MS = 240_000; // a host who drops may come back this quickly
 const RESERVE_MS = 120_000; // a new room waits this long for its host
-const SLOT_KEEP_MS = 90_000; // a guest who drops keeps their slot this long
+const SLOT_KEEP_MS = 300_000; // a guest who drops keeps their slot this long
 
 // Close codes the client knows.
 const CLOSED = 4000; // the host shut the ranch (or never came back)
@@ -254,10 +257,12 @@ export class Room extends DurableObject<Env> {
     const s = this.seat(ws);
     this.shut(ws, code === 1000 || (code >= 3000 && code < 5000) ? code : 1000, reason);
     if (!s || code === REPLACED) return;
-    // Replaced by a newer socket for the same player: nothing has changed.
+    const m = await this.meta();
+    // Replaced by a newer socket for the same player (a quick reconnect can
+    // arrive before this close does): nothing has changed. Checked after
+    // the read above, so a reconnect during it counts too.
     const others = this.ctx.getWebSockets(s.role).filter((o) => o !== ws);
     if (s.role === 'host' ? others.length > 0 : others.some((o) => this.seat(o)?.id === s.id)) return;
-    const m = await this.meta();
     if (!m) return;
     if (s.role === 'host') {
       if (code === CLOSED) {
