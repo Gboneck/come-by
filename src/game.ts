@@ -55,6 +55,7 @@ export interface DayStats {
   goodsValue: number;
   built: number;
   sold: number;
+  lostOwn?: number; // of the losses, your own stock (penned, or let out of a pen)
 }
 
 export interface Banner {
@@ -341,8 +342,8 @@ export class Game {
 
   endDay() {
     if (this.day.phase === 'night') {
-      const lost = Object.values(this.stats.lost).reduce((n, v) => n + (v ?? 0), 0);
-      if (lost === 0) this.totals.nightsNoLoss++;
+      // Wild flocks out in the far pastures are not yours to lose.
+      if (!this.stats.lostOwn) this.totals.nightsNoLoss++;
       // Anyone still being carried off at dawn is dropped where they are.
       for (const p of this.predators) p.dropCarry();
     }
@@ -630,6 +631,7 @@ export class Game {
       },
       onLoss: (a, p) => {
         this.stats.lost[a.sp.id] = (this.stats.lost[a.sp.id] ?? 0) + 1;
+        if (a.home) this.stats.lostOwn = (this.stats.lostOwn ?? 0) + 1;
         this.totals.lost++;
         this.showBanner(`A ${p.kind.toUpperCase()} TOOK A ${a.sp.name.toUpperCase()}`, undefined, 2.2);
         this.audio?.play('howl');

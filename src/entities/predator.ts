@@ -227,6 +227,7 @@ export class Predator {
           const a = p.animals[Math.floor(Math.random() * p.animals.length)];
           p.animals = p.animals.filter((x) => x !== a);
           a.pen = null;
+          a.home = true; // taken from your pen: your loss
           a.carried = true;
           a.x = this.x;
           a.y = this.y;

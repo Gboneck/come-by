@@ -623,6 +623,8 @@ export class Pacer {
     // Wait out the fade into the end-of-day card.
     for (let i = 0; i < 120 && g.mode === 'play'; i++) this.frame({ ...STILL, lie: true });
     const choice = g.summary?.buildable?.length ?? 0;
+    const lostAll = Object.values(g.stats.lost).reduce((n, v) => n + (v ?? 0), 0);
+    if (lostAll) this.stuck.push(`NIGHT: LOST ${lostAll} (${g.stats.lostOwn ?? 0} OF YOURS)`);
     const income = { stock: g.stats.deliveredValue, goods: g.stats.goodsValue, orders: g.orders.list.reduce((s, o) => s + o.paid, 0) - orders0, trials: prize };
     if (g.mode === 'summary') {
       this.shop();

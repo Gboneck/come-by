@@ -85,7 +85,7 @@ export const TIERS: Tier[] = [
     blurb: 'CATTLE AT THE RIVER FORD. NIP THEIR HEELS.',
     goals: [
       penGoal('cow', 6),
-      { label: 'A NIGHT WITH NO LOSSES', target: 1, value: (g) => g.totals.nightsNoLoss },
+      { label: 'A NIGHT WITH NO STOCK LOST', target: 1, value: (g) => g.totals.nightsNoLoss },
       { label: 'HIRE A HELPER DOG', target: 1, value: (g) => g.helpers.length },
       { label: 'SCORE 60 IN A TRIAL', target: 60, value: (g) => g.totals.bestTrial },
     ],
