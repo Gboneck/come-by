@@ -5,29 +5,35 @@ import { PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, priz
 import { checkLegacy } from './progression';
 import { SKY_LINE, SKY_TIP } from './weather';
 import { Predator } from '../entities/predator';
-import { breedNear, buyBreed, isFairDay, seasonalMorning, seasonalOrders, seasonalUpdate } from './seasonal';
+import { breedNear, buyBreed, isFairDay, seasonalMorning, seasonalOrders, seasonalUpdate, type MorningBanner } from './seasonal';
 
 // The jobs around the herding: buyers' orders and the Show Ground trials.
 // Game calls in here at a handful of points; this keeps those hooks short.
 
 export function jobsMorning(game: Game, fresh: boolean) {
-  const seasonNews = seasonalMorning(game, fresh); // the calendar first: the rest reads it
+  // The morning shows its most important banner: winter's feeding, the
+  // shearer or the fair, then a trial day, a new season, the sky.
+  const banners: MorningBanner[] = [];
+  const season = seasonalMorning(game, fresh); // the calendar first: the rest reads it
+  if (season) banners.push(season);
   if (fresh) {
     morningOrders(game);
-    seasonalOrders(game);
+    const shear = seasonalOrders(game);
+    if (shear) banners.push(shear);
     game.weather.newDay(game.tier);
   }
   const sky = game.weather.sky;
-  if (sky !== 'clear') game.showBanner(`DAY ${game.day.day}`, SKY_LINE[sky], 2.8);
+  if (sky !== 'clear') banners.push({ big: `DAY ${game.day.day}`, small: SKY_LINE[sky], prio: 0 });
   const c = currentClass(game);
-  if (c && isTrialDay(game.day.day)) game.showBanner(`DAY ${game.day.day}: TRIAL DAY`, `THE ${c.name} CLASS RUNS AT THE SHOW GROUND`, 3.2);
+  if (c && isTrialDay(game.day.day)) banners.push({ big: `DAY ${game.day.day}: TRIAL DAY`, small: `THE ${c.name} CLASS RUNS AT THE SHOW GROUND`, prio: 2 });
+  const top = banners.sort((a, b) => b.prio - a.prio)[0];
+  if (top) game.showBanner(top.big, top.small, top.prio ? 3.4 : 2.8);
   // The first windy, wet, foggy or stormy day says what it does.
   const tip = SKY_TIP[sky];
   if (tip && !game.tipsSeen.has(`sky-${sky}`) && !game.tip) {
     game.tipsSeen.add(`sky-${sky}`);
     game.tip = { text: tip, t: 9 };
   }
-  if (seasonNews) game.showBanner(seasonNews[0], seasonNews[1], 3.4);
 }
 
 // Nightfall: a storm brings an extra coyote, and they are all bolder.
