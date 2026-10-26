@@ -48,7 +48,8 @@ original and drawn in code. No external art files, ever.
   `scripts/resttest.mjs`, `scripts/daytest.mjs` (day one affords the kennel
   however the first drive goes), `scripts/weathertest.mjs`, `scripts/transittest.mjs`
   (an order's flock across a built-up ranch to each yard)
-  `scripts/discoverytest.mjs` and `scripts/tour.mjs` check the loops end to
+  `scripts/discoverytest.mjs`, `scripts/projecttest.mjs` (the valley
+  projects) and `scripts/tour.mjs` check the loops end to
   end, `scripts/perftest.mjs` measures each frame's work at a phone size
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
@@ -59,7 +60,8 @@ original and drawn in code. No external art files, ever.
   deploy picked up), `scripts/installtest.mjs` the install card,
   `scripts/padtest.mjs` plays every screen with a simulated game pad,
   `scripts/transfertest.mjs` moves a save between two browsers, `scripts/places.mjs` screenshots every hidden place and its way in
-  (`--found`, `--only=circle,hut`),
+  (`--found`, `--only=circle,hut`, `--half` and `--done` for the valley
+  projects before and after),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,
   coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`;
@@ -199,7 +201,9 @@ needs a line there.
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
   weather state everything else reads: `game.weather`), `season.ts` (the
   season state everything else reads: `game.season`), `discovery.ts`
-  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`).
+  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`),
+  `projects.ts` (valley projects: herding work in the hidden places that
+  changes them for good: `game.projects`; art in `src/art/projects.ts`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
   pieces, `textfield.ts` typed names.

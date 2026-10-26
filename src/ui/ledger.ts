@@ -12,7 +12,7 @@ import { safeArea } from './safe';
 import { SKY_WORD, skyIcon } from './icons';
 import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
-import { discoveryLines, drawFog, drawPlaceMarks } from './discovery';
+import { discoveryLines, drawFog, drawPlaceMarks, drawProjectMarks, projectLines } from './discovery';
 import { travelLines } from '../net/travels';
 
 let mini: HTMLCanvasElement | null = null;
@@ -57,6 +57,7 @@ function drawMap(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number
     }
   }
   drawPlaceMarks(game, g, x0, y0);
+  drawProjectMarks(game, g, x0, y0);
   // Groups out in the pastures, then the dog (blinking bandana red).
   for (const gr of game.groups) {
     if (!game.discovery.known(gr.x, gr.y)) continue; // no flocks in the fog
@@ -136,6 +137,9 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
     add(game.won ? 'THE VALLEY THRIVES!' : 'THE LAST TIER', C.butter);
     add('KEEP THE RANCH GROWING', C.wool);
   }
+  add('');
+  // The valley's projects (with the village and paddocks, as one list).
+  for (const l of projectLines(game, colW - 12)) add(l.s, l.c);
   add('');
   for (const l of discoveryLines(game, colW - 12)) add(l.s, l.c);
   for (const l of travelLines(colW - 12)) add(l.s, l.c);

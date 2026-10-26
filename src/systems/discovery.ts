@@ -275,19 +275,22 @@ export class Discovery {
     for (const f of FINDS) {
       if (regionById(placeById(f.place).region).tier > game.tier) continue;
       if ([...this.tracked.values()].includes(f.place)) continue;
+      // Once goats have browsed the valley's scrub back (a valley project),
+      // its wild flock is back every day, and bigger.
+      const browsed = f.place === 'valley' && game.projects.isDone('scrub');
       if (f.bonus) {
         if (this.home.has(f.place)) continue;
       } else {
         if (day < (this.flockDay[f.place] ?? 0)) continue;
-        this.flockDay[f.place] = day + FLOCK_EVERY;
+        this.flockDay[f.place] = day + (browsed ? 1 : FLOCK_EVERY);
       }
-      this.spawn(game, f);
+      this.spawn(game, f, browsed ? 7 : f.n);
     }
   }
 
-  private spawn(game: Game, f: Finder) {
-    for (let i = 0; i < f.n; i++) {
-      const ang = Math.random() * Math.PI * 2, r = f.n > 1 ? Math.sqrt(Math.random()) * (5 + f.n * 1.3) : 0;
+  private spawn(game: Game, f: Finder, n = f.n) {
+    for (let i = 0; i < n; i++) {
+      const ang = Math.random() * Math.PI * 2, r = n > 1 ? Math.sqrt(Math.random()) * (5 + n * 1.3) : 0;
       this.add(game, f, f.coat, f.x + Math.cos(ang) * r, f.y + Math.sin(ang) * r, 0);
     }
   }

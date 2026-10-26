@@ -206,6 +206,7 @@ export function penGateAt(game: Game): Pen | null {
 // E at a pen gate: hold it open to let the stock out, or shut it again.
 // Only when there is no loose animal at the dog's nose to nip instead.
 export function gateAction(game: Game): boolean {
+  if (game.projects.gateAction(game)) return true; // the mended hut's fold
   const p = penGateAt(game);
   if (!p) return false;
   const d = game.dog;

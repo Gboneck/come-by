@@ -1,5 +1,5 @@
 import { fbm, hash2, mulberry32, type Rng } from '../rng';
-import { PLACES, PROPS } from './places';
+import { PLACES, PROPS, WORKS, propBlocks, type ProjectView } from './places';
 
 // Terrain is authored on 8px tiles; collision runs on 4px cells so fences can
 // be thin.
@@ -320,10 +320,28 @@ export class WorldMap {
   hurdleCells: number[] = [];
   hurdleOpen = false;
   hurdleY = 0; // px: its foot
+  // How the valley projects stand (src/systems/projects.ts): which of their
+  // walls, stones and gates are up. Call setProjects again when that changes.
+  // Only the projects' own props' cells are touched, so anything else set
+  // on the flags since (the hurdle, the old bridge's deck) stays as it is.
+  projects: ProjectView | null = null;
+  setProjects(v: ProjectView) {
+    this.projects = v;
+    const cells = new Set<number>();
+    const each = (p: (typeof PROPS)[number], f: (i: number) => void) => {
+      const [dx, dy, w, h] = p.solid!;
+      for (let cy = Math.max(0, Math.floor((p.y + dy) / CS)); cy < Math.min(CH, Math.ceil((p.y + dy + h) / CS)); cy++)
+        for (let cx = Math.max(0, Math.floor((p.x + dx) / CS)); cx < Math.min(CW, Math.ceil((p.x + dx + w) / CS)); cx++) f(cy * CW + cx);
+    };
+    for (const p of [...PROPS, ...WORKS]) if (p.project && p.solid) each(p, (i) => cells.add(i));
+    for (const i of cells) this.terFlags[i] = this.bareFlags(i % CW, Math.floor(i / CW));
+    for (const p of [...PROPS, ...WORKS]) if (propBlocks(p, v)) each(p, (i) => { if (cells.has(i)) this.terFlags[i] |= SOLID; });
+  }
+
   private stampProps() {
-    for (const p of PROPS) {
-      if (!p.solid) continue;
-      const [dx, dy, w, h] = p.solid;
+    for (const p of [...PROPS, ...WORKS]) {
+      if (!propBlocks(p, this.projects)) continue;
+      const [dx, dy, w, h] = p.solid!;
       for (let cy = Math.floor((p.y + dy) / CS); cy < Math.ceil((p.y + dy + h) / CS); cy++)
         for (let cx = Math.floor((p.x + dx) / CS); cx < Math.ceil((p.x + dx + w) / CS); cx++)
           if (cx >= 0 && cy >= 0 && cx < CW && cy < CH) this.terFlags[cy * CW + cx] |= SOLID;
@@ -397,18 +415,15 @@ export class WorldMap {
   }
 
   computeTerFlags() {
-    for (let cy = 0; cy < CH; cy++) {
-      for (let cx = 0; cx < CW; cx++) {
-        const t = this.t(cx >> 1, cy >> 1);
-        let f = 0;
-        if (t === Ter.Forest) f = SOLID;
-        else if (t === Ter.Rock) f = ROCK;
-        else if (t === Ter.Water) f = DEEP;
-        else if (t === Ter.Shallow) f = SHALLOW;
-        this.terFlags[cy * CW + cx] = f;
-      }
-    }
+    for (let cy = 0; cy < CH; cy++)
+      for (let cx = 0; cx < CW; cx++) this.terFlags[cy * CW + cx] = this.bareFlags(cx, cy);
     this.stampProps();
+  }
+
+  // A collision cell's flags from its terrain alone.
+  private bareFlags(cx: number, cy: number): number {
+    const t = this.t(cx >> 1, cy >> 1);
+    return t === Ter.Forest ? SOLID : t === Ter.Rock ? ROCK : t === Ter.Water ? DEEP : t === Ter.Shallow ? SHALLOW : 0;
   }
 
   // Combined flags for a collision cell.

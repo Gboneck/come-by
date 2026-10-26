@@ -16,6 +16,8 @@ export const SHARED: Shared[] = [
   { key: 'seasonal', get: (g) => ({ loft: g.seasonal.loft, hungryNights: g.seasonal.hungryNights, fair: g.seasonal.fair }), set: (g, v) => Object.assign(g.seasonal, v as Partial<Seasonal>) },
   // Bales left in each haystack, in building order.
   { key: 'hay', get: (g) => stacks(g).map((h) => h.bales), set: (g, v) => stacks(g).forEach((h, i) => (h.bales = (v as number[])[i] ?? h.bales)) },
+  // Valley projects: progress, what is done, the fold's gate (systems/projects.ts).
+  { key: 'projects', get: (g) => g.projects.shared(), set: (g, v) => g.projects.applyShared(g, v) },
 ];
 
 export function sharedOut(game: Game): Record<string, unknown> {
