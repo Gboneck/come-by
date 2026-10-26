@@ -36,7 +36,8 @@ if (!REMOTE && !existsSync(`${root}server/node_modules/.bin/wrangler`)) {
   console.log('FAIL the relay\'s packages are not installed: run (cd server && npm install) first');
   process.exit(1);
 }
-const relay = REMOTE ? null : spawn('npx', ['wrangler', 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], { cwd: `${root}server`, stdio: ['ignore', 'pipe', 'pipe'] });
+// Its own state folder and inspector port, so two runs can go at once.
+const relay = REMOTE ? null : spawn('npx', ['wrangler', 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1', '--log-level', 'warn', '--inspector-port', String(RELAY_PORT + 1), '--persist-to', `.wrangler/cooptest-${RELAY_PORT}`], { cwd: `${root}server`, stdio: ['ignore', 'pipe', 'pipe'] });
 let relayLog = '';
 relay?.stdout.on('data', (d) => (relayLog += d));
 relay?.stderr.on('data', (d) => (relayLog += d));
@@ -185,7 +186,14 @@ await wait(4000);
 const mid = await sample();
 const gdog = await guest.evaluate(() => ({ x: window.game.dog.x, y: window.game.dog.y }));
 check('host has the guest dog where the guest has it', Math.hypot(mid.guest.x - gdog.x, mid.guest.y - gdog.y) < 30, `${Math.round(Math.hypot(mid.guest.x - gdog.x, mid.guest.y - gdog.y))}px apart`);
-check("host's herd moves for the guest's dog", Math.hypot(mid.x - before.x, mid.y - before.y) > 8, `${Math.round(Math.hypot(mid.x - before.x, mid.y - before.y))}px in 4s`);
+// The bot first walks round behind them, so give it time on a busy machine.
+let moved = Math.hypot(mid.x - before.x, mid.y - before.y), movedIn = 4;
+for (; moved <= 8 && movedIn < 10; movedIn += 0.5) {
+  await wait(500);
+  const now = await sample();
+  moved = Math.hypot(now.x - before.x, now.y - before.y);
+}
+check("host's herd moves for the guest's dog", moved > 8, `${Math.round(moved)}px in ${movedIn}s`);
 if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-driving.png` });
 const res = await driving;
 await wait(1200);
@@ -562,6 +570,15 @@ await guest.waitForFunction(() => window.game.trials.run?.cls.id === 'brace' && 
 const brace = await guest.evaluate(() => ({ cls: window.game.trials.run?.cls.id, flock: window.game.animals.filter((a) => a.trial).length }));
 const hostBrace = await host.evaluate(() => ({ cls: window.game.trials.run?.cls.id, n: window.game.trials.run?.flock.length }));
 check('both dogs at the post start a BRACE (host and guest see it)', hostBrace.cls === 'brace' && hostBrace.n === 10 && brace.cls === 'brace' && brace.flock === 10, JSON.stringify({ hostBrace, brace, braceHint }));
+if (brace.flock !== 10) {
+  // What the guest has: in its game, in the snapshots it holds, and how far behind it draws.
+  console.log('  guest', JSON.stringify(await guest.evaluate(() => {
+    const g = window.game, n = g.net, F = n.frames, last = F[F.length - 1], rt = performance.now() - n.offset - 100;
+    const trialRecs = (m) => (m ? [...m.values()].filter((r) => r.fl & 256).length : -1);
+    return { inGame: g.animals.filter((a) => a.trial).length, sheepInGame: g.animals.filter((a) => a.sp.id === 'sheep' && !a.pen).length, inBase: trialRecs(n.base), inLast: trialRecs(last?.animals), frames: F.length, lastAge: last ? Math.round(rt - last.t) : null, status: n.status, stale: n.stale, mode: g.mode, fulls: n.fulls };
+  })));
+  console.log('  host', JSON.stringify(await host.evaluate(() => { const n = window.game.net; return { cached: [...n.cache.values()].filter((r) => r.fl & 256).length, trialIds: window.game.trials.run?.flock.map((a) => a.id), snaps: n.stats.snaps, link: n.status }; })));
+}
 if (SHOTS) {
   await wait(300);
   await guest.screenshot({ path: `${root}shots/coop/guest-brace.png` });

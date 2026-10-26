@@ -263,9 +263,14 @@ export class GuestNet implements PingNet {
       // What the host's build mode made of our change.
       if (this.game) this.game.build.answer(this.game, m.res as BuildResult);
     } else if (m.t === 'meta') {
-      this.meta = m as unknown as Meta;
-      this.hostName = this.meta.host || this.hostName;
-      if (this.game) this.applyMeta(this.game);
+      // The herd is drawn a little behind (INTERP_MS), so the ranch's numbers
+      // wait for the moment they belong to: a trial's start turns up with its
+      // sheep, the purse with the coins flying to it. (Sent after the latest
+      // snapshot, so they belong just after it.)
+      const meta = m as unknown as Meta;
+      const last = this.frames[this.frames.length - 1];
+      if (!this.game || !last) this.takeMeta(meta);
+      else this.metaQ.push({ t: last.t, meta });
     } else if (m.t === 'players') {
       this.players.clear();
       for (const p of m.list as { slot: number; name: string; look: Look['dog']; away?: boolean }[]) this.players.set(p.slot, { name: p.name, look: p.look, away: p.away });
@@ -354,6 +359,19 @@ export class GuestNet implements PingNet {
     d.stamina = d.stats.stamina;
     game.cam.x = d.x;
     game.cam.y = d.y;
+  }
+
+  private metaQ: { t: number; meta: Meta }[] = [];
+
+  private takeMeta(meta: Meta) {
+    this.meta = meta;
+    this.hostName = meta.host || this.hostName;
+    if (this.game) this.applyMeta(this.game);
+  }
+
+  // The ranch's numbers whose moment has been drawn (all of them, rt = Infinity).
+  private flushMeta(rt: number) {
+    while (this.metaQ.length && this.metaQ[0].t <= rt) this.takeMeta(this.metaQ.shift()!.meta);
   }
 
   private applyMeta(game: Game) {
@@ -577,9 +595,10 @@ export class GuestNet implements PingNet {
   // ---- The host's world, drawn a little behind ----
 
   private apply(game: Game, dt: number) {
-    if (!this.frames.length || this.offset === null) return;
+    if (!this.frames.length || this.offset === null) return this.flushMeta(Infinity);
     const now = performance.now();
     const rt = now - this.offset - INTERP_MS;
+    this.flushMeta(rt);
     const F = this.frames;
     let bi = F.findIndex((f) => f.t > rt);
     if (bi < 0) bi = F.length - 1;
