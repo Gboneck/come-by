@@ -305,8 +305,11 @@ function bakeWorld(map: WorldMap): Baked {
           if (!at(water, x, y - 1)) c = U32.plum;
         }
       } else if (!rock[i]) {
-        // Banks: a wet sage line where grass meets water, mud beyond it.
-        if (atw(x, y - 1) || atw(x - 1, y) || atw(x + 1, y)) c = U32.sage;
+        // Banks: a wet sage line where grass meets water, mud beyond it; the
+        // far bank shows a face of earth dropping to the water.
+        if (atw(x, y + 1)) c = ((x + y) & 3) === 0 ? U32.plum : U32.sage;
+        else if (atw(x, y + 2) && ((x + y) & 1) === 0) c = U32.moss;
+        else if (atw(x, y - 1) || atw(x - 1, y) || atw(x + 1, y)) c = U32.sage;
         else if ((atw(x, y - 2) || atw(x - 2, y) || atw(x + 2, y)) && ((x + y) & 1) === 0) c = U32.moss;
       }
       if (rock[i]) c = rockColor(x, y);
@@ -318,10 +321,14 @@ function bakeWorld(map: WorldMap): Baked {
     const i = y * W + x;
     if (!at(rock, x, y + 1) || !at(rock, x - 1, y)) return U32.plum;
     // The south face of the outcrop, seen a little from the front.
-    const faceH = rh[i] > 0.55 ? 3 : 2;
+    // The big outcrops stand taller: a cliff with a pale band of strata.
+    const faceH = rh[i] > 0.8 ? 5 : rh[i] > 0.55 ? 3 : 2;
     let fd = 1;
     while (fd <= faceH && at(rock, x, y + fd + 1)) fd++;
-    if (fd <= faceH) return hash2(x, 0, 63) < 0.25 ? U32.plum : U32.sage;
+    if (fd <= faceH) {
+      if (faceH === 5 && fd === 3 && hash2(x >> 2, y, 64) < 0.7) return U32.wool;
+      return hash2(x, 0, 63) < 0.25 ? U32.plum : U32.sage;
+    }
     if (!at(rock, x, y - 1) || !at(rock, x + 1, y)) return U32.wool;
     // The top, lit from the upper right, broken into facets that each catch
     // the light differently, with cracks along some of their seams.
@@ -349,6 +356,27 @@ function bakeWorld(map: WorldMap): Baked {
         else if (d < d2) { d2 = d; k2 = id; }
       }
     return { lit: hash2(k1, 0, 72), seam: d2 - d1, crack: hash2(Math.min(k1, k2), Math.max(k1, k2), 73) < 0.3 };
+  }
+
+  // Trees on the far bank reflected in still and slow water: the canopy
+  // mirrored below the bank line, broken up by ripples (a teal-plum dither).
+  function reflections() {
+    for (let y = 1; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (!water[i] || gp[i] === U32.plum) continue;
+        let k = 1;
+        while (k <= 12 && water[i - k * W]) k++;
+        if (k > 12) continue;
+        const y0 = y - k; // the last bank row above
+        const my = y0 - (y - y0) + 1;
+        if (my < 0) continue;
+        const mi = my * W + x;
+        if (!cm[mi]) continue;
+        const fade = k <= 6 ? 0.85 : 0.45;
+        if (hash2(x, y, 180) > fade) continue;
+        gp[i] = cb.cp[mi] === U32.plum || ((x + (y >> 1)) & 1) === 0 ? U32.plum : U32.teal;
+      }
   }
 
   // Depth at the forest edge: the trunks under the crowns (only the part
@@ -607,6 +635,7 @@ function bakeWorld(map: WorldMap): Baked {
   }
 
   groundDetail();
+  reflections();
   trunksAndShrubs();
 
   // River Ford: stepping stones along the path where it crosses.

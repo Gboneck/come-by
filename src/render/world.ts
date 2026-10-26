@@ -9,6 +9,8 @@ import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, ke
 import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
 import { blueHour, goldenHour, skyDarkness, skySlope, sunShadow } from './sky';
+import { drawShafts } from './light';
+import { quality } from '../gfx/quality';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
@@ -122,6 +124,8 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   g.restore();
 
   g.drawImage(game.life.seasons.canopy ?? game.baked.canopy, ox, oy, W, H, 0, 0, W, H);
+  // Low sun slanting through the treetops (light comes against the shadow).
+  if (quality.fx >= 1 && game.weather.rain < 0.2 && game.weather.fog < 0.4) drawShafts(g, game.baked, ox, oy, W, H, sh.dx, sh.dy, lightLook.golden * 1.4, game.life.vt);
 
   g.save();
   g.translate(-ox, -oy);
@@ -148,7 +152,12 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
     for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2, warm: true }); }
   }
-  game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...game.life.wx.sky(game, dark) });
+  // Morning mist, lying in drifts until the sun gets up (fair days only).
+  const sk = game.life.wx.sky(game, dark);
+  const f = game.day.frac, w = game.weather;
+  if (quality.shade && game.day.phase === 'day' && f < 0.16 && w.rain < 0.1) sk.fog = Math.max(sk.fog ?? 0, 0.28 * (1 - f / 0.16) * (1 - w.wind * 0.7));
+  if ((sk.fog ?? 0) > 0.03 && dark <= 0 && !lights.length) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
+  game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk });
   game.life.wx.drawAir(g, game, W, H, dark > 0.25);
   if (sleeping(game)) {
     g.save();

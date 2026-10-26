@@ -153,6 +153,18 @@ export class WeatherFx {
         }
       }
     }
+    // After the rain, the wet paths glint where the light catches them.
+    if (w.rain < 0.1 && this.wet > 0.3 && quality.fx >= 0.6) {
+      const n = Math.round((this.wet * W * H) / 2200);
+      g.fillStyle = C.wool;
+      for (let j = 0; j < n; j++) {
+        const s = this.t * 2 + hash2(j, 0, 25) * 7, slot = Math.floor(s);
+        if (s - slot > 0.3) continue;
+        const x = ox + Math.floor(hash2(j, slot, 26) * W), y = oy + Math.floor(hash2(j, slot, 27) * H);
+        const so = game.baked.soil[y * WORLD_W + x];
+        if (so === 1 || so === 2) g.fillRect(x, y, 1, 1);
+      }
+    }
     if (w.rain < 0.05) return;
     // Splashes: each slot shows a drop landing somewhere new every moment.
     const n = Math.round(((w.rain * W * H) / 1400) * quality.fx);
