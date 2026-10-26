@@ -15,6 +15,7 @@ import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
 import { discoveryLines, drawPaperFog, drawPlaceMarks } from './discovery';
 import { travelLines } from '../net/travels';
+import { valleyLedger } from './valley';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -202,6 +203,8 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
     add(game.won ? 'THE VALLEY THRIVES!' : 'THE LAST TIER', C.butter);
     add('KEEP THE RANCH GROWING', C.wool);
   }
+  add('');
+  for (const l of valleyLedger(game, colW - 12)) add(l.s, l.c);
   add('');
   for (const l of discoveryLines(game, colW - 12)) add(l.s, l.c);
   for (const l of travelLines(colW - 12)) add(l.s, l.c);

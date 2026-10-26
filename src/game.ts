@@ -45,6 +45,9 @@ import { Weather } from './systems/weather';
 import { Seasons } from './systems/season';
 import { Seasonal, seasonalEvening } from './systems/seasonal';
 import { fairDrawables } from './art/fair';
+import { Valley } from './systems/valley';
+import { Farmwork, farmworkEvening } from './systems/farmwork';
+import { valleyDrawables } from './art/valley';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
 import { Trials, closeResult, trialNip } from './systems/trials';
@@ -165,6 +168,8 @@ export class Game {
   weather = new Weather();
   season = new Seasons();
   seasonal = new Seasonal(); // lambs, the shearer, the fair, winter hay
+  valley!: Valley; // the village, the paddocks, the old bridge
+  farmwork = new Farmwork(); // the shearing shed, the dairy, the agility yard
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
@@ -190,6 +195,8 @@ export class Game {
     this.map = new WorldMap();
     this.baked = bake(this.map);
     this.ranch = new Ranch(this.map);
+    this.valley = new Valley(this.map);
+    this.ranch.landRule = (kind, tx, ty, w, h) => this.valley.landProblem(kind, tx, ty, w, h);
     this.ranch.setupStarter();
     const door = this.doorPoint();
     this.dog = new Dog(door.x, door.y);
@@ -398,6 +405,7 @@ export class Game {
     }
     this.predators = [];
     seasonalEvening(this); // winter hay, the fair packs up
+    farmworkEvening(this); // the dairy yard empties
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
@@ -692,9 +700,12 @@ export class Game {
   // ---- Night ----
 
   sheltered(p: Pen): boolean {
-    if (this.ranch.buildings.some((b) => b instanceof Barn && Math.hypot(b.cx - p.cx, b.cy - p.cy) <= b.shelterRadius)) return true;
+    // A field shelter inside, or a barn's ring reaching its middle or its gate.
+    if (p.has('shelter')) return true;
+    const gp = p.gatePoint(0);
+    if (this.ranch.buildings.some((b) => b instanceof Barn && Math.min(Math.hypot(b.cx - p.cx, b.cy - p.cy), Math.hypot(b.cx - gp.x, b.cy - gp.y)) <= b.shelterRadius)) return true;
     // A helper lying by a pen's gate guards it.
-    return this.day.phase === 'night' && this.helpers.some((h) => h.guardPen === p && Math.hypot(h.x - p.cx, h.y - p.cy) < 60);
+    return this.day.phase === 'night' && this.helpers.some((h) => h.guardPen === p && Math.min(Math.hypot(h.x - p.cx, h.y - p.cy), Math.hypot(h.x - gp.x, h.y - gp.y)) < 60);
   }
 
   startNight() {
@@ -1054,7 +1065,7 @@ export class Game {
 
   // Trial course, buyers' yards and carts, hidden places, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.

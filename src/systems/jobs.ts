@@ -6,6 +6,8 @@ import { checkLegacy } from './progression';
 import { SKY_LINE, SKY_TIP } from './weather';
 import { Predator } from '../entities/predator';
 import { breedNear, buyBreed, isFairDay, seasonalMorning, seasonalOrders, seasonalUpdate, type MorningBanner } from './seasonal';
+import { buyField, valleyHint, valleyMorning, valleyUpdate } from './valley';
+import { farmworkHint, farmworkNearHint, farmworkUpdate, startAgility } from './farmwork';
 
 // The jobs around the herding: buyers' orders and the Show Ground trials.
 // Game calls in here at a handful of points; this keeps those hooks short.
@@ -22,6 +24,7 @@ export function jobsMorning(game: Game, fresh: boolean) {
     if (shear) banners.push(shear);
     game.weather.newDay(game.tier);
   }
+  banners.push(...valleyMorning(game, fresh)); // the village grows, market day, festivals
   const sky = game.weather.sky;
   if (sky !== 'clear') banners.push({ big: `DAY ${game.day.day}`, small: SKY_LINE[sky], prio: 0 });
   const c = currentClass(game);
@@ -51,6 +54,8 @@ export function jobsUpdate(game: Game, dt: number) {
   updateOrders(game, dt);
   updateRun(game, dt);
   seasonalUpdate(game, dt);
+  valleyUpdate(game, dt);
+  farmworkUpdate(game, dt);
   if ((legacyT -= dt) <= 0) {
     legacyT = 0.5;
     checkLegacy(game);
@@ -61,6 +66,8 @@ export function jobsUpdate(game: Game, dt: number) {
 export function jobsAction(game: Game): boolean {
   if (atPost(game) && !game.trials.run && currentClass(game)) return startRun(game);
   if (buyBreed(game)) return true;
+  if (startAgility(game)) return true;
+  if (buyField(game)) return true;
   return gateAction(game);
 }
 
@@ -111,10 +118,12 @@ export function jobsHint(game: Game): string | null {
   }
   const sale = breedNear(game);
   if (sale) return `${E}: BUY THE ${sale.breed.name} ${sale.a.forSale}$ (YOU HAVE ${game.coins}$)`;
+  const work = farmworkHint(game);
+  if (work) return work;
   const p = penGateAt(game);
   if (p) {
     if (p.letOut) return `WALK IN BEHIND THEM TO DRIVE THEM OUT. ${E}: SHUT THE GATE`;
     if (p.animals.length && p.species && orderFor(game, p.species)) return `${E}: OPEN THE GATE AND LET THEM OUT FOR THE BUYER`;
   }
-  return null;
+  return farmworkNearHint(game) ?? valleyHint(game);
 }

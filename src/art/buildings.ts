@@ -135,7 +135,8 @@ export function penDrawables(g: CanvasRenderingContext2D, p: Pen, t: number, sho
 
   // Trough along the back fence, goods piling up along the side.
   if (p.hasTrough) {
-    const tx0 = Math.round(p.cx - 7), ty0 = p.iy0 + 2;
+    const tf = p.fixtures.find((f) => f.kind === 'trough'); // placed where it was put
+    const tx0 = tf ? tf.tx * CS * 2 + 1 : Math.round(p.cx - 7), ty0 = tf ? tf.ty * CS * 2 + 2 : p.iy0 + 2;
     out.push({
       y: ty0 + 4,
       draw: () => {
@@ -149,16 +150,15 @@ export function penDrawables(g: CanvasRenderingContext2D, p: Pen, t: number, sho
       },
     });
   }
-  if (p.goods > 0 && p.species) {
-    const n = Math.min(12, p.goods);
-    const sp = p.species;
+  if (p.goods > 0) {
+    const list = p.goodsList().slice(0, 12); // a mixed paddock's goods, each its kind's
     out.push({
       y: p.iy1 - 2,
       draw: () => {
-        for (let i = 0; i < n; i++) {
+        list.forEach((sp, i) => {
           const gx = p.ix0 + 3 + (i % 6) * 4, gy = p.iy1 - 4 - Math.floor(i / 6) * 4;
           drawGood(g, sp, gx, gy);
-        }
+        });
       },
     });
   }
@@ -189,7 +189,8 @@ export function penDrawables(g: CanvasRenderingContext2D, p: Pen, t: number, sho
       draw: () => {
         const sp = p.animals[0]?.sp;
         const cap = sp ? Math.floor(p.capacity / sp.space) : 0;
-        const label = p.full ? 'FULL' : `${p.animals.length}/${cap}`;
+        // A mixed paddock counts room, not heads.
+        const label = p.full ? 'FULL' : p.kinds.length > 1 ? `${p.used}/${p.capacity} ROOM` : `${p.animals.length}/${cap}`;
         const tx = Math.round(p.cx), ty = Math.round(y0 - 12);
         text(g, label, tx, ty, p.full ? C.butter : C.wool, { align: 'center', shadow: C.plum });
       },
@@ -225,7 +226,7 @@ export function drawGood(g: CanvasRenderingContext2D, sp: string, x: number, y: 
 
 // A hipped roof seen from the front: plum, staggered teal shingle courses,
 // a sage ridge, the right hip catching the light and the left in shade.
-function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top: number, eave: number, hip: number, base: string = C.plum, course: string = C.teal) {
+export function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top: number, eave: number, hip: number, base: string = C.plum, course: string = C.teal) {
   const rh = eave - top;
   for (let y = top; y < eave; y++) {
     const k = y - top;
@@ -518,7 +519,7 @@ export function fieldGateDrawables(g: CanvasRenderingContext2D, gt: FieldGate): 
   ];
 }
 
-function shadowRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function shadowRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   rect(g, x - 4, y + 3, w, h, C.sage);
 }
 

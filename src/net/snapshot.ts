@@ -1,6 +1,7 @@
 import type { Game } from '../game';
 import type { Animal } from '../entities/animal';
 import type { Pen } from '../ranch/buildings';
+import { Dairy } from '../ranch/structures';
 import { SPECIES_ORDER } from '../entities/species';
 import { SKIES } from '../systems/weather';
 import { SEASON_LIST } from '../systems/season';
@@ -73,19 +74,21 @@ const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
 // Every pen an animal can be in: the ranch's, the buyers' yards', the trial
 // pen, the fair's show ring.
 export function allPens(game: Game): Pen[] {
-  return [...game.ranch.pens, ...game.ranch.yards.map((y) => y.pen), game.ranch.course.pen, game.ranch.ring.pen];
+  return [...game.ranch.pens, ...game.ranch.yards.map((y) => y.pen), game.ranch.course.pen, game.ranch.ring.pen, ...game.ranch.buildings.filter((b): b is Dairy => b instanceof Dairy).map((d) => d.yard)];
 }
 
 // Round three's per-animal state (a lamb, an age band, a breed beyond the
 // coat): one byte, filled in here by whoever adds it and read back on a
 // guest's screen in applyAnimalExtra (guest.ts). Zero means nothing extra.
-// Bit 0: a lamb (drawn small, at its mother's side).
+// Bit 0: a lamb (drawn small, at its mother's side). Bit 1: a cow dragging
+// a log to the old bridge.
 export function animalExtra(a: Animal): number {
-  return a.young ? 1 : 0;
+  return (a.young ? 1 : 0) | (a.load === 'log' ? 2 : 0);
 }
 
 export function applyAnimalExtra(a: Animal, v: number) {
   a.young = (v & 1) !== 0;
+  a.load = v & 2 ? 'log' : null;
 }
 
 export function animalRec(a: Animal, pens: Pen[]): AnimalRec {

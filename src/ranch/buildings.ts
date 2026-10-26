@@ -13,6 +13,11 @@ export type BuildingKind =
   | 'market'
   | 'windmill'
   | 'haystack'
+  | 'shed'
+  | 'dairy'
+  | 'agility'
+  | 'shelter'
+  | 'rack'
   | 'regiongate';
 
 // Pens open on one side: 0 = south, 1 = west, 2 = north, 3 = east.
@@ -63,43 +68,107 @@ export function clearCells(map: WorldMap, x0: number, y0: number, x1: number, y1
 
 export const PEN_W = 8;
 export const PEN_H = 7;
-const GATE_TILES = 2;
+export const GATE_TILES = 2;
 
+// Who may share a paddock: ducks with anyone, sheep with goats, cattle with
+// ponies. Other mixes are refused at the gate.
+export function getsAlong(a: SpeciesId, b: SpeciesId) {
+  if (a === b || a === 'duck' || b === 'duck') return true;
+  const pair = (x: SpeciesId, y: SpeciesId) => (a === x && b === y) || (a === y && b === x);
+  return pair('sheep', 'goat') || pair('cow', 'pony');
+}
+
+// Room in a paddock scales with its area: the old 8x7 pen holds 16 space.
+// An old upgraded (sturdy) pen keeps its half again.
+export function paddockCapacity(w: number, h: number, level = 1) {
+  return Math.round(((w * h * 16) / (PEN_W * PEN_H)) * (level >= 2 ? 1.5 : 1));
+}
+
+// Fixtures placed inside a paddock (src/ranch/paddock.ts): a trough (more
+// goods, calmer stock), a field shelter (safe at night, as in a barn's
+// ring) and a hay rack (less hay wasted in winter).
+export type FixtureKind = 'trough' | 'shelter' | 'rack';
+export interface PenFixture { kind: FixtureKind; tx: number; ty: number }
+export const FIXTURE_SIZE: Record<FixtureKind, { w: number; h: number }> = { trough: { w: 2, h: 1 }, shelter: { w: 3, h: 2 }, rack: { w: 2, h: 1 } };
+
+// A paddock: any size (src/ranch/paddock.ts has the rules), its gate on
+// any side at any point along it. `rot` is the gate's side, `gateAt` how
+// many tiles along that side (from its west or north end) the gate starts.
 export class Pen extends Building implements Enclosure {
   animals: Animal[] = [];
-  species: SpeciesId | null = null;
+  species: SpeciesId | null = null; // the kind that came first (signs, goods' look)
   open = true; // gate target state
   swing = 1; // 0 closed .. 1 open (animated)
   batch: Animal[] = []; // arrivals since the gate last opened
   quietT = 0; // time with nobody waiting at the gate
   shutFlash = 0;
   goods = 0; // produce waiting to be collected (whole units)
+  goodsBy: Partial<Record<SpeciesId, number>> = {}; // ... by the kind that made it
   goodsFrac = 0;
-  hasTrough = false;
+  fixtures: PenFixture[] = [];
   sheltered = false; // within a barn's protection
   hungry = false; // went without hay last winter night: no goods today
   letOut = false; // gate held open so the stock can be driven out
   letOutQuiet = 0; // time with the dog gone and the gateway clear
+  gateAt: number | null = null; // null: the gate in the middle of its side
 
-  constructor(tx: number, ty: number, rot: Rot = 0) {
-    super('pen', tx, ty, rot % 2 === 0 ? PEN_W : PEN_H, rot % 2 === 0 ? PEN_H : PEN_W, rot);
+  constructor(tx: number, ty: number, rot: Rot = 0, w?: number, h?: number) {
+    super('pen', tx, ty, w ?? (rot % 2 === 0 ? PEN_W : PEN_H), h ?? (rot % 2 === 0 ? PEN_H : PEN_W), rot);
+  }
+
+  has(kind: FixtureKind) {
+    return this.fixtures.some((f) => f.kind === kind);
+  }
+  get hasTrough() {
+    return this.has('trough');
+  }
+  set hasTrough(on: boolean) {
+    this.fixtures = this.fixtures.filter((f) => f.kind !== 'trough');
+    if (on) this.fixtures.push({ kind: 'trough', tx: Math.round(this.cx / TS) - 1, ty: this.ty + 1 });
   }
 
   get capacity() {
-    return this.level >= 2 ? 24 : 16;
+    return paddockCapacity(this.w, this.h, this.level);
   }
 
   get used() {
     return this.animals.reduce((s, a) => s + spaceOf(a), 0);
   }
 
+  // The kinds in it now.
+  get kinds(): SpeciesId[] {
+    return [...new Set(this.animals.map((a) => a.sp.id))];
+  }
+
+  canHold(sp: SpeciesId) {
+    return this.animals.every((a) => getsAlong(a.sp.id, sp));
+  }
+  canShare(sp: SpeciesId) {
+    return this.canHold(sp);
+  }
+  // What is in it, by kind.
+  mix(): { sp: SpeciesId; n: number }[] {
+    return this.kinds.map((sp) => ({ sp, n: this.animals.filter((a) => a.sp.id === sp).length }));
+  }
+  get gate(): { side: Rot; at: number } {
+    return { side: this.rot, at: this.gateStart };
+  }
+
   hasRoomFor(a: Animal) {
     if (a.trial) return false;
-    return this.used + spaceOf(a) <= this.capacity && (this.species === null || this.species === a.sp.id);
+    return this.used + spaceOf(a) <= this.capacity && this.canHold(a.sp.id);
   }
 
   get full() {
     return this.species ? this.used + SPECIES[this.species].space > this.capacity : false;
+  }
+
+  // Goods waiting, one entry a unit, by the kind that made them.
+  goodsList(): SpeciesId[] {
+    const out: SpeciesId[] = [];
+    for (const [k, n] of Object.entries(this.goodsBy) as [SpeciesId, number][]) for (let i = 0; i < n; i++) out.push(k);
+    while (out.length < this.goods && this.species) out.push(this.species);
+    return out.slice(0, this.goods);
   }
 
   // Interior in pixels (inside the 4px fence band).
@@ -112,14 +181,26 @@ export class Pen extends Building implements Enclosure {
     return x > this.ix0 + 1 && x < this.ix1 - 1 && y > this.iy0 + 1 && y < this.iy1 - 1;
   }
 
+  // The gate's side length, and where along it the gate starts (tiles): never
+  // on a corner tile.
+  get sideLen() {
+    return this.rot % 2 === 0 ? this.w : this.h;
+  }
+  get gateStart() {
+    const len = this.sideLen;
+    const at = this.gateAt ?? Math.round(len / 2) - 1;
+    return Math.max(1, Math.min(len - GATE_TILES - 1, at));
+  }
+
   // Gate opening span in pixels, along the gate side.
   gateSpan(): { x0: number; y0: number; x1: number; y1: number } {
     const g = GATE_TILES * TS;
+    const m = (this.rot % 2 === 0 ? this.tx : this.ty) * TS + this.gateStart * TS;
     switch (this.rot) {
-      case 0: { const m = Math.round(this.cx / TS) * TS - g / 2; return { x0: m, y0: this.y1 - CS, x1: m + g, y1: this.y1 }; }
-      case 2: { const m = Math.round(this.cx / TS) * TS - g / 2; return { x0: m, y0: this.y0, x1: m + g, y1: this.y0 + CS }; }
-      case 1: { const m = Math.round(this.cy / TS) * TS - g / 2; return { x0: this.x0, y0: m, x1: this.x0 + CS, y1: m + g }; }
-      default: { const m = Math.round(this.cy / TS) * TS - g / 2; return { x0: this.x1 - CS, y0: m, x1: this.x1, y1: m + g }; }
+      case 0: return { x0: m, y0: this.y1 - CS, x1: m + g, y1: this.y1 };
+      case 2: return { x0: m, y0: this.y0, x1: m + g, y1: this.y0 + CS };
+      case 1: return { x0: this.x0, y0: m, x1: this.x0 + CS, y1: m + g };
+      default: return { x0: this.x1 - CS, y0: m, x1: this.x1, y1: m + g };
     }
   }
 
@@ -138,6 +219,14 @@ export class Pen extends Building implements Enclosure {
     fillCells(map, x0, y0, x0 + CS, y1, SOLID);
     fillCells(map, x1 - CS, y0, x1, y1, SOLID);
     fillCells(map, this.ix0, this.iy0, this.ix1, this.iy1, PEN);
+    // A hay rack stands solid inside, and a shelter's back wall (stock
+    // stands under its roof, open to the south); a trough is walked over.
+    for (const f of this.fixtures) {
+      if (f.kind === 'trough') continue;
+      const z = FIXTURE_SIZE[f.kind];
+      const h = f.kind === 'shelter' ? TS / 2 : z.h * TS - 2;
+      fillCells(map, f.tx * TS + 1, f.ty * TS + 2, (f.tx + z.w) * TS - 1, f.ty * TS + 2 + h, SOLID);
+    }
     const s = this.gateSpan();
     clearCells(map, s.x0, s.y0, s.x1, s.y1, SOLID);
     fillCells(map, s.x0, s.y0, s.x1, s.y1, GATE);

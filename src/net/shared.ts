@@ -1,5 +1,7 @@
 import type { Game } from '../game';
+import type { PenFixture, Rot } from '../ranch/buildings';
 import { stacks, type Seasonal } from '../systems/seasonal';
+import { valleyApply, valleyShared, type ValleySave } from '../systems/valley';
 
 // Ranch state that guests need but that is neither the herd nor the world
 // in the snapshot: plain JSON, sent with the ranch's numbers whenever it
@@ -16,7 +18,27 @@ export const SHARED: Shared[] = [
   { key: 'seasonal', get: (g) => ({ loft: g.seasonal.loft, hungryNights: g.seasonal.hungryNights, fair: g.seasonal.fair }), set: (g, v) => Object.assign(g.seasonal, v as Partial<Seasonal>) },
   // Bales left in each haystack, in building order.
   { key: 'hay', get: (g) => stacks(g).map((h) => h.bales), set: (g, v) => stacks(g).forEach((h, i) => (h.bales = (v as number[])[i] ?? h.bales)) },
+  // Each paddock's size, gate and fixtures, in building order: extending a
+  // side or moving a gate does not add a building, so it is sent here.
+  { key: 'paddocks', get: (g) => g.ranch.pens.map((p) => [p.tx, p.ty, p.w, p.h, p.rot, p.gateAt, p.fixtures]), set: (g, v) => applyPaddocks(g, v as PaddockRec[]) },
+  // The village, the paddocks' scrub, the old bridge (systems/valley.ts).
+  { key: 'valley', get: (g) => valleyShared(g), set: (g, v) => valleyApply(g, v as ValleySave) },
 ];
+
+type PaddockRec = [number, number, number, number, Rot, number | null, PenFixture[]];
+function applyPaddocks(g: Game, recs: PaddockRec[]) {
+  let changed = false;
+  g.ranch.pens.forEach((p, i) => {
+    const r = recs[i];
+    if (!r) return;
+    const [tx, ty, w, h, rot, gateAt, fixtures] = r;
+    if (p.tx !== tx || p.ty !== ty || p.w !== w || p.h !== h || p.rot !== rot || p.gateAt !== gateAt || JSON.stringify(p.fixtures) !== JSON.stringify(fixtures)) {
+      Object.assign(p, { tx, ty, w, h, rot, gateAt, fixtures });
+      changed = true;
+    }
+  });
+  if (changed) g.ranch.restamp();
+}
 
 export function sharedOut(game: Game): Record<string, unknown> {
   return Object.fromEntries(SHARED.map((s) => [s.key, s.get(game)]));

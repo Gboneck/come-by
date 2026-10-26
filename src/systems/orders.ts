@@ -24,6 +24,7 @@ export interface Order {
   paid: number;
   state: 'open' | 'done' | 'gone';
   kind?: 'shear'; // the shearer: sheep come back out shorn, paid a wool bonus
+  market?: boolean; // market day at the crossroads: pays half again
 }
 
 // Per head, times the species value, before the calm multiplier.
@@ -111,7 +112,7 @@ export function updateOrders(game: Game, dt: number) {
         if (ord.kind === 'shear') a.shorn = year;
         const v = ord.kind === 'shear'
           ? Math.max(1, Math.round(SHEAR_PAY * calmRating(a.peakStress).mult * (a.rare ? 1.5 : 1)))
-          : headPrice(a.sp.id, a.peakStress, a.rare);
+          : Math.round(headPrice(a.sp.id, a.peakStress, a.rare) * (ord.market ? 1.5 : 1));
         ord.paid += v;
         game.earn(v);
         game.fx.float(a.x, a.y - 10, `+${v}$`, C.butter, 1.1);

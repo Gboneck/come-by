@@ -700,6 +700,58 @@ another origin are never answered from the cache.
       mix, a bar of spaces and its fixtures. Waits on the ranch's paddock
       rules (`setPaddockRules`); `src/ui/paddockdev.ts` is a stand-in for
       trying it (debug and tests only)
+## M28 Paddocks you size yourself, and the valley grows (gameplay, round four)
+- [x] Paddocks instead of fixed pens (`src/ranch/paddock.ts`, the rules for
+      build mode): any size from 6x6 to 28 across, the gate on any side at
+      any point along it. Room grows with the area (an 8x7 still holds
+      16), the price with the fence (an 8x7 still costs 25$), so one big
+      paddock costs about half as much a head as small ones. EXTEND drags
+      a side out and pays only for the new fence; the gate moves for free.
+      Build mode's drag handles are the UI session's
+- [x] Mixed flocks that get along: ducks with anyone, sheep with goats,
+      cattle with ponies; others are refused at the gate (and put back out
+      if they slip in). Goods are kept by kind; a mixed paddock's sign
+      counts room
+- [x] Fixtures inside instead of whole-pen upgrades: the trough (now
+      placed where you put it), a field shelter (safe at night, as in a
+      barn's ring) and a hay rack (a third less hay). A barn's ring shelters
+      a big paddock if it reaches its middle or its gate. Old upgraded pens
+      keep their half again
+- [x] Fields past the clearing: two plots off the ranch's south side to buy
+      at their signs (200$, 300$). Bought, they take paddocks and fences at
+      once; stock grazing on them, penned or loose, eats the scrub down,
+      and then anything can be built there
+- [x] Old saves: every pen becomes an 8x7 paddock with its gate, stock,
+      goods, trough and upgrade as they were
+- [x] A village at the crossroads (`src/ranch/village.ts`,
+      `src/systems/valley.ts`) on a new green south-west of the junction:
+      a well at first, then a cottage (fill an order), the market square
+      (4 orders), a second cottage (graze a field clear), the smithy (pen 4
+      cattle), the hall (a trial or fair ribbon) and a third cottage (40
+      penned). One step a morning, the morning after the deed, in order; a
+      banner says what came and the Ledger what is next
+- [x] Market day, the third of each season once the square stands: the
+      drover always has an order and pays half again; goods sell for a
+      quarter more. Festivals, the last day of each season once the hall
+      stands: the season's decorations on the green, and five of a kind
+      driven through the arch make a parade
+- [x] The old bridge at the ford: with a smith to forge the yoke, a cow
+      driven through the woodpile picks up a log (and walks a little
+      slower); six logs mend it, and cattle cross dry-shod, without balking
+- [x] New ranch buildings (`src/systems/farmwork.ts`): the shearing shed
+      (summer: sheep walked along its chute, funnelled in by its wings, are
+      shorn for a wool bonus), the dairy (mornings: cows walked into its
+      yard are milked, paid by how calm they came, and let back out) and
+      the agility yard (a clean run under par counts once a day, three to
+      a free level of speed or stamina)
+- [x] First-pass art (`src/art/village.ts`, `valley.ts`, `farm2.ts`),
+      village lights at night, legacy goals, saves, co-op shared state
+      (paddocks, the valley), the Ledger's village lines
+- [x] The pace bot extends paddocks (and buys a field) before building
+      new ones, hauls timber, and uses the shed, dairy and agility yard;
+      `scripts/paddocktest.mjs`, `scripts/valleytest.mjs`
+
+VALLEY_TABLES
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.

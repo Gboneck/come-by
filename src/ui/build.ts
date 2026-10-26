@@ -6,7 +6,7 @@ import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
-import { Barn, FieldGate, Fence, Haystack, Kennel, Market, Windmill } from '../ranch/structures';
+import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
 import { SPECIES } from '../entities/species';
@@ -47,6 +47,9 @@ export function makeBuilding(def: BuildDef, tx: number, ty: number, rot: Rot): B
     case 'barn': return new Barn(tx, ty);
     case 'windmill': return new Windmill(tx, ty);
     case 'hay': return new Haystack(tx, ty);
+    case 'shed': return new ShearingShed(tx, ty);
+    case 'dairy': return new Dairy(tx, ty);
+    case 'agility': return new AgilityYard(tx, ty);
     default: return new Building(def.kind, tx, ty, def.w, def.h, rot);
   }
 }
@@ -191,6 +194,8 @@ export class BuildMode {
     if (tx < 0 || ty < 0 || tx >= MW) return false;
     const r = regionById('ranch');
     if (game.map.region[ty * MW + tx] !== r.index || game.map.t(tx, ty) !== Ter.Grass) return false;
+    const land = game.valley.landAt(tx, ty); // a paddock: land once grazed clear
+    if (land !== null) return land;
     const f = REACH[Math.min(REACH.length, game.tier) - 1];
     const dx = (tx + 0.5 - r.cx) / (r.rx * f), dy = (ty + 0.5 - r.cy) / (r.ry * f);
     if (dx * dx + dy * dy > 1) return false;
@@ -226,13 +231,6 @@ export class BuildMode {
       if (game.coins < def.cost) return { ...gh, paddock: pd, reason: `NEED ${def.cost}$` };
       return { ...gh, paddock: pd, ok: true };
     }
-    if (def.id === 'trough') {
-      const b = this.buildingAt(game, this.cx, this.cy);
-      if (!(b instanceof Pen)) return { ...gh, reason: 'PLACE IT IN A PEN' };
-      if (b.hasTrough) return { ...gh, pen: b, reason: 'THIS PEN HAS ONE' };
-      if (game.coins < def.cost) return { ...gh, pen: b, reason: `NEED ${def.cost}$` };
-      return { ...gh, pen: b, ok: true };
-    }
     for (let y = ty; y < ty + h; y++)
       for (let x = tx; x < tx + w; x++) if (!this.buildable(game, x, y)) return { ...gh, reason: 'NOT ON RANCH LAND' };
     for (const b of game.ranch.buildings) if (b.kind !== 'regiongate' && b.overlapsTiles(tx, ty, w, h)) return { ...gh, reason: 'SOMETHING IS IN THE WAY' };
@@ -256,8 +254,6 @@ export class BuildMode {
     game.coins -= gh.def.cost;
     if (gh.paddock) {
       paddockRules()!.placeFixture!(game, gh.paddock, gh.def.id, gh.tx, gh.ty);
-    } else if (gh.pen) {
-      gh.pen.hasTrough = true;
     } else {
       game.ranch.add(makeBuilding(gh.def, gh.tx, gh.ty, this.rot));
       clearDecorUnder(game, gh.tx, gh.ty, gh.w, gh.h);
@@ -269,6 +265,7 @@ export class BuildMode {
     for (let i = 0; i < 8; i++)
       game.fx.dust(gh.tx * TS + Math.random() * gh.w * TS, (gh.ty + gh.h) * TS - 1, (Math.random() - 0.5) * 20, 0);
   }
+
 
   private upgrade(game: Game, b: Building) {
     const d = defOfKind(b.kind);
@@ -528,8 +525,6 @@ export class BuildMode {
         drawSpr(g, ic, X0 + Math.floor((Wd - ic.w) / 2), Y0 + Math.floor((Hd - ic.h) / 2));
       } else ditherRect(g, X0, Y0, Wd, Hd, 8, C.plum);
       placeMark(g, X0, Y0, Wd, Hd, gh.ok, game.t);
-    } else if (gh.def.id === 'trough') {
-      if (gh.pen) outline(g, gh.pen.x0, gh.pen.y0, gh.pen.x1 - gh.pen.x0, gh.pen.y1 - gh.pen.y0, gh.ok ? C.butter : C.plum, game.t);
     } else if (under && !gh.ok) {
       outline(g, under.x0, under.y0, under.x1 - under.x0, under.y1 - under.y0, C.wool, game.t);
       ditherRect(g, X0, Y0, Wd, Hd, 6, C.plum);
@@ -692,9 +687,11 @@ export class BuildMode {
     } else if (under && ud && this.def.id !== 'trough') {
       title = `${ud.name}${under.level > 1 ? ' II' : ''}`;
       if (under instanceof Pen) {
-        const sp = under.species ? SPECIES[under.species] : null;
-        lines.push(sp ? `${under.animals.length} ${sp.plural.toUpperCase()}, ${under.goods} GOODS` : 'EMPTY');
-        if (under.hasTrough) lines.push('HAS A TROUGH');
+        const kinds = under.kinds.map((k) => `${under.animals.filter((a) => a.sp.id === k).length} ${SPECIES[k].plural.toUpperCase()}`);
+        lines.push(kinds.length ? `${kinds.join(', ')}, ${under.goods} GOODS` : 'EMPTY');
+        lines.push(`${under.w}X${under.h}, ROOM ${under.used}/${under.capacity}${under.fixtures.length ? `, ${under.fixtures.map((f) => f.kind.toUpperCase()).join(', ')}` : ''}`);
+        const side = this.extendSide(under);
+        lines.push(`U: EXTEND ${['SOUTH', 'WEST', 'NORTH', 'EAST'][side]} 2 (${extendPrice(under, extendRect(under, side, 2))}$)`);
       }
       if (ud.upgrade && under.level < 2) lines.push(`U: UPGRADE ${ud.upgrade.cost}$ (${ud.upgrade.desc})`);
       lines.push('X: REMOVE');
