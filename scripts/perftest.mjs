@@ -5,6 +5,7 @@
 //        [--only=title,day,worst] [--frames=60] [--batches=7]
 //        [--profile] [--calls] [--live] [--quality=auto|high|medium|low]
 //        [--nopics] (picture cache off, src/gfx/picture.ts)
+//        [--noflush] (the main thread's part only: no raster read-back)
 //        [--idle] (frames drawn a second: playing, and left alone in the
 //        pause menu and build mode)
 //
@@ -102,7 +103,7 @@ async function run(scene, rate) {
   }, { quality, calls: flag('calls'), live });
   await page.goto(`http://localhost:${PORT}/?${s.query}`);
   await page.waitForFunction(() => window.game);
-  await page.evaluate(async ({ save, ranch, night, nopics, quality }) => {
+  await page.evaluate(async ({ save, ranch, night, nopics, quality, noflush }) => {
     const g = window.game;
     if (nopics) (await import('/src/gfx/picture.ts')).setPictures(false);
     // The stepped frames skip main.ts, where the setting is applied.
@@ -139,10 +140,12 @@ async function run(scene, rate) {
       g.screen.present();
       g.input.endFrame();
       // With no paint, Chrome would leave the frame's raster for later:
-      // reading a pixel back makes every frame pay for all of it.
-      g.screen.vctx.getImageData(0, 0, 1, 1);
+      // reading a pixel back makes every frame pay for all of it. (On a
+      // phone the raster runs on the GPU, off the main thread: --noflush
+      // measures the main thread's part alone.)
+      if (!noflush) g.screen.vctx.getImageData(0, 0, 1, 1);
     };
-  }, { save: fixture, ranch: !!s.ranch, night: !!s.night, nopics: flag('nopics'), quality });
+  }, { save: fixture, ranch: !!s.ranch, night: !!s.night, nopics: flag('nopics'), quality, noflush: flag('noflush') });
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate });
   let per = [], fps = 0;
@@ -246,7 +249,7 @@ for (const rate of throttles)
     console.log(`${scene} ${rate}x: ${what} (${r.size}, quality ${r.q})${r.errors.length ? `  ERRORS: ${r.errors.slice(0, 3).join(' | ')}` : ''}`);
     for (const n of r.notes) console.log('  ' + n);
   }
-console.log(`\n${width}x${height}@${dpr}${quality ? `, quality ${quality}` : ''}${flag('nopics') ? ', no picture cache' : ''}`);
+console.log(`\n${width}x${height}@${dpr}${quality ? `, quality ${quality}` : ''}${flag('nopics') ? ', no picture cache' : ''}${flag('noflush') ? ', main thread only' : ''}`);
 if (live) {
   console.log('| scene | CPU | work per frame (median) | p95 | fps |');
   console.log('|---|---|---|---|---|');

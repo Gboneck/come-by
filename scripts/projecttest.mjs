@@ -209,10 +209,11 @@ const hut = await page.evaluate(async () => {
   for (const a of goats) if (loaded.has(a)) { a.x = 272; a.y = 680; }
   T.step(2);
   const got = P.delivered('hut');
-  // The dropped one: picked up again and brought.
+  // The dropped one: picked up again (by it, or by the goat that went
+  // empty and is still by the pile) and brought.
   scared.x = 452; scared.y = 546;
   T.step(2);
-  scared.x = 272; scared.y = 680;
+  for (const a of goats) if (loaded.has(a)) { a.x = 272; a.y = 680; }
   T.step(2);
   return { before, carrying, pileLeft, dropped, got, done: P.isDone('hut'), after: { hut: T.solidAt(270, 645) }, crook: g.discovery.keepsakes.has('crook') };
 });

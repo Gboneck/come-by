@@ -1048,20 +1048,60 @@ export class Game {
     return best;
   }
 
+  private camGate: { x: number; y: number } | null = null;
+  private camGateT = 0;
+
+  // The gate a flock can go in: an open pen that takes them, a buyer's
+  // yard, a project's fold, the trial pen; the nearest within reach.
+  private flockGate(gr: Group): { x: number; y: number } | null {
+    const a = gr.members[0];
+    let best: { x: number; y: number } | null = null, bd = 240;
+    const consider = (x: number, y: number) => {
+      const dd = Math.hypot(x - gr.x, y - gr.y);
+      if (dd < bd) { bd = dd; best = { x, y }; }
+    };
+    for (const p of this.ranch.pens) if (p.open && !p.full && p.accepts(a)) { const gp = p.gatePoint(0); consider(gp.x, gp.y); }
+    for (const g of [...jobGates(this), ...this.projects.gates()]) if (g.open && g.accepts(a)) consider(g.x, g.y);
+    return best;
+  }
+
   updateCamera(dt: number) {
     const d = this.dog;
     let tx = d.x + d.vx * 0.35;
     let ty = d.y + d.vy * 0.35;
+    const { W, H } = this.screen;
+    const band = this.thumbBand();
     // Lean towards the flock you are working so you can see both (on a
     // trial outrun, from the post).
     const gr = this.nearestGroup(this.trials.run ? 200 : 110);
     if (gr) {
       tx += (gr.x - d.x) * 0.3;
       ty += (gr.y - d.y) * 0.3;
+      // Frame the dog, the flock and the gate they can go in together when
+      // they fit in the field (above the thumbs on a phone); whatever the
+      // lean, keep the dog and the whole flock in view when they fit.
+      if ((this.camGateT -= dt) <= 0) {
+        this.camGate = this.flockGate(gr);
+        this.camGateT = 0.3;
+      }
+      let r = 0;
+      for (const a of gr.members) r = Math.max(r, Math.abs(a.x - gr.x), Math.abs(a.y - gr.y));
+      let x0 = Math.min(d.x - 10, gr.x - r - 8), x1 = Math.max(d.x + 10, gr.x + r + 8);
+      let y0 = Math.min(d.y - 14, gr.y - r - 12), y1 = Math.max(d.y + 6, gr.y + r + 6);
+      const fw = W - 16, fh = H - band - 24;
+      const g = this.camGate;
+      if (g) {
+        const gx0 = Math.min(x0, g.x - 12), gx1 = Math.max(x1, g.x + 12), gy0 = Math.min(y0, g.y - 16), gy1 = Math.max(y1, g.y + 8);
+        if (gx1 - gx0 <= fw && gy1 - gy0 <= fh) {
+          [x0, x1, y0, y1] = [gx0, gx1, gy0, gy1];
+          tx = (x0 + x1) / 2;
+          ty = (y0 + y1) / 2;
+        }
+      }
+      if (x1 - x0 <= fw) tx = clamp(tx, x1 - fw / 2, x0 + fw / 2);
+      if (y1 - y0 <= fh) ty = clamp(ty, y1 - fh / 2, y0 + fh / 2);
     }
     // On a phone held upright, frame the dog in the field above the thumbs.
-    const { W, H } = this.screen;
-    const band = this.thumbBand();
     if (H > W) ty += band / 2;
     const k = damp(4, dt);
     this.cam.x += (tx - this.cam.x) * k;

@@ -10,13 +10,13 @@ import { valleyLights } from '../art/valley';
 import { penDrawables } from '../art/paddock';
 import type { Look } from '../world/fineground';
 import { farmhouseWindows, windowGlow, barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
-import type { Light } from './night';
+import { defaultFogField, hasFogField, type Light } from './night';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
 import { blueHour, goldenHour, skyDarkness, skySlope, sunShadow } from './sky';
 import { drawShafts } from './light';
 import { quality } from '../gfx/quality';
 import { tierOf } from '../systems/progression';
-import { TS } from '../world/map';
+import { TS, WORLD_H, WORLD_W } from '../world/map';
 import { drawSway, drawWater } from './sway';
 import { lightLook, setSeasonLook } from '../art/seasonlook';
 import { drawDog } from './dogpose';
@@ -162,7 +162,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   if (fogged && dark <= 0) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
   if (dark > 0) {
     const fl = (i: number) => Math.sin(game.t * 7.3 + i * 2.1) * 0.8 + Math.sin(game.t * 13.1 + i) * 0.6;
-    lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 });
+    lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 50, soft: 1 }); // the dog's own glow: all falloff
     for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
     for (const o of game.coop) lights.push({ x: o.x - ox, y: o.y - oy, r: 36 });
     lights.push(...game.folk.lights(ox, oy));
@@ -177,6 +177,20 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // laid a grid of dots over every morning, so it is gone.)
   const sk = game.life.wx.sky(game, dark);
   if ((sk.fog ?? 0) > 0.03 && dark <= 0 && !lights.length) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
+  // The flock catches what light there is: a faint halo round each animal,
+  // so they read as shapes in the dark (the predators' eyes are drawn above).
+  if (dark > 0.2) {
+    let n = 0;
+    for (const a of game.animals) {
+      if (a.gone || a.carried || n >= 48) continue;
+      const sx = a.x - ox, sy = a.y - 3 - oy;
+      if (sx < -12 || sy < -12 || sx > W + 12 || sy > H + 12) continue;
+      lights.push({ x: sx, y: sy, r: 11, power: 0.4, soft: 1 });
+      n++;
+    }
+  }
+  // Fog by place (render/night.ts), worked out once from the land.
+  if ((sk.fog ?? 0) > 0.03 && !hasFogField()) defaultFogField(WORLD_W, WORLD_H, game.baked.soil, (x, y) => game.map.regionAt(x, y)?.id);
   game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk });
   game.life.wx.drawAir(g, game, W, H, dark > 0.25);
   if (sleeping(game)) {

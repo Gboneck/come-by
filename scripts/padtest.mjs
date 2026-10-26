@@ -61,11 +61,13 @@ await press(B.UP);
 check('title: pad takes over from the keyboard', await g(() => window.game.input.padMode && !window.game.input.touchMode));
 const lines = await g(async () => {
   const f = await import('/src/gfx/font.ts');
-  return [f.wrap('WASD MOVE  SHIFT RUN  SPACE BARK  E NIP', 999)[0], f.wrap('HOLD Q TO LIE DOWN: THEY SETTLE AND SLOW.', 999)[0], f.wrap('NIP (E) TO START A RUN', 999)[0], f.wrap('YOU JOINED THIS RANCH FROM ANOTHER TAB.', 999)[0]];
+  return [f.wrap('WASD MOVE  SHIFT RUN  SPACE BARK  E NIP', 999)[0], f.wrap('HOLD Q TO LIE DOWN: THEY SETTLE AND SLOW.', 999)[0], f.wrap('NIP (E) TO START A RUN', 999)[0], f.wrap('YOU JOINED THIS RANCH FROM ANOTHER TAB.', 999)[0],
+    f.wrap('Hold Q to lie down: they settle.', 999)[0], f.wrap('Tab opens the Ranch Ledger.', 999)[0]];
 });
 check('prompts: the title controls', lines[0] === 'STICK MOVE  (RT) RUN  (A) BARK  (B) NIP', lines[0]);
 check('prompts: hints', lines[1].startsWith('HOLD (X) TO LIE DOWN') && lines[2] === 'NIP (B) TO START A RUN', lines.slice(1, 3));
 check('prompts: plain words untouched', lines[3] === 'YOU JOINED THIS RANCH FROM ANOTHER TAB.', lines[3]);
+check('prompts: sentence case keeps its case', lines[4] === 'Hold (X) to lie down: they settle.' && lines[5] === '(SELECT) opens the Ranch Ledger.', lines.slice(4));
 await shot('title');
 
 // ---- START a new game: the look screen, the name typed with the pad ----

@@ -1,87 +1,39 @@
-import { makeCanvas } from './screen';
+import { PX, makeCanvas } from './screen';
+import { BODY, LARGE, SMALL } from './glyphs';
 
-// Two pixel faces, both upper case only.
+// The game's text.
 //
-// The body face is 5px tall and proportional: most letters are 3 wide, I and
-// the stops are 1, M and W are 5. Letters sit one pixel apart, except where
-// a pair leaves a gap anyway (L then T, a full stop after a P, ...): those
-// are kerned together, as long as their nearest pixels are two rows apart.
+// Two faces drawn in fine pixels (PX to a world pixel; glyphs in
+// src/gfx/glyphs.ts), with lower case, proportional and kerned:
+// - body: capitals 9 fine pixels, x-height 6, descenders 2, a line every 12
+//   fine pixels (LINE_H = 6 world pixels);
+// - small: capitals 7, x-height 5, a line every 10 (5 world pixels);
+// - large: capitals 12, x-height 8, a line every 16 (8 world pixels), for
+//   body text on phones;
+// - heading: the body face blown up by Scale2x (rounded, strokes two fine
+//   pixels): capitals 18, a line every 24 (12 world pixels).
+// text(g, s, x, y, colour, { size }) takes world pixels as everything else
+// does (x, y may be fractional: they snap to the fine grid); y is the top
+// of the capitals. Widths come back in world pixels, in halves.
 //
-// The heading face (heading(), below) is 7px tall and bold, for panel titles,
-// banners and the logo.
-const G: Record<string, string> = {
-  A: '.#.|#.#|###|#.#|#.#',
-  B: '##.|#.#|##.|#.#|##.',
-  C: '.##|#..|#..|#..|.##',
-  D: '##.|#.#|#.#|#.#|##.',
-  E: '###|#..|##.|#..|###',
-  F: '###|#..|##.|#..|#..',
-  G: '.##|#..|#.#|#.#|.##',
-  H: '#.#|#.#|###|#.#|#.#',
-  I: '#|#|#|#|#',
-  J: '..#|..#|..#|#.#|.#.',
-  K: '#.#|#.#|##.|#.#|#.#',
-  L: '#..|#..|#..|#..|###',
-  M: '#...#|##.##|#.#.#|#...#|#...#',
-  N: '#..#|##.#|#.##|#..#|#..#',
-  O: '.#.|#.#|#.#|#.#|.#.',
-  P: '##.|#.#|##.|#..|#..',
-  Q: '.#.|#.#|#.#|##.|.##',
-  R: '##.|#.#|##.|#.#|#.#',
-  S: '.##|#..|.#.|..#|##.',
-  T: '###|.#.|.#.|.#.|.#.',
-  U: '#.#|#.#|#.#|#.#|###',
-  V: '#.#|#.#|#.#|#.#|.#.',
-  W: '#...#|#...#|#.#.#|##.##|#...#',
-  X: '#.#|#.#|.#.|#.#|#.#',
-  Y: '#.#|#.#|.#.|.#.|.#.',
-  Z: '###|..#|.#.|#..|###',
-  '0': '###|#.#|#.#|#.#|###',
-  '1': '.#.|##.|.#.|.#.|###',
-  '2': '##.|..#|.#.|#..|###',
-  '3': '##.|..#|.#.|..#|##.',
-  '4': '#.#|#.#|###|..#|..#',
-  '5': '###|#..|##.|..#|##.',
-  '6': '.##|#..|###|#.#|###',
-  '7': '###|..#|.#.|.#.|.#.',
-  '8': '###|#.#|###|#.#|###',
-  '9': '###|#.#|###|..#|##.',
-  '.': '.|.|.|.|#',
-  ',': '.|.|.|#|#',
-  '!': '#|#|#|.|#',
-  '?': '##.|..#|.#.|...|.#.',
-  ':': '.|#|.|#|.',
-  ';': '.|#|.|#|#',
-  '-': '...|...|###|...|...',
-  '+': '...|.#.|###|.#.|...',
-  '/': '..#|..#|.#.|#..|#..',
-  "'": '#|#|.|.|.',
-  '"': '#.#|#.#|...|...|...',
-  '(': '.#|#.|#.|#.|.#',
-  ')': '#.|.#|.#|.#|#.',
-  '%': '#.#|..#|.#.|#..|#.#',
-  '=': '...|###|...|###|...',
-  '<': '..#|.#.|#..|.#.|..#',
-  '>': '#..|.#.|..#|.#.|#..',
-  '*': '...|#.#|.#.|#.#|...',
-  '_': '...|...|...|...|###',
-  '#': '#.#|###|#.#|###|#.#',
-  '^': '.#.|#.#|...|...|...',
-  // Icons, addressed by lower-case letters in text: c = coin, h = heart.
-  // '+' pixels are the coin's rim: drawn in `iconRim` when one is given
-  // (plum on paper), else in the icon colour.
-  c: '.+++.|+###+|+#.#+|+###+|.+++.',
-  h: '#.#|###|###|.#.|...',
-  ' ': '..|..|..|..|..',
-};
+// The heading face (heading(), below) is the bold capitals face from
+// before, in world pixels, for panel titles, banners and the logo.
 
 interface Glyph { w: number; h: number; bits: number[]; left: number[]; right: number[] } // bits: 0 none, 1 ink, 2 rim
-function build(defs: Record<string, string>): Record<string, Glyph> {
+function build(defs: Record<string, string>, rows?: number): Record<string, Glyph> {
   const out: Record<string, Glyph> = {};
-  for (const [ch, def] of Object.entries(defs)) {
-    const rows = def.split('|');
-    const w = rows[0].length, h = rows.length;
-    const bits = rows.join('').split('').map((c) => (c === '#' ? 1 : c === '+' ? 2 : 0));
+  for (const [ch, raw] of Object.entries(defs)) {
+    // "N:" starts the glyph N rows down.
+    const m = /^(\d+):/.exec(raw);
+    const lines = (m ? raw.slice(m[0].length) : raw).split('|');
+    const all = [...Array(m ? Number(m[1]) : 0).fill(''), ...lines];
+    const h = rows ?? all.length;
+    const w = Math.max(...all.map((r) => r.length));
+    const bits: number[] = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const c = all[y]?.[x];
+      bits.push(c === '#' ? 1 : c === '+' ? 2 : 0);
+    }
     // The rows where the first and last columns have ink, for kerning.
     const left: number[] = [], right: number[] = [];
     for (let y = 0; y < h; y++) {
@@ -92,11 +44,62 @@ function build(defs: Record<string, string>): Record<string, Glyph> {
   }
   return out;
 }
-const glyphs = build(G);
+
+export type TextSize = 'small' | 'body' | 'large' | 'heading';
+// gap: fine pixels between letters (kerning takes away as many).
+interface Face { tag: string; glyphs: Record<string, Glyph>; rows: number; line: number; gap: number }
+function face(tag: string, f: typeof BODY): Face {
+  const glyphs = build(f.glyphs, f.rows);
+  glyphs[' '] = { w: f.space, h: f.rows, bits: Array(f.space * f.rows).fill(0), left: [], right: [] };
+  return { tag, glyphs, rows: f.rows, line: f.line, gap: 1 };
+}
+
+// The heading face: the body face blown up 2x with Scale2x, which rounds
+// the diagonals and curves as it doubles every stroke: capitals 18 fine
+// pixels (9 world), a line every 24.
+function scale2x(src: Face, tag: string): Face {
+  const glyphs: Record<string, Glyph> = {};
+  for (const [ch, gl] of Object.entries(src.glyphs)) {
+    const w = gl.w * 2, h = gl.h * 2;
+    const at = (x: number, y: number) => (x < 0 || y < 0 || x >= gl.w || y >= gl.h ? 0 : gl.bits[y * gl.w + x]);
+    const bits = new Array<number>(w * h).fill(0);
+    for (let y = 0; y < gl.h; y++)
+      for (let x = 0; x < gl.w; x++) {
+        const P = at(x, y), A = at(x, y - 1), B = at(x + 1, y), C = at(x - 1, y), D = at(x, y + 1);
+        const o = y * 2 * w + x * 2;
+        bits[o] = C === A && C !== D && A !== B ? A : P;
+        bits[o + 1] = A === B && A !== C && B !== D ? B : P;
+        bits[o + w] = D === C && D !== B && C !== A ? C : P;
+        bits[o + w + 1] = B === D && B !== A && D !== C ? D : P;
+      }
+    const left: number[] = [], right: number[] = [];
+    for (let y = 0; y < h; y++) {
+      if (bits[y * w]) left.push(y);
+      if (bits[y * w + w - 1]) right.push(y);
+    }
+    glyphs[ch] = { w, h, bits, left, right };
+  }
+  return { tag, glyphs, rows: src.rows * 2, line: src.line * 2, gap: 2 };
+}
+const FACES: Record<TextSize, Face> = { small: face('s', SMALL), body: face('b', BODY), large: face('L', LARGE as typeof BODY), heading: face('b', BODY) };
+FACES.heading = scale2x(FACES.body, 'H');
+
+// Sizes are roles. Where a fine pixel is physically small (the wide view on
+// a phone, about two thirds of a CSS pixel), every role steps up one face,
+// so text keeps its size on screen when the view widens (main.ts sets it
+// from the screen: setTextBoost). Lay out with lineHeight() and textWidth()
+// and a layout reads the same in either view.
+const ORDER: TextSize[] = ['small', 'body', 'large', 'heading'];
+let boost = 0;
+export function setTextBoost(n: number) {
+  boost = Math.max(0, Math.min(2, Math.round(n)));
+}
+export const textBoost = () => boost;
+const faceOf = (size: TextSize = 'body') => FACES[ORDER[Math.min(ORDER.length - 1, ORDER.indexOf(size) + boost)]];
 
 // 0 or -1: how much closer the second glyph may sit to the first.
 const kernCache = new Map<string, number>();
-function kern(face: Record<string, Glyph>, a: string, b: string, tag: string): number {
+function kern(face: Record<string, Glyph>, a: string, b: string, tag: string, rows = 2): number {
   const k = tag + a + b;
   let v = kernCache.get(k);
   if (v === undefined) {
@@ -105,7 +108,7 @@ function kern(face: Record<string, Glyph>, a: string, b: string, tag: string): n
     if (ga && gb && a !== ' ' && b !== ' ' && ga.right.length && gb.left.length) {
       let near = 99;
       for (const i of ga.right) for (const j of gb.left) near = Math.min(near, Math.abs(i - j));
-      if (near >= 2) v = -1;
+      if (near >= rows) v = -1;
     }
     kernCache.set(k, v);
   }
@@ -132,20 +135,19 @@ function glyphCanvas(face: Record<string, Glyph>, tag: string, ch: string, color
   return c;
 }
 
-function norm(ch: string): string {
-  if (glyphs[ch]) return ch;
+// '$' is the coin, '@' a heart; anything the face lacks falls back to its
+// capital, then to a space.
+function glyphKey(f: Face, ch: string): string {
+  if (f.glyphs[ch]) return ch;
   const u = ch.toUpperCase();
-  return glyphs[u] ? u : ' ';
+  return f.glyphs[u] ? u : ' ';
 }
+const isIcon = (k: string) => k === '$' || k === '@';
 
-// Text tokens: '$' renders the coin icon, '@' a heart.
-function glyphKey(ch: string): string {
-  if (ch === '$') return 'c';
-  if (ch === '@') return 'h';
-  return norm(ch);
-}
-
-export const LINE_H = 6;
+// Line pitch in world pixels: small 5, body 6, large 8, heading 12 (one
+// face up each with the boost).
+export const LINE_H = BODY.line / PX;
+export const lineHeight = (size: TextSize = 'body') => faceOf(size).line / PX;
 
 // Rewrites text before it is measured or drawn: while a game pad is in use,
 // src/ui/pad.ts swaps keyboard prompts ("SPACE TO BARK") for pad buttons.
@@ -154,21 +156,28 @@ export function setTextFilter(f: ((s: string) => string) | null) {
   filter = f;
 }
 
-export function textWidth(s: string, scale = 1): number {
-  if (filter) s = filter(s);
+// Width in fine pixels, before any scale.
+function fineWidth(f: Face, s: string): number {
   let w = 0, prev = '';
   for (const ch of s) {
-    const k = glyphKey(ch);
-    w += glyphs[k].w + 1 + (prev ? kern(glyphs, prev, k, 'b') : 0);
+    const k = glyphKey(f, ch);
+    w += f.glyphs[k].w + f.gap + (prev ? kern(f.glyphs, prev, k, f.tag, 2 * f.gap) * f.gap : 0);
     prev = k;
   }
-  return Math.max(0, w - 1) * scale;
+  return Math.max(0, w - f.gap);
+}
+
+// Width in world pixels (halves are possible).
+export function textWidth(s: string, scale = 1, size: TextSize = 'body'): number {
+  if (filter) s = filter(s);
+  return (fineWidth(faceOf(size), s) * scale) / PX;
 }
 
 export interface TextOpts {
   align?: 'left' | 'center' | 'right';
-  shadow?: string;
-  scale?: number;
+  shadow?: string; // one fine pixel below (two for headings)
+  scale?: number; // whole number: every fine pixel drawn this many times
+  size?: TextSize;
   // Per-character colour override for icons.
   iconColor?: string;
   // The coin's rim (plum on paper, so a buttercup coin still reads).
@@ -177,24 +186,28 @@ export interface TextOpts {
 
 export function text(g: CanvasRenderingContext2D, s: string, x: number, y: number, color: string, o: TextOpts = {}): number {
   if (filter) s = filter(s);
+  const f = faceOf(o.size);
   const scale = o.scale ?? 1;
-  const w = textWidth(s, scale);
-  let cx = Math.round(o.align === 'center' ? x - w / 2 : o.align === 'right' ? x - w : x);
-  const cy = Math.round(y);
+  const wf = fineWidth(f, s) * scale;
+  // Placed on the fine grid, in fine pixels.
+  let fx = Math.round(x * PX - (o.align === 'center' ? wf / 2 : o.align === 'right' ? wf : 0));
+  const fy = Math.round(y * PX);
+  const gh = (f.rows * scale) / PX;
   let prev = '';
   for (const ch of s) {
-    const k = glyphKey(ch);
-    const gl = glyphs[k];
-    if (prev) cx += kern(glyphs, prev, k, 'b') * scale;
+    const k = glyphKey(f, ch);
+    const gl = f.glyphs[k];
+    if (prev) fx += kern(f.glyphs, prev, k, f.tag, 2 * f.gap) * f.gap * scale;
     prev = k;
-    const isIcon = k === 'c' || k === 'h';
-    const col = isIcon && o.iconColor ? o.iconColor : color;
-    const rim = isIcon ? o.iconRim : undefined;
-    if (o.shadow) g.drawImage(glyphCanvas(glyphs, 'b', k, o.shadow), cx, cy + scale, gl.w * scale, 5 * scale);
-    g.drawImage(glyphCanvas(glyphs, 'b', k, col, rim), cx, cy, gl.w * scale, 5 * scale);
-    cx += (gl.w + 1) * scale;
+    if (k !== ' ') {
+      const icon = isIcon(k);
+      const gw = (gl.w * scale) / PX;
+      if (o.shadow) g.drawImage(glyphCanvas(f.glyphs, f.tag, k, o.shadow), fx / PX, (fy + f.gap * scale) / PX, gw, gh);
+      g.drawImage(glyphCanvas(f.glyphs, f.tag, k, icon && o.iconColor ? o.iconColor : color, icon ? o.iconRim : undefined), fx / PX, fy / PX, gw, gh);
+    }
+    fx += (gl.w + f.gap) * scale;
   }
-  return w;
+  return wf / PX;
 }
 
 // ---- Heading face: 7px, bold, for titles, banners and the logo ----
@@ -313,15 +326,15 @@ export function heading(g: CanvasRenderingContext2D, s: string, x: number, y: nu
   return w;
 }
 
-// Greedy word wrap to a pixel width.
-export function wrap(s: string, maxW: number): string[] {
+// Greedy word wrap to a width in world pixels.
+export function wrap(s: string, maxW: number, size: TextSize = 'body'): string[] {
   if (filter) s = filter(s);
   const out: string[] = [];
   for (const para of s.split('\n')) {
     let line = '';
     for (const word of para.split(' ')) {
       const t = line ? line + ' ' + word : word;
-      if (textWidth(t) > maxW && line) {
+      if (textWidth(t, 1, size) > maxW && line) {
         out.push(line);
         line = word;
       } else line = t;

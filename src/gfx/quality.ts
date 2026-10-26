@@ -17,6 +17,7 @@ export const quality = {
   fx: 1, // share of the mood particles drawn (rain, splashes, critters)
   shade: true, // cloud shadows and the wet-ground dither
   sway: true, // grass and reeds bend in gusts
+  fineSky: true, // night, fog and ground dithers in fine pixels (else world pixels)
 };
 
 export function setLevel(l: Level) {
@@ -24,6 +25,7 @@ export function setLevel(l: Level) {
   quality.fx = l === 'high' ? 1 : l === 'medium' ? 0.6 : 0.35;
   quality.shade = l !== 'low';
   quality.sway = l !== 'low';
+  quality.fineSky = l === 'high';
 }
 
 // The automatic level. Fed once per drawn frame with the milliseconds our

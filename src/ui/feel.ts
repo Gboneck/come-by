@@ -1,7 +1,7 @@
 import { C } from '../palette';
-import { BAYER4 } from '../gfx/draw';
+import { BAYER4, ditherPattern } from '../gfx/draw';
 import { text } from '../gfx/font';
-import { makeCanvas } from '../gfx/screen';
+import { PX, fine } from '../gfx/screen';
 import { settings } from './settings';
 import { quality } from '../gfx/quality';
 
@@ -18,21 +18,10 @@ export interface TierCard { n: number; name: string; blurb: string; brings: stri
 
 type Fade = { phase: 'out' | 'in'; act: (() => void) | null; outRate: number; inRate: number };
 
-// One 4x4 tile per dither level, used as a fill pattern (fast full-screen).
-const patterns: (CanvasPattern | null)[] = [];
-function coverPattern(g: CanvasRenderingContext2D, level: number): CanvasPattern | null {
-  if (patterns[level] === undefined) {
-    const [c, pg] = makeCanvas(4, 4);
-    pg.fillStyle = C.plum;
-    for (let i = 0; i < 16; i++) if (BAYER4[i] < level) pg.fillRect(i % 4, Math.floor(i / 4), 1, 1);
-    patterns[level] = g.createPattern(c, 'repeat');
-  }
-  return patterns[level];
-}
-
-// Plum dither over the whole screen: 0 = clear, 16 = solid. Pass the view
-// offset to anchor it to the world like the night's dither, so a dimmed
-// night stays at the night's own level instead of filling in solid.
+// Plum dither over the whole screen: 0 = clear, 16 = solid, its dots fine
+// pixels. Pass the view offset to anchor it to the world like the night's
+// dither, so a dimmed night stays at the night's own level instead of
+// filling in solid.
 export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, level: number, ox = 0, oy = 0) {
   const l = Math.max(0, Math.min(16, Math.round(level)));
   if (l <= 0) return;
@@ -41,14 +30,14 @@ export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, lev
     g.fillRect(0, 0, W, H);
     return;
   }
-  const p = coverPattern(g, l);
+  const p = ditherPattern(l, C.plum);
   if (!p) return;
-  const sx = ox & 3, sy = oy & 3;
-  g.save();
-  g.translate(-sx, -sy);
-  g.fillStyle = p;
-  g.fillRect(0, 0, W + sx, H + sy);
-  g.restore();
+  const sx = (Math.round(ox) * PX) & 3, sy = (Math.round(oy) * PX) & 3;
+  fine(g, (fg) => {
+    fg.translate(-sx, -sy);
+    fg.fillStyle = p;
+    fg.fillRect(0, 0, W * PX + sx, H * PX + sy);
+  });
 }
 
 // The iris: the screen closes to a circle on (cx, cy) as `level` goes from
