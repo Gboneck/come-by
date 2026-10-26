@@ -34,6 +34,11 @@ export class Herds {
 // again).
 export function herdsMorning(g: Game, fresh: boolean): MorningBanner[] {
   stockLot(g);
+  // Once a paddock is packed, say what it costs (economy.ts, crowding).
+  if (fresh && !g.tip && !g.tipsSeen.has('crowded') && g.ranch.pens.some((p) => p.animals.length >= 6 && p.used >= p.capacity * 0.9)) {
+    g.tipsSeen.add('crowded');
+    g.tip = { text: 'A PACKED PADDOCK MAKES LESS, AND HAS NO ROOM FOR YOUNG. KEEP SOME ROOM: EXTEND IT, BUILD ANOTHER, OR SELL A FEW AT THE MARKET.', t: 10 };
+  }
   const d = fresh ? bigDrove(g) : null;
   return d ? [d] : [];
 }

@@ -44,6 +44,21 @@ for (const seed of seeds) {
     const { Pacer } = await import('/src/pacebot.ts');
     window.__pace = new Pacer(window.game);
     window.game.tut = 99; // the bot needs no tutorial
+    // Every coin the game pays, by the system that paid it (the first frame
+    // of the stack that names one).
+    const g = window.game, earn = g.earn.bind(g);
+    const SRC = [[/onRanchEvent/, 'stock'], [/endDay/, 'goods'], [/systems\/favour\.ts/, 'favour'], [/systems\/orders\.ts/, 'orders'], [/systems\/trials\.ts/, 'trials'], [/systems\/seasonal\.ts/, 'fair'], [/systems\/farmwork\.ts/, 'farmwork'], [/systems\/valley\.ts/, 'valley'], [/systems\/projects\.ts/, 'projects'], [/systems\/loot\.ts/, 'loot'], [/systems\/discovery\.ts/, 'places'], [/systems\/progression\.ts/, 'legacy'], [/systems\/achievements\.ts/, 'badges'], [/net\/travels\.ts/, 'travels']];
+    window.__src = {};
+    g.earn = (n) => {
+      const lines = (new Error().stack || '').split('\n').slice(2);
+      let k = 'other';
+      for (const l of lines) {
+        const hit = SRC.find(([re]) => re.test(l));
+        if (hit) { k = hit[1]; break; }
+      }
+      window.__src[k] = (window.__src[k] || 0) + n;
+      return earn(n);
+    };
   });
   const days = [];
   let wonDay = 0;
@@ -55,13 +70,17 @@ for (const seed of seeds) {
       const c = calendar(g.day.day);
       const hay0 = P.hayBought ?? 0, rare0 = P.rareBought ?? 0, lambs0 = g.totals.lambs, born0 = g.totals.born ?? 0, lot0 = P.lotBought ?? 0, hungry0 = g.seasonal.hungryNights, ribbons0 = g.totals.fairRibbons.reduce((s, n) => s + n, 0);
       const wild0 = g.animals.filter((a) => !a.pen && !a.gone && !a.trial).length;
+      const src0 = { ...window.__src };
       const out = P.playDay();
+      const src = Object.fromEntries(Object.entries(window.__src).map(([k, v]) => [k, v - (src0[k] ?? 0)]).filter(([, v]) => v));
       const nx = calendar(g.day.day); // the morning playDay ended on (lambs arrive in it)
       return {
         ...out,
         season: c.season, year: c.year, dayOf: c.dayOf, wild: wild0, next: `${nx.year} ${nx.season}`,
         hayStacks: (P.hayBought ?? 0) - hay0, rare: (P.rareBought ?? 0) - rare0, lambs: g.totals.lambs - lambs0, born: (g.totals.born ?? 0) - born0, lot: (P.lotBought ?? 0) - lot0,
         herd: g.ranch.pens.reduce((n, p) => n + p.animals.filter((a) => !a.gone).length, 0),
+        young: g.animals.filter((a) => a.young && !a.gone).length, animals: g.animals.filter((a) => !a.gone).length,
+        src,
         hungry: g.seasonal.hungryNights - (c.season === 'winter' && c.dayOf === 1 ? 0 : hungry0),
         ribbons: g.totals.fairRibbons.reduce((s, n) => s + n, 0) - ribbons0,
         hayLeft: Z.hayHeld(g), hayNeed: Z.hayNeed(g),
@@ -145,6 +164,20 @@ for (let tier = 1; tier <= 5; tier++) {
 console.log('| tier | days | play min | resting min | earned $ | spent $ | choices at day end | days nothing moved | stuck on (count over all seeds) |');
 console.log('|---|---|---|---|---|---|---|---|---|');
 for (const r of rows) console.log(`| ${r.tier} | ${r.days} | ${r.minutes} | ${r.rested} | ${r.earned} | ${r.spent} | ${r.choice} | ${r.idleDays} | ${r.notes} |`);
+// Every coin by the system that paid it, per tier (share of the tier's earnings).
+{
+  const keys = [...new Set(runs.flatMap((r) => r.days.flatMap((d) => Object.keys(d.src ?? {}))))].sort();
+  if (keys.length) {
+    console.log(`\n| tier | ${keys.join(' | ')} | per day $ |`);
+    console.log(`|---|${keys.map(() => '---|').join('')}---|`);
+    for (let tier = 1; tier <= 5; tier++) {
+      const ds = runs.flatMap((r) => r.days.filter((d) => d.tier === tier));
+      if (!ds.length) continue;
+      const tot = ds.reduce((s, d) => s + Object.values(d.src ?? {}).reduce((a, b) => a + b, 0), 0) || 1;
+      console.log(`| ${tier} | ${keys.map((k) => `${Math.round((100 * ds.reduce((s, d) => s + (d.src?.[k] ?? 0), 0)) / tot)}%`).join(' | ')} | ${Math.round(tot / ds.length)} |`);
+    }
+  }
+}
 console.log('\n| tier | earned per day $ | where it came from | stock penned at tier end | enclosures at tier end | purse at tier end $ |');
 console.log('|---|---|---|---|---|---|');
 for (const r of rows) console.log(`| ${r.tier} | ${r.perDay} | ${r.income} | ${r.penned} | ${r.paddocks} | ${r.coinsEnd} |`);
@@ -162,6 +195,20 @@ if (year) {
     const born = runs.reduce((s, r) => s + r.days.filter((d) => d.next === k).reduce((t, d) => t + (d.born ?? 0), 0), 0) / runs.length;
     const said = (re) => per.flatMap((p) => p.flatMap((d) => d.did.filter((x) => re.test(x)))).map((x) => x.replace(/\s+\d+S\b.*$/, '')).join('; ') || '-';
     console.log(`| year ${k} | ${Math.round(sum('earned'))} | ${Math.round(sum('spent'))} | ${sum('hayStacks').toFixed(1)} | ${sum('hungry').toFixed(1)} | ${Math.round(avg((p) => p[p.length - 1].hayLeft))} | ${lambs.toFixed(1)} | ${born.toFixed(1)} | ${sum('lot').toFixed(1)} | ${Math.round(avg((p) => p[p.length - 1].herd ?? 0))} | ${said(/^SHEARER/)} | ${per.flatMap((p) => p.flatMap((d) => d.did.filter((x) => /^FAIR/.test(x)))).length ? said(/^FAIR/) : '-'} | ${sum('rare').toFixed(1)} | ${Math.round(avg((p) => p.reduce((s, d) => s + d.wild, 0) / p.length))} | ${avg((p) => p[p.length - 1].village).toFixed(1)} | ${avg((p) => p[p.length - 1].cleared).toFixed(1)} | ${avg((p) => p[p.length - 1].bridge ? 6 : p[p.length - 1].logs).toFixed(1)} |`);
+  }
+}
+if (year) {
+  // Per season: every coin by source, and how many animals the world holds.
+  const keys = [...new Set(runs.flatMap((r) => r.days.flatMap((d) => Object.keys(d.src ?? {}))))].sort();
+  console.log(`\n| season | ${keys.join(' | ')} | earned per day $ | purse at end $ | animals at end | young at end | penned at end |`);
+  console.log(`|---|${keys.map(() => '---|').join('')}---|---|---|---|---|`);
+  const seasons = [...new Set(runs.flatMap((r) => r.days.map((d) => `${d.year} ${d.season}`)))];
+  for (const k of seasons) {
+    const per = runs.map((r) => r.days.filter((d) => `${d.year} ${d.season}` === k)).filter((p) => p.length);
+    const ds = per.flat();
+    const tot = ds.reduce((s, d) => s + Object.values(d.src ?? {}).reduce((a, b) => a + b, 0), 0) || 1;
+    const end = (f) => Math.round(per.reduce((s, p) => s + f(p[p.length - 1]), 0) / per.length);
+    console.log(`| year ${k} | ${keys.map((x) => `${Math.round((100 * ds.reduce((s, d) => s + (d.src?.[x] ?? 0), 0)) / tot)}%`).join(' | ')} | ${Math.round(tot / ds.length)} | ${end((d) => d.coins)} | ${end((d) => d.animals ?? 0)} | ${end((d) => d.young ?? 0)} | ${end((d) => d.herd ?? 0)} |`);
   }
 }
 if (year) for (const r of runs) console.log(`seed ${r.seed} valley: village ${JSON.stringify(r.end.village)}; ${JSON.stringify(r.end.valley)}; farm ${JSON.stringify(r.end.farm)}; dog ${JSON.stringify(r.end.upgrades)}`);
