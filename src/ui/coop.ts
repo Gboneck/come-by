@@ -1,7 +1,8 @@
 import { C } from '../palette';
+import { prose } from './case';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
-import { text, textWidth, wrap } from '../gfx/font';
+import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import type { View } from '../render/world';
 import { HostNet } from '../net/host';
@@ -11,8 +12,8 @@ import { focusField, stopTyping, takeEscape, textField, typingId } from './textf
 import { safeArea } from './safe';
 import { edgeArrow } from './hud';
 import { touchLayout } from './touch';
-import { tierOf } from '../systems/progression';
 import { drawPings, pingArrows, pingControls } from '../net/ping';
+import { pitch } from './metrics';
 
 // The co-op screens. A host opens INVITE A FRIEND from the pause menu: a
 // room code and a link to send. A guest opens JOIN A FRIEND on the title
@@ -117,7 +118,7 @@ function button(game: Game, g: CanvasRenderingContext2D, id: string, label: stri
   return game.ui.click(id, x - 2, y - 2, w + 4, h + 4);
 }
 
-const lines = (s: string, w: number) => wrap(s, w);
+const lines = (s: string, w: number) => prose(s, w);
 
 function drawPanel(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
   const touch = game.input.touchMode;
@@ -205,27 +206,11 @@ function card(game: Game, g: CanvasRenderingContext2D, W: number, H: number, big
   if (dim) dimView(g, game.view(), 6);
   const pw = Math.min(W - 16, 170);
   const ls = small.flatMap((s) => lines(s, pw - 14));
-  const ph = 16 + ls.length * 7;
+  const ph = 16 + ls.length * pitch();
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H * 0.38 - ph / 2);
   panel(g, x0, y0, pw, ph);
   text(g, big, W / 2, y0 + 5, C.butter, { align: 'center' });
-  ls.forEach((l, i) => text(g, l, W / 2, y0 + 14 + i * 7, C.wool, { align: 'center' }));
-}
-
-function summaryCard(game: Game, g: CanvasRenderingContext2D, W: number, H: number, host: string) {
-  const s = game.summary;
-  const out: string[] = [];
-  if (s) {
-    const got = Object.values(s.stats.delivered).reduce((a, b) => a + (b ?? 0), 0);
-    out.push(`${got} BROUGHT HOME  +${s.stats.deliveredValue}$`);
-    if (s.stats.goodsValue) out.push(`GOODS SOLD  +${s.stats.goodsValue}$`);
-    const lost = Object.values(s.stats.lost).reduce((a, b) => a + (b ?? 0), 0);
-    if (lost) out.push(`LOST IN THE NIGHT: ${lost}`);
-    out.push(`${host}'S PURSE: ${s.coins}$`);
-  }
-  out.push('');
-  out.push(`WAITING FOR ${host} TO START THE NEXT DAY...`);
-  card(game, g, W, H, s ? `DAY ${s.day} IS DONE` : 'THE DAY IS DONE', out);
+  ls.forEach((l, i) => text(g, l, W / 2, y0 + 14 + i * pitch(), C.wool, { align: 'center' }));
 }
 
 // Name tags over friends' dogs ('world', under the HUD); the guest's cards
@@ -239,7 +224,8 @@ export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer
       if (!d.tag) continue;
       const sx = Math.round(d.x - v.ox), sy = Math.round(d.y - v.oy);
       if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
-      const tag = net?.isAway(d) ? `${d.tag} ZZZ` : d.tag;
+      const note = net?.noteOf(d);
+      const tag = note ? `${d.tag} ${note}` : d.tag;
       const w = textWidth(tag);
       rect(g, sx - Math.ceil(w / 2) - 1, sy - 19, w + 3, 7, C.plum);
       text(g, tag, sx + 1, sy - 18, C.butter, { align: 'center' });
@@ -275,10 +261,11 @@ export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer
     if (!net.ready) return card(game, g, W, H, 'WALKING OVER...', [`TO ${host}'S RANCH`]);
     if (net.hostBg) return card(game, g, W, H, `${host} STEPPED AWAY`, ['THEIR SCREEN IS OFF, SO THE RANCH IS WAITING. IT WILL GO ON WHEN THEY ARE BACK.']);
     if (net.stale) return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR GAME HAS STOPPED FOR A MOMENT. MAYBE THEIR SCREEN WENT TO SLEEP.']);
-    const m = net.hostMode;
-    if (m === 'summary') return summaryCard(game, g, W, H, host);
-    if (m === 'build') return card(game, g, W, H, `${host} IS BUILDING`, [`${tierOf(game.tier).name}: ${game.coins}$ IN THE PURSE`, 'THE HERD WAITS TILL THEY ARE DONE.']);
-    if (m === 'result') return void text(g, `WAITING FOR ${host}...`, W / 2, H - 14 - S.bottom, C.wool, { align: 'center', shadow: C.plum });
+  }
+  // The day's end, on either screen: who is ready, who is still building.
+  if (net && game.mode === 'summary') {
+    const lines = net.readyLines();
+    lines.forEach((l, i) => text(g, l, W / 2, S.top + 4 + i * 8, C.wool, { align: 'center', shadow: C.plum }));
   }
   // Pings: F, or the PING button by the thumb buttons.
   if (together && net && !game.trials.result) {

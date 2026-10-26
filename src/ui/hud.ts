@@ -1,15 +1,20 @@
 import { C } from '../palette';
+import { prose, setNames } from './case';
+import { boxH, pitch, textIn, touchScale } from './metrics';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
+import { drawGoodsTally } from './goods';
+import { drawObjective, objective } from './objective';
+import { drawWhatsThis } from './whatsthis';
+import { FIRST_STEPS, drawWelcome, firstDayStep, welcomeUp } from './firstday';
 import { heading, headingWidth, text, textWidth } from '../gfx/font';
-import { drawSpr } from '../gfx/sprite';
+import { drawSpr, sprH, sprW } from '../gfx/sprite';
 import { animalSprites } from '../art/animals';
 import { bone, coin, dial, icon } from './hudart';
 import { stamp } from './frame';
 import { calmRating, type Game } from '../game';
 import { DUSK_AT, NIGHT_LEN } from '../systems/day';
 import { TIERS, nextGoal } from '../systems/progression';
-import { wrap } from '../gfx/font';
 import { touchLayout } from './touch';
 import { safeArea } from './safe';
 import { coachHint, drawCoach } from './coach';
@@ -90,8 +95,10 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   const touch = game.input.touchMode;
   const TL = touch ? touchLayout(game, W, H) : null;
   const L = 2 + S.left, T = 2 + S.top, R = W - 2 - S.right;
-  const bh = touch ? 13 : 11; // button height
-  const ty = (touch ? 4 : 3); // text inset in a button
+  // Buttons keep their size under a finger in either view, and fit the text.
+  const bh = boxH(touch ? Math.round(13 * touchScale(game)) : 11); // button height
+  const ty = textIn(bh); // text inset in a button
+  const lp = pitch();
 
   // ---- Hint line layout (drawn later): it bounds the view from below ----
   const hint = steadyHint(game, coachHint(game) ?? game.hint());
@@ -107,14 +114,20 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
       bottomY = H - 4 - S.bottom;
     }
   }
-  const hl = hint ? wrap(hint, hmax) : [];
-  const hh = hl.length * 7 + 5;
+  setNames([game.look.name, game.look.ranch, ...game.helpers.map((h) => h.name)]);
+  const hl = hint ? prose(hint, hmax) : [];
+  const hh = hl.length * lp + 5;
   const hy = Math.round(bottomY - hh);
   // What is left of the field to point at: below this, a marker would hide
   // under the hint or the thumbs, so it gets an edge arrow instead.
   const viewBottom = Math.min(hint ? hy - 2 : H, TL ? TL.top : H - S.bottom - 4);
 
   drawCoach(game, g, T + 12, viewBottom);
+  // The one thing to do now (ui/objective.ts): its arrow and marker here,
+  // its words on the goal card below.
+  const ob = objective(game);
+  drawObjective(game, g, ob, T + 12, viewBottom);
+  drawWhatsThis(game, g, T + 34, viewBottom);
 
   // ---- Stamina: a bone by the dog that empties as it runs ----
   {
@@ -154,12 +167,13 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
 
   // ---- Clock (top-left): a dial the sun climbs by day, the moon by night ----
   const d = game.day;
-  panel(g, L, T, 62, 18);
+  const clockH = Math.max(18, lp * 2 + 4);
+  panel(g, L, T, 62, clockH);
   const night = d.phase === 'night';
   dial(g, L + 10, T + 13, 6, d.frac, d.duskAt ?? DUSK_AT, night, d.nightT / NIGHT_LEN, game.t);
   text(g, `DAY ${d.day}`, L + 20, T + 3, C.wool);
   const resting = game.rest > 1.5;
-  text(g, d.clock(), L + 20, T + 10, d.phase === 'dusk' || resting ? C.butter : C.wool);
+  text(g, d.clock(), L + 20, T + 3 + lp, d.phase === 'dusk' || resting ? C.butter : C.wool);
   // Today's sky at the end of the clock; on a clear day, the season.
   if (game.weather.sky === 'clear' && !night) seasonIcon(g, game.season.season, L + 51 + (game.season.season === 'summer' ? 0 : 1), T + 5);
   else skyIcon(g, game.weather.sky, L + 51, T + 5, night);
@@ -172,14 +186,15 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   const coinStr = `${shown}`;
   const cw = Math.max(textWidth(coinStr), textWidth(`${game.coins}`)) + 18;
   const ticking = shown !== game.coins || f.bump > 0;
-  panel(g, R - cw, T, cw, 11, C.plum, ticking ? C.butter : C.sage);
-  text(g, coinStr, R - 12, T + 3 - (f.bump > 0 ? 1 : 0), ticking ? C.butter : C.wool, { align: 'right' });
+  const purseH = boxH(11);
+  panel(g, R - cw, T, cw, purseH, C.plum, ticking ? C.butter : C.sage);
+  text(g, coinStr, R - 12, T + textIn(purseH) - (f.bump > 0 ? 1 : 0), ticking ? C.butter : C.wool, { align: 'right' });
   coin(g, R - 7, T + 5 - (f.bump > 0 ? 1 : 0), game.t, f.bump > 0);
   f.purse.x = R - 7;
   f.purse.y = T + 5;
 
   // ---- Pause (touch) ----
-  let rightY = T + 13;
+  let rightY = T + purseH + 2;
   let bx = R;
   if (touch) {
     const pw = 15;
@@ -192,11 +207,11 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   }
 
   // ---- Build button (on the ranch) ----
-  if (game.inRanch() && game.net?.role !== 'guest') {
+  if (game.inRanch()) {
     const label = touch ? 'BUILD' : 'B: BUILD';
     const w = textWidth(label) + 15;
     bx -= w;
-    const pulse = game.tut === 6 && game.coins >= defOf('kennel').cost;
+    const pulse = (game.tut === 6 && game.coins >= defOf('kennel').cost) || ob?.ui === 'build';
     if (button(game, g, 'hud-build', bx, rightY, w, bh, C.butter, pulse)) game.input.push('build');
     icon(g, 'build', bx + 4, rightY + Math.floor((bh - 6) / 2));
     text(g, label, bx + 11, rightY + ty, C.wool);
@@ -211,21 +226,30 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     if (button(game, g, 'hud-help', R - hw, rightY, hw, bh, C.butter)) game.input.push('helper');
     icon(g, 'helper', R - hw + 4, rightY + Math.floor((bh - 5) / 2));
     text(g, label, R - hw + 11, rightY + ty, C.wool);
+    rightY += bh + 2;
   }
 
-  // ---- Next goal (always visible; tap or Tab for the ledger) ----
-  let cardY = T + 20;
+  // ---- Today's goods, and what they fetch at day's end ----
+  drawGoodsTally(game, g, R, rightY, W >= 300);
+
+  // ---- What to do now (always visible; tap or Tab for the ledger) ----
+  let cardY = T + clockH + 2;
   {
     const ng = nextGoal(game);
-    const label = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
+    const goal = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
+    const label = ob ? `${ob.text}${ob.progress ? ` ${ob.progress[0]}/${ob.progress[1]}` : ''}` : goal;
     const tag = game.ledgerNew ? 'NEW' : '';
-    const w = textWidth(label) + 14 + (tag ? textWidth(tag) + 5 : 0);
-    if (button(game, g, 'hud-ledger', L, cardY, w, bh, C.butter, game.ledgerNew || game.tut === 5)) game.input.push('ledger');
+    // Clear of the right-hand buttons: long ones wrap onto a second line.
+    const maxW = Math.max(90, W - L - 2 - S.right - 80);
+    const lines = prose(label, maxW - 14 - (tag ? textWidth(tag) + 5 : 0)).slice(0, 2);
+    const w = Math.max(...lines.map((l) => textWidth(l))) + 14 + (tag ? textWidth(tag) + 5 : 0);
+    const ch = bh + (lines.length - 1) * lp;
+    if (button(game, g, 'hud-ledger', L, cardY, w, ch, C.butter, game.ledgerNew || game.tut === 5)) game.input.push('ledger');
     // The Ledger's own little book.
     icon(g, 'ledger', L + 3, cardY + ty);
-    text(g, label, L + 10, cardY + ty, C.wool, { iconColor: C.butter });
+    lines.forEach((l, i) => text(g, l, L + 10, cardY + ty + i * lp, C.wool, { iconColor: C.butter }));
     if (tag) text(g, tag, L + w - 4, cardY + ty, C.butter, { align: 'right' });
-    cardY += bh + 2;
+    cardY += ch + 2;
   }
 
   // ---- Orders and trials: the day's jobs, under the goal ----
@@ -250,30 +274,41 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     // The flock's own likeness at the left of the card.
     const a0 = gr.members[0];
     const pic = animalSprites(sp.id, a0.coat).stand[0];
-    const iw = Math.min(16, pic.w) + 4;
+    const pd = pic.d ?? 1; // a dense sprite's sizes are in fine pixels
+    const iw = Math.min(16, sprW(pic)) + 4;
     const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8 + iw;
-    panel(g, L, cardY, w, 19);
+    const fh = Math.max(19, lp * 2 + 5);
+    panel(g, L, cardY, w, fh);
     g.save();
     g.beginPath();
     g.rect(L + 2, cardY + 2, iw, 15);
     g.clip();
-    drawSpr(g, pic, L + 3 + pic.ax, cardY + Math.max(2, Math.floor((19 - pic.h) / 2)) + pic.ay);
+    drawSpr(g, pic, L + 3 + pic.ax / pd, cardY + Math.max(2, Math.floor((fh - sprH(pic)) / 2)) + pic.ay / pd);
     g.restore();
     const lx = L + 3 + iw;
     text(g, label, lx, cardY + 3, C.wool);
     const pips = 5, lit = Math.max(1, Math.round((1 - gr.stress) * pips));
     const panic = gr.stress >= 0.6;
-    for (let i = 0; i < pips; i++) rect(g, lx + i * 4, cardY + 11, 3, 4, i < lit ? (panic ? C.wool : C.butter) : C.sage);
-    if (!panic || Math.floor(game.t * 6) % 2 === 0) text(g, mood, lx + 21, cardY + 10, col);
+    for (let i = 0; i < pips; i++) rect(g, lx + i * 4, cardY + 4 + lp, 3, 4, i < lit ? (panic ? C.wool : C.butter) : C.sage);
+    if (!panic || Math.floor(game.t * 6) % 2 === 0) text(g, mood, lx + 21, cardY + 3 + lp, col);
   }
 
   // ---- Hint line (tutorial and region tips) ----
   if (hint) {
     const hw = Math.max(...hl.map((l) => textWidth(l))) + 10;
     const hx = Math.round(hcx - hw / 2);
-    panel(g, hx, hy, hw, hh);
-    hl.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
+    // The first day's steps are gilt and carry their number.
+    const step = firstDayStep(game);
+    panel(g, hx, hy, hw, hh, C.plum, step ? C.butter : C.sage);
+    if (step) {
+      const tag = `FIRST DAY ${step}/${FIRST_STEPS}`;
+      const tw = textWidth(tag) + 6;
+      panel(g, hx + 3, hy - 8, tw, 9, C.teal, C.butter);
+      text(g, tag, hx + 6, hy - 6, C.wool);
+    }
+    hl.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * lp, C.wool, { align: 'center', iconColor: C.butter }));
   }
+  drawWelcome(game, g, W, H);
 
   // ---- Place name and banners ----
   if (game.place) {
@@ -296,7 +331,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   }
   if (f.tierCard) drawTierCard(game, g, W, H);
   else if (badgeUp(game)) drawBadgeCard(game, g, W, H); // a badge earned, a buyer's favour
-  else if (game.banner) {
+  else if (game.banner && !welcomeUp(game)) {
     const b = game.banner;
     const age = b.max - b.t;
     const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
@@ -319,7 +354,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
       heading(g, big, W / 2, y, C.butter, { align: 'center', scale: sc, outline: C.plum, shade: C.moss });
       bottom = y + 7 * sc + 4;
     }
-    if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, bottom + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
+    if (b.small) prose(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, bottom + i * pitch(), C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
   }
 }
 
@@ -328,9 +363,9 @@ function drawTierCard(game: Game, g: CanvasRenderingContext2D, W: number, H: num
   const c = game.feel.tierCard!;
   const age = c.max - c.t;
   const pw = Math.min(W - 12, 190);
-  const lines = [...wrap(c.blurb, pw - 14).map((s) => ({ s, col: C.wool as string })), ...c.brings.flatMap((b) => wrap(`+ ${b}`, pw - 14).map((s) => ({ s, col: C.butter as string })))];
+  const lines = [...prose(c.blurb, pw - 14).map((s) => ({ s, col: C.wool as string })), ...c.brings.flatMap((b) => prose(`+ ${b}`, pw - 14).map((s) => ({ s, col: C.butter as string })))];
   const big = headingWidth(c.name, 2) <= pw - 10 ? 2 : 1;
-  const ph = 36 + big * 7 + lines.length * 7;
+  const ph = 36 + big * 7 + lines.length * pitch();
   const x0 = Math.round(W / 2 - pw / 2);
   const y0 = Math.round(H * 0.24 - ph / 2 + Math.max(0, 1 - age * 5) * -24);
   panel(g, x0, y0, pw, ph, C.plum, C.butter);
@@ -345,7 +380,7 @@ function drawTierCard(game: Game, g: CanvasRenderingContext2D, W: number, H: num
   let y = y0 + 26 + big * 7;
   for (const l of lines) {
     text(g, l.s, W / 2, y, l.col, { align: 'center', iconColor: C.butter });
-    y += 7;
+    y += pitch();
   }
   if (game.ui.click('tiercard', x0, y0, pw, ph)) game.feel.tierCard = null;
 }

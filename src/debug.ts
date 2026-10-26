@@ -1,6 +1,6 @@
 import { C } from './palette';
 import { rect } from './gfx/draw';
-import { drawSpr, type Sprite } from './gfx/sprite';
+import { drawSpr, sprH, sprW, type Sprite } from './gfx/sprite';
 import { text } from './gfx/font';
 import { makeDogSprites } from './art/dog';
 import { animalSprites, type Coat } from './art/animals';
@@ -86,14 +86,16 @@ export function drawSpriteSheet(g: CanvasRenderingContext2D, W: number, H: numbe
     let x = 4;
     let rowH = 0;
     for (const s of row.sprites) {
-      drawSpr(g, s, x + s.ax, y + s.ay);
-      x += s.w + 3;
-      rowH = Math.max(rowH, s.h);
+      const d = s.d ?? 1; // dense sprites: sizes in fine pixels
+      drawSpr(g, s, x + s.ax / d, y + s.ay / d);
+      x += sprW(s) + 3;
+      rowH = Math.max(rowH, sprH(s));
     }
     // Animated copy of the row at the end.
     if (row.sprites.length > 1) {
       const s = row.sprites[Math.floor(t * 8) % row.sprites.length];
-      drawSpr(g, s, W - 20 + s.ax - s.w / 2, y + s.ay);
+      const d = s.d ?? 1;
+      drawSpr(g, s, W - 20 + (s.ax - s.w / 2) / d, y + s.ay / d);
     }
     y += rowH + 5;
   }

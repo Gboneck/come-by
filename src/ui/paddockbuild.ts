@@ -1,6 +1,7 @@
 import { C } from '../palette';
+import { prose, sentence } from './case';
 import { ditherRect, px, rect } from '../gfx/draw';
-import { heading, text, textWidth, wrap } from '../gfx/font';
+import { heading, text, textWidth, lineHeight } from '../gfx/font';
 import type { Game } from '../game';
 import type { Building } from '../ranch/buildings';
 import { SPECIES } from '../entities/species';
@@ -230,27 +231,6 @@ export class PaddockEditor {
     return { cost, why, changed: true };
   }
 
-  // Build (or extend) it. Returns what to say and whether it went well.
-  commit(game: Game, R: PaddockRules, land: Land): { say: string; good: boolean; built?: Building } {
-    const d = this.draft;
-    if (!d) return { say: '', good: false };
-    const q = this.quote(game, R, land);
-    if (q.why) return { say: q.why, good: false };
-    if (d.base) {
-      const p = d.base;
-      if (!sameR(d.r, p) && !R.extend(game, p, d.r)) return { say: 'IT WILL NOT GO THERE', good: false };
-      if (d.gate.side !== p.gate.side || d.gate.at !== p.gate.at) {
-        const err = R.moveGate(game, p, d.gate);
-        if (err) return { say: err, good: false };
-      }
-      this.cancel();
-      return { say: q.cost ? `PADDOCK EXTENDED (-${q.cost}$)` : 'GATE MOVED', good: true, built: p };
-    }
-    const b = R.build(game, d.r, d.gate);
-    if (!b) return { say: 'IT WILL NOT GO THERE', good: false };
-    this.cancel();
-    return { say: `BUILT A ${d.r.w}x${d.r.h} PADDOCK`, good: true, built: b };
-  }
 
   // ---- Pointers: drag out a band, or the handles ----
 
@@ -416,20 +396,20 @@ export class PaddockEditor {
       title = d.base ? 'EXTEND' : `PADDOCK ${d.r.w}x${d.r.h}`;
       price = d.base ? (q.cost ? `+${q.cost}$` : 'FREE') : `${q.cost}$`;
       lines.push({ s: holdsLine(R.holds(d.r)), c: C.wool });
-      if (q.why) for (const l of wrap(q.why, W - 8)) lines.push({ s: l, c: C.butter });
+      if (q.why) for (const l of prose(q.why, W - 8)) lines.push({ s: l, c: C.butter });
     }
     const rowH = touch ? 17 : 0;
     const rows = touch && d ? 2 : touch ? 1 : 0;
-    const ch = 13 + lines.length * 6 + rows * rowH + (rows ? 2 : 0);
+    const ch = 13 + lines.length * lineHeight() + rows * rowH + (rows ? 2 : 0);
     const y0 = bottom - ch;
     panel(g, L, y0, W, ch);
     const tw = heading(g, title, L + 4, y0 + 3, C.butter, { shade: C.moss });
     text(g, price, L + 4 + tw + 5, y0 + 5, C.wool, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l.s, L + 4, y0 + 13 + i * 6, l.c, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l.s), L + 4, y0 + 13 + i * lineHeight(), l.c, { iconColor: C.butter }));
 
     if (touch) {
       // Buttons: a row of steppers, then CANCEL and BUILD.
-      let y = y0 + 13 + lines.length * 6 + 2;
+      let y = y0 + 13 + lines.length * lineHeight() + 2;
       const btn = (id: string, x: number, w: number, label: string, on: boolean, fn: () => void, rim: string = C.sage) => {
         panel(g, x, y, w, rowH - 2, ui.isActive(id) ? C.teal : C.plum, on ? rim : C.plum);
         if (label.length === 1) glyph(g, label, Math.round(x + w / 2), y + Math.floor((rowH - 2) / 2), on ? C.wool : C.sage);

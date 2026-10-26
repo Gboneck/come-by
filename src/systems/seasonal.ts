@@ -1,6 +1,6 @@
 import { C } from '../palette';
 import type { Game } from '../game';
-import { Animal } from '../entities/animal';
+import { Animal, spaceOf } from '../entities/animal';
 import { RARE_BREEDS, SPECIES, SPECIES_ORDER, type Breed } from '../entities/species';
 import type { Coat } from '../art/animals';
 import type { SpeciesId } from '../world/map';
@@ -8,16 +8,19 @@ import { Barn, Haystack } from '../ranch/structures';
 import type { Pen } from '../ranch/buildings';
 import { defOf } from '../ranch/catalog';
 import { admit, swingGate } from '../ranch/fixtures';
-import { DAY_PACE, SEASON_DAYS } from './season';
+import { DAY_PACE, SEASON_DAYS, type Season } from './season';
 import { hourToT, yardOf } from './orders';
 import { mulberry32 } from '../rng';
 
 // What each season brings to the ranch (the calendar is in season.ts):
 //
-// - Spring: ewes in your pens drop lambs over the first two mornings, and
-//   wild ewes out on the hills come with lambs at foot. A lamb keeps to its
-//   mother; a ewe cut off from her lamb turns back and frets, so a flock
-//   with lambs has to be driven as pairs. Lambs grow up when autumn comes.
+// - Spring: stock in your paddocks breed over the first two mornings
+//   (ponies in summer): lambs, ducklings, kids and calves, then foals. Only
+//   calm, fed animals with another of their kind and room in the paddock
+//   for the young to grow into. Wild flocks out on the hills come with young
+//   at foot. The young keep to their mothers; a mother cut off from hers
+//   turns back and frets, so a flock with young has to be driven as pairs.
+//   The young grow up when autumn comes, and the herd is that much bigger.
 // - Summer: on the first morning the shearer waits at a buyer's yard. Bring
 //   your sheep (up to eight): each pays a wool bonus, calm ones more, and
 //   they come back out shorn, to be walked home again.
@@ -121,7 +124,7 @@ export function seasonalMorning(g: Game, fresh: boolean): MorningBanner | null {
     banner = { big: g.seasonal.news.startsWith('HUNGRY') ? 'A HUNGRY NIGHT' : 'HAY', small: g.seasonal.news, prio: 3 };
     g.seasonal.news = null;
   } else if (turned && S.dayOf === 1 && g.day.day > 1) banner = { big: `${S.season.toUpperCase()}, YEAR ${S.year}`, small: SEASON_LINE[S.season], prio: 1 }; // not over a new game's welcome
-  if (S.season === 'spring' && S.dayOf <= 2 && g.tier >= 2) lambing(g);
+  if (S.dayOf <= 2 && g.tier >= 2) breeding(g);
   if (S.season === 'autumn' && S.dayOf === 1) {
     growUp(g);
     g.seasonal.loft = LOFT_MAX + g.seasonal.loftBonus; // the farm's own hay, cut in the summer
@@ -173,10 +176,12 @@ function ringBusy(g: Game) {
 export function seasonalEvening(g: Game) {
   const S = g.season;
   for (const p of g.ranch.pens) p.hungry = false;
+  // How each animal ended the day: what decides whether it breeds in the
+  // morning (the night takes most stress off).
+  for (const a of g.animals) a.eveStress = a.stress;
   if (S.winter && isWinterTier(g)) feed(g);
   // The fair packs up: entries go home to a pen of their kind (or one they
-  // can share), unsold
-  // breeds go back with their breeders.
+  // can share), unsold breeds go back with their breeders.
   const ring = g.ranch.ring.pen;
   for (const a of ring.animals) sendHome(g, a);
   ring.animals = [];
@@ -231,47 +236,101 @@ function feed(g: Game) {
     : `THE PENS ATE ${ate} BALES${spoiled ? `, THE SNOW SPOILED ${spoiled}` : ''}. ${left} LEFT`;
 }
 
-// ---- Spring: lambs ----
+// ---- Spring (and summer): young ----
 
-function lambing(g: Game) {
-  const year = g.season.year;
-  let born = 0;
+// Who breeds when. `chance`: that a grown animal with another of its kind
+// bears young in its season; `litter`: [usually, sometimes, how often].
+export const BREED: Record<SpeciesId, { season: Season; chance: number; litter: [number, number, number] }> = {
+  duck: { season: 'spring', chance: 0.5, litter: [2, 3, 0.4] },
+  sheep: { season: 'spring', chance: 0.93, litter: [1, 2, 0.15] },
+  goat: { season: 'spring', chance: 0.8, litter: [1, 2, 0.4] },
+  cow: { season: 'spring', chance: 0.65, litter: [1, 1, 0] },
+  pony: { season: 'summer', chance: 0.55, litter: [1, 1, 0] },
+};
+const CALM_TO_BREED = 0.4; // stress above this (at day's end or in the morning): no young yet
+
+// Room the young will want once grown, on top of what the paddock holds.
+function roomLeft(p: Pen): number {
+  let grown = 0;
+  for (const a of p.animals) if (a.young && !a.gone) grown += a.sp.space - spaceOf(a);
+  return p.capacity - p.used - grown;
+}
+
+// Each of the season's first two mornings, in your paddocks.
+function breeding(g: Game) {
+  const year = g.season.year, season = g.season.season;
+  const born: Partial<Record<SpeciesId, number>> = {};
+  let crowded = false;
   for (const p of g.ranch.pens) {
-    for (const ewe of [...p.animals]) {
-      if (ewe.sp.id !== 'sheep' || ewe.young || ewe.lambedYear === year) continue;
-      // Half lamb on the first morning, nearly all the rest on the second.
-      if (Math.random() > (g.season.dayOf === 1 ? 0.5 : 0.85)) continue;
-      ewe.lambedYear = year;
-      const n = Math.random() < 0.15 ? 2 : 1;
+    if (p.hungry) continue; // fed stock only
+    const here: Partial<Record<SpeciesId, number>> = {};
+    for (const mother of [...p.animals]) {
+      const sp = mother.sp, B = BREED[sp.id];
+      if (B.season !== season || mother.young || mother.gone || mother.forSale || mother.trial || mother.lambedYear === year) continue;
+      if (!p.animals.some((o) => o !== mother && o.sp.id === sp.id && !o.young && !o.gone)) continue; // none of her kind to breed with
+      if (Math.max(mother.stress, mother.eveStress) > CALM_TO_BREED) continue; // calm last night and this morning
+      // Over half on the first morning, nearly all the rest on the second.
+      const first = B.chance * 0.55;
+      if (Math.random() > (g.season.dayOf === 1 ? first : (B.chance - first) / (1 - first))) continue;
+      const n = Math.random() < B.litter[2] ? B.litter[1] : B.litter[0];
+      let had = 0;
       for (let i = 0; i < n; i++) {
-        const l = lambFor(ewe);
-        l.pen = p;
-        l.home = true;
-        p.animals.push(l);
-        g.animals.push(l);
-        born++;
+        if (roomLeft(p) < sp.space) {
+          crowded = true;
+          break;
+        }
+        const y = youngFor(mother);
+        y.pen = p;
+        y.home = true;
+        p.animals.push(y);
+        g.animals.push(y);
+        had++;
       }
+      if (!had) continue;
+      mother.lambedYear = year;
+      here[sp.id] = (here[sp.id] ?? 0) + had;
+      born[sp.id] = (born[sp.id] ?? 0) + had;
     }
+    // Over the paddock, what came.
+    const line = youngLine(here);
+    if (line) g.fx.float(p.cx, p.cy - 10, `+${line}`, C.butter, 2.4);
   }
-  if (born) {
-    g.totals.lambs += born;
-    g.fx.float(g.dog.x, g.dog.y - 16, `${born} LAMB${born > 1 ? 'S' : ''} BORN`, C.butter, 2);
-    if (!g.tipsSeen.has('lambs')) {
-      g.tipsSeen.add('lambs');
-      g.tip = { text: 'LAMBS! A LAMB KEEPS TO ITS MOTHER, AND A EWE CUT OFF FROM HER LAMB TURNS BACK FOR IT. DRIVE THEM AS PAIRS, GENTLY.', t: 10 };
-    }
+  const total = Object.values(born).reduce((a, b) => a + b, 0);
+  if (crowded && !g.tipsSeen.has('noRoomYoung')) {
+    g.tipsSeen.add('noRoomYoung');
+    g.tip = { text: 'A FULL PADDOCK HAS NO ROOM FOR YOUNG: THEY NEED SPACE TO GROW INTO. GIVE THE FLOCK A BIGGER PADDOCK AND IT WILL GROW.', t: 10 };
+  }
+  if (!total) return;
+  g.totals.lambs += born.sheep ?? 0;
+  g.totals.born += total;
+  g.fx.float(g.dog.x, g.dog.y - 16, `${youngLine(born)} BORN`, C.butter, 2);
+  if (born.sheep && !g.tipsSeen.has('lambs')) {
+    g.tipsSeen.add('lambs');
+    g.tip = { text: 'LAMBS! A LAMB KEEPS TO ITS MOTHER, AND A EWE CUT OFF FROM HER LAMB TURNS BACK FOR IT. DRIVE THEM AS PAIRS, GENTLY.', t: 10 };
+  } else if (!g.tipsSeen.has('young')) {
+    g.tipsSeen.add('young');
+    g.tip = { text: 'YOUNG ONES! CALM, FED STOCK WITH ROOM IN THE PADDOCK BREED IN THEIR SEASON. THE YOUNG KEEP TO THEIR MOTHERS AND GROW UP IN AUTUMN.', t: 10 };
   }
 }
 
-export function lambFor(ewe: Animal): Animal {
-  const a = Math.random() * Math.PI * 2;
-  const l = new Animal('sheep', ewe.x + Math.cos(a) * 4, ewe.y + Math.sin(a) * 4, ewe.coat as Coat);
-  l.young = true;
-  l.mother = ewe;
-  l.wanderer = false;
-  if (!ewe.lamb || ewe.lamb.gone) ewe.lamb = l;
-  return l;
+// "3 LAMBS, 1 CALF"
+function youngLine(n: Partial<Record<SpeciesId, number>>): string {
+  return SPECIES_ORDER.filter((id) => n[id])
+    .map((id) => `${n[id]} ${(n[id] === 1 ? SPECIES[id].young : SPECIES[id].youngPlural).toUpperCase()}`)
+    .join(', ');
 }
+
+// A young one at its mother's side, in her coat.
+export function youngFor(mother: Animal): Animal {
+  const a = Math.random() * Math.PI * 2;
+  const y = new Animal(mother.sp.id, mother.x + Math.cos(a) * 4, mother.y + Math.sin(a) * 4, mother.coat as Coat);
+  y.young = true;
+  y.mother = mother;
+  y.wanderer = false;
+  if (!mother.lamb || mother.lamb.gone) mother.lamb = y;
+  return y;
+}
+export const lambFor = youngFor;
 
 function growUp(g: Game) {
   let n = 0;
@@ -283,7 +342,7 @@ function growUp(g: Game) {
     }
     a.lamb = null;
   }
-  if (n) g.fx.float(g.dog.x, g.dog.y - 16, `${n} LAMBS GROWN`, C.wool, 2);
+  if (n) g.fx.float(g.dog.x, g.dog.y - 16, `${n} YOUNG GROWN UP`, C.wool, 2);
 }
 
 // ---- Summer: the shearer ----
@@ -313,9 +372,14 @@ function shearingOrder(g: Game): MorningBanner | null {
 
 function setOutBreeders(g: Game) {
   const p = yardOf(g, 'sale').pen;
+  // The day's lot of stock (systems/herds.ts) makes way for the breeders.
+  for (const a of p.animals) if (a.forSale && !a.rare) a.gone = true;
+  p.animals = p.animals.filter((a) => !a.gone);
   if (p.animals.some((a) => a.forSale)) return;
-  RARE_BREEDS.filter((b) => b.tier <= g.tier).forEach((b, i) => {
-    const a = new Animal(b.species, p.ix0 + 6 + (i % 3) * 10, p.iy0 + 6 + Math.floor(i / 3) * 10, b.coat as Coat);
+  // A pair of each of the smaller breeds (a pair breeds true: rare young),
+  // one of the cattle.
+  RARE_BREEDS.filter((b) => b.tier <= g.tier).flatMap((b) => (SPECIES[b.species].space <= 2 ? [b, b] : [b])).forEach((b, i) => {
+    const a = new Animal(b.species, p.ix0 + 5 + (i % 4) * 8, p.iy0 + 5 + Math.floor(i / 4) * 9, b.coat as Coat);
     a.forSale = b.price;
     a.wanderer = false;
     a.pen = p;
@@ -324,30 +388,33 @@ function setOutBreeders(g: Game) {
   });
 }
 
-// The breed for sale the dog is standing by, at the sale yard's fence.
-export function breedNear(g: Game): { a: Animal; breed: Breed } | null {
-  if (!isFairDay(g)) return null;
+// The animal for sale the dog is standing by, at the sale yard's fence: a
+// rare breed on fair day, the day's lot of stock any other day
+// (systems/herds.ts).
+export function breedNear(g: Game): { a: Animal; breed: Breed | null; name: string } | null {
   const p = yardOf(g, 'sale').pen;
   const d = g.dog;
   if (d.x < p.x0 - 12 || d.x > p.x1 + 12 || d.y < p.y0 - 12 || d.y > p.y1 + 12) return null;
   const on = p.animals.filter((a) => a.forSale && Math.hypot(a.x - d.x, a.y - d.y) < 30).sort((x, y) => Math.hypot(x.x - d.x, x.y - d.y) - Math.hypot(y.x - d.x, y.y - d.y))[0];
-  const breed = on && RARE_BREEDS.find((b) => b.species === on.sp.id && b.coat === on.coat);
-  return on && breed ? { a: on, breed } : null;
+  if (!on) return null;
+  const breed = RARE_BREEDS.find((b) => b.species === on.sp.id && b.coat === on.coat) ?? null;
+  return { a: on, breed, name: breed ? breed.name : on.sp.name.toUpperCase() };
 }
 
-// E by the sale yard's fence on fair day: buy the breed you are standing
-// by. It comes out of the gate, to be walked home.
+// E by the sale yard's fence: buy the animal you are standing by. It comes
+// out of the gate, to be walked home.
 export function buyBreed(g: Game): boolean {
   const at = breedNear(g);
   if (!at) return false;
-  const { a, breed } = at;
+  const { a, breed, name } = at;
   if (g.coins < a.forSale) {
-    g.showBanner(`${breed.name}: ${a.forSale}$`, `YOU HAVE ${g.coins}$`, 1.8);
+    g.showBanner(`${name}: ${a.forSale}$`, `YOU HAVE ${g.coins}$`, 1.8);
     g.audio?.play('deny');
     return true;
   }
   g.coins -= a.forSale;
-  g.totals.rareBought++;
+  if (breed) g.totals.rareBought++;
+  else g.totals.stockBought++;
   const p = yardOf(g, 'sale').pen;
   p.animals = p.animals.filter((x) => x !== a);
   a.forSale = 0;
@@ -357,7 +424,7 @@ export function buyBreed(g: Game): boolean {
   a.x = out.x;
   a.y = out.y;
   a.stress = 0.1;
-  g.showBanner(`BOUGHT A ${breed.name}`, 'WALK IT HOME TO A PEN OF ITS KIND', 2.6);
+  g.showBanner(`BOUGHT A ${name}`, 'WALK IT HOME TO A PADDOCK', 2.6);
   g.audio?.play('coin');
   return true;
 }

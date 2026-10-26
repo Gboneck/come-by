@@ -7,7 +7,10 @@ import type { DayStats, Game } from '../game';
 import { SPECIES, SPECIES_ORDER } from '../entities/species';
 import { nextGoal } from '../systems/progression';
 import { dimView } from './feel';
+import { drawSale, saleLen, type Sale } from './sale';
+import { sentence } from './case';
 import { SKY_WORD, skyIcon } from './icons';
+import { pitch } from './metrics';
 
 export interface Summary {
   day: number;
@@ -18,6 +21,8 @@ export interface Summary {
   penned: number;
   buildable?: string[];
   lost?: number;
+  sale?: Sale; // the day's goods, sold as the cart comes by
+  saleSkipped?: boolean;
 }
 
 const ROW_STEP = 0.07; // rows of the card arrive one after another
@@ -38,7 +43,13 @@ function tape(g: CanvasRenderingContext2D, x: number, y: number, w: number) {
 export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, H: number): 'next' | 'build' | null {
   const s = game.summary!;
   const ui = game.ui;
-  const age = game.summaryT;
+  // First the cart comes for the day's goods (ui/sale.ts).
+  const sale = saleLen(s);
+  if (game.summaryT < sale) {
+    drawSale(game, g, W, H, game.summaryT);
+    return null;
+  }
+  const age = game.summaryT - sale;
   const touch = game.input.touchMode;
   const pw = Math.min(W - 16, 168);
   const lines: [string, string, string?][] = [];
@@ -64,7 +75,8 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   const goal = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : null;
   const build = s.buildable ?? [];
   const bh = touch ? 15 : 13;
-  const ph = 34 + lines.length * 8 + 5 + (goal ? 8 : 0) + 9 + (build.length ? 12 + Math.ceil(build.length / 2) * 8 : 0) + bh + 9;
+  const rp = pitch() + 1; // a row of the page
+  const ph = 34 + lines.length * rp + 5 + (goal ? rp : 0) + 9 + (build.length ? 4 + rp + Math.ceil(build.length / 2) * rp : 0) + bh + 9;
   const px0 = Math.round(W / 2 - pw / 2);
   // The card drops in as the fade clears.
   const drop = Math.round(Math.max(0, 1 - age / 0.25) * -16);
@@ -76,35 +88,36 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   tape(g, px0 + pw - 9, py0 - 2, 12);
   const ink = C.plum, ink2 = C.teal;
   const cal = calendar(s.day);
-  heading(g, `DAY ${s.day}`, px0 + 13, py0 + 6, ink, { shade: ink2 });
-  text(g, `${cal.season.toUpperCase()}, YEAR ${cal.year}`, px0 + pw - 6, py0 + 8, C.sage, { align: 'right' });
+  const dw = heading(g, `DAY ${s.day}`, px0 + 13, py0 + 6, ink, { shade: ink2 });
+  // The season beside the day; a calm day's stamp at the right.
+  text(g, `${cal.season[0].toUpperCase()}${cal.season.slice(1)}, year ${cal.year}`, px0 + 13 + dw + 6, py0 + 8, C.sage);
   rect(g, px0 + 4, py0 + 16, pw - 8, 1, ink);
   rect(g, px0 + 4, py0 + 18, pw - 8, 1, ink);
   let y = py0 + 24;
   const iconOpts = { iconColor: C.butter, iconRim: C.plum };
   lines.forEach(([k, v, col], i) => {
     if (age >= (i + 1) * ROW_STEP) {
-      text(g, k, px0 + 13, y, ink, iconOpts);
-      text(g, v, px0 + pw - 6, y, col ?? ink, { align: 'right', ...iconOpts });
+      text(g, sentence(k), px0 + 13, y, ink, iconOpts);
+      text(g, sentence(v), px0 + pw - 6, y, col ?? ink, { align: 'right', ...iconOpts });
     }
-    y += 8;
+    y += pitch() + 1;
   });
   const late = age >= (lines.length + 2) * ROW_STEP;
   // A calm day earns the page a stamp.
-  if (s.stats.calm > 0 && late) stamp(g, 'CALM', px0 + pw - 26, py0 + 34, C.teal);
+  if (s.stats.calm > 0 && late) stamp(g, 'CALM', px0 + pw - 24, py0 + 9, C.teal);
   // What comes next: the goal, and tomorrow's sky.
   rule(g, px0 + 4, y + 1, pw - 8, C.plum);
   y += 5;
   if (goal) {
     if (late) {
-      text(g, 'NEXT GOAL', px0 + 13, y, ink2);
-      text(g, goal, px0 + pw - 6, y, ink, { align: 'right', ...iconOpts });
+      text(g, 'Next goal', px0 + 13, y, ink2);
+      text(g, sentence(goal), px0 + pw - 6, y, ink, { align: 'right', ...iconOpts });
     }
-    y += 8;
+    y += pitch() + 1;
   }
   if (late) {
-    const sky = game.weather.forecast, word = SKY_WORD[sky];
-    text(g, 'TOMORROW', px0 + 13, y + 1, ink2);
+    const sky = game.weather.forecast, word = sentence(SKY_WORD[sky]);
+    text(g, 'Tomorrow', px0 + 13, y + 1, ink2);
     text(g, word, px0 + pw - 6, y + 1, ink, { align: 'right' });
     g.fillStyle = C.plum;
     g.fillRect(px0 + pw - 6 - textWidth(word) - 11, y - 1, 9, 9);
@@ -115,12 +128,12 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
     rule(g, px0 + 4, y + 1, pw - 8, C.plum);
     y += 5;
     if (late) {
-      text(g, 'NOW YOU CAN BUILD', px0 + 13, y, ink2);
+      text(g, 'Now you can build', px0 + 13, y, ink2);
       build.forEach((b, i) => {
-        text(g, b, px0 + 13 + (i % 2) * (pw / 2 - 6), y + 8 + Math.floor(i / 2) * 8, ink, iconOpts);
+        text(g, sentence(b), px0 + 13 + (i % 2) * (pw / 2 - 6), y + pitch() + 1 + Math.floor(i / 2) * (pitch() + 1), ink, iconOpts);
       });
     }
-    y += 8 + Math.ceil(build.length / 2) * 8;
+    y += pitch() + 1 + Math.ceil(build.length / 2) * (pitch() + 1);
   }
   // Buttons: BUILD is the recommended choice when something is affordable.
   // They only take input once the card is fully in.
@@ -134,7 +147,8 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   panel(g, bx1, by, bw, bh, hot1 || (wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.butter : C.sage);
   text(g, touch ? 'BUILD' : 'B: BUILD', bx1 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
   panel(g, bx2, by, bw, bh, hot2 || (!wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.sage : C.butter);
-  text(g, touch ? 'NEXT DAY' : 'SPACE: NEXT DAY', bx2 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
+  const next = game.net?.role === 'guest' ? 'READY' : 'NEXT DAY'; // co-op: a guest says ready, the host starts the day
+  text(g, touch ? next : `SPACE: ${next}`, bx2 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
   const p = touch ? 3 : 0;
   if (ui.click('sbuild', bx1 - p, by - p, bw + p, bh + p * 2) && ready) return 'build';
   if (ui.click('next', bx2, by - p, bw + p, bh + p * 2) && ready) return 'next';

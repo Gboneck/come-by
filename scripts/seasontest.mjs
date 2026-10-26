@@ -106,6 +106,11 @@ const res = await page.evaluate(async () => {
   const brief = g.ranch.remove(barn);
 
   // ---- Spring: lambs ----
+  // (Fed and calm again since the hungry night: only they breed. And room
+  // for the lambs to grow into: the old upgraded pen's half again.)
+  pen.hungry = false;
+  pen.animals.forEach((a) => (a.stress = 0));
+  pen.level = 2;
   morning(17); // spring, year 2, day 1
   const penLambs = () => pen.animals.filter((a) => a.young);
   const lambs1 = penLambs().length;
@@ -142,7 +147,8 @@ const res = await page.evaluate(async () => {
     const before = flocks.length;
     SP.spawnMorning(g.map, flocks, 30, 5, (r) => r === hills, 'winter');
     const stayed = flocks.filter((a) => !a.gone).length;
-    check('winter sends the extra wild flocks down the valley', stayed <= 2 * 8 + 1 && stayed >= 7 && !mine.gone, { before, stayed });
+    const keepN = Math.round(SP.groupsFor(hills, 30, 5, 'winter') * 7.5 * SP.flockGrowth(hills, 5)) + 1;
+    check('winter sends the extra wild flocks down the valley', stayed <= keepN && stayed >= 7 && !mine.gone, { before, stayed, keepN });
   }
 
   // ---- Summer: the shearer ----
@@ -182,7 +188,7 @@ const res = await page.evaluate(async () => {
   check('fair day', Z.isFairDay(g));
   const sale = g.ranch.yards.find((y) => y.site.id === 'sale');
   const breeds = sale.pen.animals.filter((a) => a.forSale);
-  check('rare breeds for sale at the sale yard, by tier', breeds.length === 3 && breeds.every((a) => a.rare), breeds.map((a) => `${a.sp.id}${a.coat}:${a.forSale}`).join(' '));
+  check('rare breeds for sale at the sale yard, by tier, the small ones in pairs', breeds.length === 6 && new Set(breeds.map((a) => a.sp.id)).size === 3 && breeds.every((a) => a.rare), breeds.map((a) => `${a.sp.id}${a.coat}:${a.forSale}`).join(' '));
   // Buy the one the dog stands by, outside the fence.
   const pick = breeds[breeds.length - 1];
   g.dog.x = sale.pen.x0 - 6; g.dog.y = pick.y;
@@ -195,7 +201,7 @@ const res = await page.evaluate(async () => {
   const other = sale.pen.animals.find((a) => a.forSale);
   other.x = sale.pen.ix0 + 3; other.y = g.dog.y;
   const poor = Z.buyBreed(g);
-  check('not enough coins: nothing sold', poor && g.coins === 3 && sale.pen.animals.filter((a) => a.forSale).length === 2);
+  check('not enough coins: nothing sold', poor && g.coins === 3 && sale.pen.animals.filter((a) => a.forSale).length === 5);
   g.coins = 2000;
   // The ring: a calm sheep and a stressed goat.
   step(1);
@@ -223,10 +229,14 @@ const res = await page.evaluate(async () => {
   g.endDay();
   // (The goat has no paddock of its own, but goats get on with sheep: it
   // shares the sheep's.)
-  check('after the fair, entries go home and unsold breeds leave', calm.pen === spare && goat.pen === spare && sale.pen.animals.length === 0 && ring.animals.length === 0, { calm: calm.pen?.id, goat: goat.pen?.id, sale: sale.pen.animals.length });
+  check('after the fair, entries go home and unsold breeds leave', (calm.pen === spare || calm.pen === pen) && goat.pen === spare && sale.pen.animals.length === 0 && ring.animals.length === 0, { calm: calm.pen?.id, goat: goat.pen?.id, sale: sale.pen.animals.length });
   check('ribbons in the legacy record', g.totals.fairRibbons.reduce((s, n) => s + n, 0) >= 1, g.totals.fairRibbons);
 
   // ---- Seasons in the save ----
+  // (Last year's lambs, grown, go to market: room for this year's.)
+  for (const a of pen.animals.slice(6)) a.gone = true;
+  pen.animals = pen.animals.slice(0, 6);
+  pen.animals.forEach((a) => (a.stress = 0));
   morning(17 + 16); // spring, year 3
   morning(18 + 16);
   const stack = add('hay', 114, 112);

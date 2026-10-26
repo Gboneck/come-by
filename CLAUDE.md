@@ -54,21 +54,31 @@ original and drawn in code. No external art files, ever.
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
   `scripts/makefixture.mjs`; `--profile`, `--calls`, `--live`,
-  `--quality=low`, `--idle`), `scripts/picturetest.mjs` checks the picture
-  cache draws exactly what the art does, `scripts/pwatest.mjs` builds and
+  `--quality=low`, `--idle`, `--noflush`, `--animals=N` a herd-heavy world;
+  `--only=fognight` the fog's path), `scripts/picturetest.mjs` checks the picture
+  cache (and FineLayer) draws exactly what the art does,
+  `scripts/skyshots.mjs --tag=x` shoots dusk, night, fog, fog night and a
+  storm night at phone size (`shots/sky/`), `scripts/cameratest.mjs`
+  checks the camera keeps the flock and its gate in view,
+  `scripts/densitytest.mjs` (`BASE=<a checkout of main>`) checks the world
+  layer is pixel-for-pixel the old one at 2x, `scripts/pwatest.mjs` builds and
   serves the game twice (installable, offline with the server off, a new
   deploy picked up), `scripts/installtest.mjs` the install card,
   `scripts/padtest.mjs` plays every screen with a simulated game pad,
   `scripts/paddockuitest.mjs` drives the paddock editor in build mode by
   touch (drag out, handles, gate, build, extend, a trough inside),
-  `scripts/transfertest.mjs` moves a save between two browsers, `scripts/places.mjs` screenshots every hidden place and its way in
+  `scripts/transfertest.mjs` moves a save between two browsers,
+  `scripts/loottest.mjs` sniffing, digging, the old map, relics and co-op
+  finds, `scripts/places.mjs` screenshots every hidden place and its way in
   (`--found`, `--only=circle,hut`, `--half` and `--done` for the valley
   projects before and after),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,
   coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`;
   `--year --days=22` plays on through the seasons and prints a table per
-  season: hay, hungry nights, lambs, the shearer, the fair),
+  season: hay, hungry nights, lambs, the shearer, the fair; every coin is
+  tagged by the system that paid it, with what is still worth buying and
+  how many animals the world holds),
   `scripts/seasontest.mjs` checks the calendar, winter hay, lambing, the
   shearer, the fair, rare breeds and seasons in the save (old saves load),
   `scripts/lambtest.mjs` drives ewes with lambs calm against barking,
@@ -77,6 +87,10 @@ original and drawn in code. No external art files, ever.
   `scripts/valleytest.mjs` checks the valley growing: the village's steps,
   market day, the festival parade, grazing a paddock clear, timber for the
   old bridge, the shearing shed, the dairy, the agility course, saves,
+  `scripts/breedtest.mjs` checks herds that grow: breeding by kind and
+  season (calm, fed, pairs, room), the young at their mothers, wild young,
+  bigger flocks, big droves, the sale yard's lot, goods by kind to guests,
+  saves,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
   include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
@@ -97,12 +111,37 @@ original and drawn in code. No external art files, ever.
 
 ## Rendering rules
 
-- Render to a small internal canvas (~240px on the short side), then scale up
-  by a whole number with nearest-neighbour filtering. The internal size is
-  derived from the window so the scale is always an integer. The game draws
-  straight into the page's canvas at the internal size and CSS
-  (`image-rendering: pixelated`) does the whole-number scale on the GPU
-  (`src/gfx/screen.ts`; a drawImage copy where `pixelated` is missing).
+- Two grids. **World pixels** are what the game is built in: the sim, the
+  map (`TS = 8`), speeds, layout (`screen.W/H`) and most art. **Fine
+  pixels** are `PX = 2` to a world pixel each way (`src/gfx/screen.ts`).
+  The screen canvas is fine pixels, about 432 on the short side
+  (`TARGET_FINE`), scaled up by a whole number with nearest-neighbour
+  filtering (CSS `image-rendering: pixelated` on the GPU; a drawImage copy
+  where that is missing). An upright iPhone shows 195 x 422 world pixels.
+  VIEW (pause menu) WIDE is one whole-number scale down (293 x 633 on an
+  iPhone): `screen.setView('close' | 'wide')`, `screen.cssPerFine`.
+- Every frame is drawn under `scale(PX)`, so a draw call in world pixels is
+  crisp PX x PX blocks: old art needs no change. For finer art:
+  `fine(g, (fg) => ...)` draws 1:1 in fine pixels with the translation kept
+  (world (x, y) is fine (x*PX, y*PX); `toFine`, `snapFine`); dense sprites
+  `spr(rows, ax, ay, { density: PX })` have their grid in fine pixels and
+  land on the fine grid (`drawSpr` as ever; `sprW/sprH/drawSprAt` when
+  blowing one up); `makeCanvas(w, h, PX)` is a fine offscreen canvas drawn
+  back with `drawImage(c, x, y, w, h)`. A fine layer of the screen is
+  `FW x FH` (`screen.FW/FH`) drawn with `drawImage(c, 0, 0, W, H)`.
+- World-sized pictures in fine pixels go in chunks around the camera
+  (`FineLayer`, `src/gfx/chunks.ts`): a whole world at 2x is tens of MB.
+  Terrain and canopy are still baked in world pixels.
+- Text (`src/gfx/font.ts`, glyphs in `src/gfx/glyphs.ts`) is in fine
+  pixels, with lower case, proportional and kerned. `text(g, s, x, y,
+  colour, { size })`, sizes as roles: `'small'` (capitals 7 fine px, a line
+  every 5 world px), `'body'` (capitals 9, line 6), `'large'` (capitals 12,
+  line 8: body text on phones), `'heading'` (the body face by Scale2x:
+  capitals 18, line 12). Where a fine pixel is physically small (WIDE on a
+  phone) every role steps up one face so words keep their size
+  (`setTextBoost`, set in main.ts). Lay out with `lineHeight(size)`,
+  `textWidth(s, scale, size)`, `wrap(s, w, size)` (world pixels); y is the
+  top of the capitals. `heading()` is the older bold capitals face.
 - Procedural art that rarely changes (buildings, fences, ranch decor) goes
   through `cached()` in `src/gfx/picture.ts`: drawn into a recorder, shown
   from a bitmap until it asks for different pixels. Art using paths, clips
@@ -110,14 +149,25 @@ original and drawn in code. No external art files, ever.
 - GRAPHICS (pause menu: AUTO, HIGH, MEDIUM, LOW; `src/gfx/quality.ts`) thins
   only mood: read `quality.fx` (share of rain, splashes, critters),
   `quality.shade` (cloud shadows, wet ground), `quality.sway` (grass in
-  gusts). Never the night, the herd or anything you play with.
-- No blurry or sub-pixel drawing: round every draw position to whole pixels,
-  never draw rotated/scaled images except by integer factors.
+  gusts), `quality.fineSky` (night, fog and ground dithers in fine pixels,
+  HIGH only). Never the night itself, the herd or anything you play with.
+- No blurry or sub-pixel drawing: round every draw position to whole world
+  pixels (whole fine pixels for fine art: half world pixels), never draw
+  rotated/scaled images except by integer factors.
 - Sprites are pixel grids defined in code (`src/art/`), one char per pixel.
 - Layer order: terrain (baked) → shadows → y-sorted entities → canopy (baked)
   → effects → night dither → UI.
 - Night and dusk are a Bayer-dithered plum overlay, not alpha blending, so the
-  palette stays pure. Lanterns and the dog cut holes in it.
+  palette stays pure (`src/render/night.ts`). The light is worked out per
+  world pixel and dithered per fine pixel with an 8x8 ramp (64 steps,
+  world-anchored) at HIGH, 4x4 in world pixels at MEDIUM/LOW. Lights
+  (`Light`: r, warm, power, soft) cut pools that fall off smoothly; the
+  outer fall cools to teal before the plum and a flame's ring warms its
+  edge with buttercup. Fog lies in drifting banks of short level streaks
+  (a ramp of its own), thicker by place
+  (`setFogField`; the default from the soil: by water, not on high ground).
+  At night every animal on screen has a faint halo so the flock reads.
+  `ditherRect` and the dim/fade covers use fine dither patterns too.
 
 ## Palette
 
@@ -142,7 +192,7 @@ stays unique.
 | Move            | WASD / arrow keys                | virtual stick (left thumb)    | left stick / d-pad        |
 | Sprint          | Shift (hold, uses stamina)       | push stick to the rim         | RT, LT or RB (hold)       |
 | Bark            | Space / K                        | BARK button                   | A                         |
-| Nip             | E / J (also: open a pen gate, start a trial at the post) | NIP button  | B          |
+| Nip             | E / J (also: open a pen gate, start a trial at the post, dig on a scent, bury a bone on the ranch) | NIP button (DIG on a scent) | B |
 | Lie down        | Q / L (hold)                     | DOWN button (hold)            | X (hold)                  |
 | Rest            | lie down on the ranch, no stock near (day passes x12) | same | same               |
 | Build mode      | B (on the ranch)                 | BUILD button                  | LB (on the ranch)         |
@@ -156,6 +206,7 @@ stays unique.
 | Mute            | M                                | sliders to 0 in pause menu    | pause menu                |
 | Volume          | pause menu, left/right           | pause menu, - and +           | pause menu, left/right    |
 | Graphics        | pause menu, GRAPHICS (AUTO / HIGH / MEDIUM / LOW) | same         | same                      |
+| View            | pause menu, VIEW (CLOSE / WIDE: more field)       | same         | same                      |
 | Invite a friend | pause menu, INVITE A FRIEND (code + link) | same, SHARE LINK      | same                      |
 | Join a friend   | title, JOIN A FRIEND, type the code (or open the link) | same     | same (B leaves)           |
 | Leave a friend's ranch | pause menu, LEAVE ...'S RANCH | same                     | same                      |
@@ -163,8 +214,9 @@ stays unique.
 | Move a save     | title MOVE A RANCH / pause MOVE THIS RANCH: copy or paste a code, save or load a file | same (share sheet) | same (codes via the browser's box) |
 
 While a pad is in use the prompts read as pad buttons: `src/ui/pad.ts` has
-one table (PROMPTS) of keyboard phrases and what they say on a pad, applied
-to drawn text through a hook in `src/gfx/font.ts`. A new keyboard prompt
+one table (RULES) of keyboard phrases and what they say on a pad, applied
+to drawn text through a hook in `src/gfx/font.ts`. Rules match in any case
+and keep the text's case ("Hold Q" reads "Hold (X)"). A new keyboard prompt
 needs a line there.
 
 ## Design laws
@@ -190,8 +242,14 @@ needs a line there.
 - Stress: rises with pressure, barks, nips and isolation; decays with calm.
   Moderate stress bunches the flock, high stress causes panic and splitting.
   Delivery value and produce are scaled down by stress — calm always pays.
-- Lambs (spring) keep to their mothers; a ewe cut off from her lamb turns
-  back for it and both fret, so a flock with lambs is driven as pairs.
+  A big drove brought in calm pays a bonus (six head or more, up to half
+  again at fifteen); a packed paddock makes less (full rate to three-fifths
+  of its room, half when full) and breeds nothing, so room pays too.
+- Young keep to their mothers; a mother cut off from her young turns back
+  for it and both fret, so a flock with young is driven as pairs. Every
+  kind breeds in its season (spring; ponies in summer): calm, fed stock
+  with another of its kind and room in the paddock for the young to grow
+  into (lambs, ducklings, kids, calves, foals); they grow up in autumn.
   Snow (winter) slows everyone a little. The calendar is in
   `src/systems/season.ts`, what each season brings in
   `src/systems/seasonal.ts`.
@@ -230,12 +288,16 @@ needs a line there.
   `valley.ts` (the village's steps, the paddocks, the old bridge, market
   day and festivals: `game.valley`, the village itself in
   `game.ranch.village`), `farmwork.ts` (the shearing shed, the dairy, the
-  agility yard: `game.farmwork`),
+  agility yard: `game.farmwork`), `herds.ts` (the sale yard's daily lot
+  of stock, big droves: `game.herds`; breeding is in `seasonal.ts`, flock
+  sizes in `spawner.ts`),
   `projects.ts` (valley projects: herding work in the hidden places that
   changes them for good: `game.projects`; art in `src/art/projects.ts`),
   `favour.ts` (each buyer's favour and what it brings: `game.favour`),
   `achievements.ts` (the badges and the cards that bring them:
-  `game.achievements`).
+  `game.achievements`), `loot.ts` (scent, the day's dig spots, finds and
+  the old map: `game.loot`; drawn in `src/art/loot.ts`, the Ledger's FINDS
+  page in `src/ui/loot.ts`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `achievements.ts` the badge card and the Ledger's BUYERS and BADGES pages;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
@@ -245,7 +307,13 @@ needs a line there.
   mode (`sharePng()` saves or shares any canvas), `feel.ts` kicks, coins,
   fireworks and the iris, `paddockbuild.ts` the paddock editor in build
   mode (it asks the ranch's rules through `PaddockRules`). Ledger pages
-  beyond the first go in `LEDGER_PAGES` (`ledger.ts`). `src/gfx/font.ts`
+  beyond the first go in `LEDGER_PAGES` (`ledger.ts`). `objective.ts` the
+  one thing to do now (goal card, arrow, marker), `whatsthis.ts` cards on
+  new things (`THINGS`), `firstday.ts` the welcome and first-day steps,
+  `goods.ts` today's goods in the HUD, `sale.ts` the cart at day's end,
+  `case.ts` sentence case for prose (`prose()`); build mode's changes are
+  `BuildAction`s run by `applyBuild` (a co-op guest sets `build.remote`).
+  `src/art/goods.ts` goods as piles in paddocks and as icons. `src/gfx/font.ts`
   has two faces: text() (5px, proportional) and heading() (7px, bold).
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses (gaits, startles, wide eyes, ducks afloat), `dogpose.ts` every
@@ -257,7 +325,9 @@ needs a line there.
 - Platform: `src/input.ts` (keys, touch, and game pads via the Gamepad API),
   `src/ui/pad.ts` (pad buttons per screen, pad typing, pad prompts),
   `src/gfx/quality.ts` (GRAPHICS and AUTO), `src/gfx/picture.ts` (cached
-  pictures of procedural art), `src/pwa/` (icon, worker registration),
+  pictures of procedural art, in fine pixels), `src/gfx/chunks.ts`
+  (FineLayer), `src/gfx/glyphs.ts` (the font's glyphs), `src/pwa/` (icon,
+  worker registration),
   `src/ui/install.ts` (install card), `src/ui/transfer.ts` (moving a save:
   the code, the file, the checks; mode `transfer`). `src/main.ts` polls the
   pad, draws a quiet menu or build mode at 30fps and a 120Hz screen at 60,
@@ -281,11 +351,19 @@ needs a line there.
   dog. Not lockstep: the sim is not deterministic, and must not need to be.
 - **Red is you.** On every screen your own dog wears the red bandana;
   everyone else's wears buttercup with a name tag, in their own markings.
-- **The ranch is the host's.** Pay, building, the Ledger's goals and the
-  save are the host's; a guest's own save is never written. When the host
-  is at the summary, building, or at the judge's card, guests wait on a
-  read-only card. Menus (pause, Ledger, looks, invite) do not stop the
-  world while friends are there; resting needs every dog lying down at home.
+- **One ranch, one purse, everyone does everything.** The host's browser
+  still runs the world and keeps the save; a guest's actions are commands
+  the host plays with the same rules: build mode (`build.remote` on the
+  guest, `applyBuild` on the host, `build.answer` back; one builder at a
+  time; buildings by tile, `src/net/buildwire.ts`), E (the
+  post, pen gates, breeds for sale, the agility course, fields: played
+  with the guest's dog as `game.dog` and `game.actor` set, so runs a guest
+  starts follow their dog through `game.dogOf(slot)`), helper commands,
+  closing the judge's card. The day's end is the same card on both
+  screens; tomorrow starts when everyone is ready or on the host's second
+  press. No screen stops the world for friends (build mode, menus, the
+  judge's card); resting needs every dog lying down at home. A guest's
+  own save is never written (their finds go to their travels).
 - New shared-world features: JSON ranch state goes in `src/net/shared.ts`
   (one line each), a byte of per-animal state in `animalExtra` /
   `applyAnimalExtra` (snapshot.ts); keep anything that only the host's dog

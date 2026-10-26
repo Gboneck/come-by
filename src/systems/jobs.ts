@@ -5,6 +5,7 @@ import { PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, priz
 import { checkLegacy } from './progression';
 import { SKY_LINE, SKY_TIP } from './weather';
 import { Predator } from '../entities/predator';
+import { herdsMorning } from './herds';
 import { breedNear, buyBreed, isFairDay, seasonalMorning, seasonalOrders, seasonalUpdate, type MorningBanner } from './seasonal';
 import { buyField, valleyHint, valleyMorning, valleyUpdate } from './valley';
 import { farmworkHint, farmworkNearHint, farmworkUpdate, startAgility } from './farmwork';
@@ -25,6 +26,7 @@ export function jobsMorning(game: Game, fresh: boolean) {
     game.weather.newDay(game.tier);
   }
   banners.push(...valleyMorning(game, fresh)); // the village grows, market day, festivals
+  banners.push(...herdsMorning(game, fresh)); // the sale yard's lot, a big drove
   const sky = game.weather.sky;
   if (sky !== 'clear') banners.push({ big: `DAY ${game.day.day}`, small: SKY_LINE[sky], prio: 0 });
   const c = currentClass(game);
@@ -117,7 +119,7 @@ export function jobsHint(game: Game): string | null {
     return `${E}: PRACTICE THE ${classLabel(c)}. NEXT TRIAL DAY IS DAY ${nextTrialDay(isTrialDay(game.day.day) ? game.day.day + 1 : game.day.day)}`;
   }
   const sale = breedNear(game);
-  if (sale) return `${E}: BUY THE ${sale.breed.name} ${sale.a.forSale}$ (YOU HAVE ${game.coins}$)`;
+  if (sale) return `${E}: BUY ${sale.breed ? 'THE' : 'A'} ${sale.name} ${sale.a.forSale}$ (YOU HAVE ${game.coins}$)`;
   const work = farmworkHint(game);
   if (work) return work;
   const p = penGateAt(game);

@@ -18,15 +18,17 @@ export interface Totals {
   trialRuns: number;
   legacy: string[]; // legacy goals reached (labels)
   lambs: number; // lambs born on the ranch
+  born: number; // young of every kind born on the ranch
   fairRibbons: [number, number, number]; // autumn fair placings
   wintersFed: number; // winters through with no pen going hungry
   rareBought: number;
+  stockBought: number; // head bought from the sale yard's lot
 }
 
 export const newTotals = (): Totals => ({
   days: 0, delivered: {}, earned: 0, calmBatches: 0, upgrades: 0, nightsNoLoss: 0, lost: 0,
   orders: 0, calmOrders: 0, ribbons: [0, 0, 0], bestTrial: 0, trialRuns: 0, legacy: [],
-  lambs: 0, fairRibbons: [0, 0, 0], wintersFed: 0, rareBought: 0,
+  lambs: 0, born: 0, fairRibbons: [0, 0, 0], wintersFed: 0, rareBought: 0, stockBought: 0,
 });
 
 export interface Goal {

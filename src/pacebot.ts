@@ -255,7 +255,7 @@ export class Pacer {
   private extendFor(sp: SpeciesId, n: number): boolean {
     const g = this.g;
     const pens = g.ranch.pens.filter((p) => !p.letOut && p.canHold(sp)).sort((a, b) => (b.species === sp ? 1 : 0) - (a.species === sp ? 1 : 0) || b.animals.length - a.animals.length);
-    const perTile = 16 / 56; // capacity a tile (8x7 holds 16)
+    const perTile = 16 / 56; // capacity a tile (8x7 holds 16; big ones more)
     for (const p of pens) {
       const need = n * SPECIES[sp].space - Math.max(0, p.capacity - p.used);
       if (need <= 0) continue;
@@ -283,12 +283,20 @@ export class Pacer {
   }
 
   // Land short: buy a field at the ranch's edge (stock on it grazes it clear).
+  // Buy the cheapest field the purse allows. (The bot steps to its sign:
+  // its own paddocks can wall the sign in, and a player would find a way
+  // round, so the walk is not what is being measured.)
   private buyLand(): boolean {
-    const g = this.g;
-    const f = g.valley.fields.find((p) => !p.owned && g.coins >= p.site.price + 60);
-    if (!f || !this.walkTo({ x: f.mouth.x, y: f.mouth.y + 6 }, 60, 6)) return false;
-    const before = g.coins;
-    if (!buyField(g) || g.coins >= before) return false;
+    const g = this.g, d = g.dog;
+    const f = g.valley.fields.filter((p) => !p.owned && g.coins >= p.site.price + 60).sort((a, b) => a.site.price - b.site.price)[0];
+    if (!f) return false;
+    const x = d.x, y = d.y, before = g.coins;
+    d.x = f.mouth.x;
+    d.y = f.mouth.y;
+    const ok = buyField(g) && g.coins < before;
+    d.x = x;
+    d.y = y;
+    if (!ok) return false;
     this.spent += before - g.coins;
     this.did.push(`BOUGHT ${f.site.name} ${before - g.coins}$`);
     return true;
@@ -491,6 +499,33 @@ export class Pacer {
     if (!want.pen) this.bringHome([want]);
   }
 
+  // ---- The sale yard's lot ----
+
+  // With coin to spare and room at home, buy the day's lot (head by head,
+  // keeping some coin back) and walk it home.
+  lotBought = 0;
+  private doLot() {
+    const g = this.g;
+    const sale = yardOf(g, 'sale').pen;
+    const got: Animal[] = [];
+    let paid = 0;
+    for (let k = 0; k < 6 && this.playing; k++) {
+      const want = sale.animals.filter((a) => a.forSale && !a.rare && a.forSale + 150 <= g.coins && this.roomFor(a.sp.id) > got.length)[0];
+      if (!want) break;
+      const side = [{ x: sale.x0 - 6, y: want.y }, { x: sale.x1 + 6, y: want.y }, { x: want.x, y: sale.y0 - 6 }, { x: want.x, y: sale.y1 + 6 }].sort((a, b) => dist(a, want) - dist(b, want))[0];
+      if (!this.walkTo(side, 60, 4) || !this.near(want)) break;
+      const before = g.coins;
+      if (!buyBreed(g) || g.coins >= before) break;
+      paid += before - g.coins;
+      got.push(want);
+    }
+    if (!got.length) return;
+    this.spent += paid;
+    this.lotBought += got.length;
+    this.did.push(`LOT: BOUGHT ${got.length} ${(got.length === 1 ? got[0].sp.name : got[0].sp.plural).toUpperCase()} ${paid}$`);
+    this.bringHome(got);
+  }
+
   // ---- What to work on ----
 
   private groupsOut(): Animal[][] {
@@ -515,8 +550,13 @@ export class Pacer {
     for (const m of this.groupsOut()) {
       const sp = m[0].sp.id;
       if (this.roomFor(sp) === 0 && (g.coins < defOf('pen').cost || (g.ranch.pens.some((p) => p.species === sp) && !goalSp.has(sp) && g.tier < 3))) continue;
+      // A drove far bigger than the room there is: leave it for another day.
+      if (!goalSp.has(sp) && m.length > this.roomFor(sp) + SPECIES[sp].spawnGroup[1] * 1.5) continue;
       const d = dist(centroid(m), home);
-      const s = d - (goalSp.has(sp) ? 2000 : 0) - SPECIES[sp].value * 8 * m.length;
+      // A big drove is worth only what there is room for (plus a flock's
+      // worth of paddock to be made).
+      const take = Math.min(m.length, this.roomFor(sp) + SPECIES[sp].spawnGroup[1]);
+      const s = d - (goalSp.has(sp) ? 2000 : 0) - SPECIES[sp].value * 8 * take;
       if (s < bs) { bs = s; best = m; }
     }
     return best;
@@ -831,8 +871,11 @@ export class Pacer {
       prize = g.totals.earned - before;
     }
     if (this.playing) this.doDairy();
+    // Short of land with the coin for a field: buy it first thing.
+    if (this.playing && this.landShort) this.buyLand();
     for (const o of [...g.orders.open].sort((a, b) => a.due - b.due)) if (this.playing) this.doOrder(o);
     if (isFairDay(g) && this.playing) this.doFair();
+    else if (this.playing && g.herds.lot) this.doLot();
     if (this.playing) this.doTimber();
     if (this.playing) this.doShed();
     if (this.playing) this.doAgility();

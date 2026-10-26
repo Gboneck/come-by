@@ -19,6 +19,7 @@ import { drawSpeech } from './ui/speech';
 import { drawWorld } from './render/world';
 import { drawHud } from './ui/hud';
 import { drawSummary, type Summary } from './ui/summary';
+import { summaryHold } from './ui/sale';
 import { BuildMode } from './ui/build';
 import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
@@ -45,13 +46,16 @@ import { Weather } from './systems/weather';
 import { Seasons } from './systems/season';
 import { Seasonal, seasonalEvening } from './systems/seasonal';
 import { fairDrawables } from './art/fair';
-import { Valley } from './systems/valley';
+import { Valley, isMarketDay } from './systems/valley';
 import { Farmwork, farmworkEvening } from './systems/farmwork';
+import { Herds } from './systems/herds';
 import { valleyDrawables } from './art/valley';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
 import { Projects } from './systems/projects';
 import { projectDrawables } from './art/projects';
+import { Loot } from './systems/loot';
+import { lootDrawables } from './art/loot';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
 import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
@@ -102,6 +106,8 @@ const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, l
 
 
 // Delivery value multiplier from how stressed an animal was on the way home.
+export const DROVE_FROM = 6; // head in one calm batch before the drove bonus starts
+
 export function calmRating(stress: number): { mult: number; label: string } {
   if (stress < 0.3) return { mult: 1.5, label: 'CALM' };
   if (stress < 0.55) return { mult: 1, label: 'STEADY' };
@@ -117,6 +123,10 @@ export class Game {
   ranch: Ranch;
   day = new DayCycle();
   dog: Dog;
+  // This screen's own dog. `dog` is the same one, except for the moment a
+  // co-op host plays a friend's E (pen gate, the post, a field) as theirs.
+  ownDog: Dog;
+  actor = 0; // whose action is being played: 0 = ours, else a co-op guest's slot
   animals: Animal[] = [];
   groups: Group[] = [];
   fx = new Particles();
@@ -176,8 +186,10 @@ export class Game {
   seasonal = new Seasonal(); // lambs, the shearer, the fair, winter hay
   valley!: Valley; // the village, the paddocks, the old bridge
   farmwork = new Farmwork(); // the shearing shed, the dairy, the agility yard
+  herds = new Herds(); // the sale yard's lot, big droves
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   projects = new Projects(); // valley projects: herding work that changes a place for good
+  loot = new Loot(); // sniffing and digging up loot
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
   private idleT = 0;
@@ -207,6 +219,7 @@ export class Game {
     this.ranch.setupStarter();
     const door = this.doorPoint();
     this.dog = new Dog(door.x, door.y);
+    this.ownDog = this.dog;
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     if (opts.guest) {
@@ -257,6 +270,7 @@ export class Game {
 
   applyUpgrades() {
     this.dog.stats = dogStatsFor(this.upgrades);
+    this.loot.tuneDog(this.dog.stats); // a dug-up relic or two
   }
 
   onBuilt(id: string) {
@@ -331,6 +345,8 @@ export class Game {
   }
 
   enterBuild(fromSummary = false) {
+    // Co-op: one builder at a time.
+    if (this.net?.role === 'host' && !this.net.claimBuild(0)) return;
     this.buildFromSummary = fromSummary;
     this.mode = 'build';
     this.build.enter(this);
@@ -340,11 +356,22 @@ export class Game {
   exitBuild() {
     this.build.exit(this);
     this.input.clearQueue();
-    if (this.buildFromSummary) this.startDay();
-    else {
+    if (this.net?.role === 'host') this.net.releaseBuild(0);
+    if (this.buildFromSummary) {
+      // Co-op: done building is ready for tomorrow; friends may not be yet.
+      if (this.net?.role === 'host' && !this.net.nextDay(this)) {
+        this.mode = 'summary';
+        this.summaryT = 1;
+      } else this.startDay();
+    } else {
       this.mode = 'play';
       saveGame(this);
     }
+  }
+
+  // Any player's dog: 0 is this screen's own, others are co-op friends'.
+  dogOf(slot: number): Dog {
+    return slot ? this.net?.dogOf(slot) ?? this.ownDog : this.ownDog;
   }
 
   // What the purse can buy right now (for the end-of-day choice).
@@ -410,10 +437,12 @@ export class Game {
     jobsMorning(this, spawn);
     this.discovery.morning(this);
     this.projects.morning(this, spawn);
+    this.loot.morning(this);
     saveGame(this);
   }
 
   endDay() {
+    if (this.mode === 'build') this.build.exit(this); // co-op: the day can end while the host builds
     if (this.day.phase === 'night') {
       // Wild flocks out in the far pastures are not yours to lose.
       if (!this.stats.lostOwn) this.totals.nightsNoLoss++;
@@ -423,7 +452,10 @@ export class Game {
     this.predators = [];
     seasonalEvening(this); // winter hay, the fair packs up
     farmworkEvening(this); // the dairy yard empties
+    // What each paddock made, for the cart to collect on screen (ui/sale.ts).
+    const from = this.ranch.pens.filter((p) => p.goods > 0).map((p) => ({ x: p.cx, y: p.cy, kinds: p.goodsList() as string[] }));
     const sale = sellAllGoods(this);
+    const before = this.coins;
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
     this.projects.evening(this, sale.value); // the mill at the falls
@@ -438,6 +470,8 @@ export class Game {
       coins: this.coins,
       penned: this.ranch.pens.reduce((s, p) => s + p.animals.length, 0),
       buildable: this.buildable(),
+      // All the goods brought in (the mill's share too, once it is mended).
+      sale: { value: this.coins - before, mill: this.coins - before - sale.value, market: isMarketDay(this), from },
     };
     this.mode = 'summary';
     this.summaryT = 0;
@@ -462,10 +496,28 @@ export class Game {
   }
 
   // Co-op host with friends here: menus do not stop the world for them.
-  private coopWorld(dt: number) {
+  private coopWorld(dt: number, camera = true) {
     if (this.demo) {
       if (this.mode === 'coop') this.updateDemo(dt); // the join screen over the title
-    } else if (this.net?.role === 'host' && this.net.dogs.length) this.stepWorld(dt, false);
+    } else if (this.friendsHere()) this.stepWorld(dt, false, camera);
+  }
+
+  // Build mode keeps the cursor in view without chasing it, so a tap or a
+  // mouse pointer stays put; the view pans when the cursor nears an edge.
+  buildCamera(dt: number) {
+    const k = damp(6, dt);
+    const { W, H } = this.screen;
+    const bx = (this.build.cx + 0.5) * 8, by = (this.build.cy + 0.5) * 8;
+    const mx = Math.min(W / 2 - 4, 28), mt = Math.min(H / 2 - 4, 40), mb = Math.min(H / 2 - 4, 76);
+    this.cam.x += (clamp(this.cam.x, bx - W / 2 + mx, bx + W / 2 - mx) - this.cam.x) * k;
+    this.cam.y += (clamp(this.cam.y, by - H / 2 + mb, by + H / 2 - mt) - this.cam.y) * k;
+    this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
+    this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+  }
+
+  // Co-op host with friends on the ranch: screens do not stop the world.
+  friendsHere(): boolean {
+    return this.net?.role === 'host' && this.net.dogs.length > 0;
   }
 
   showBanner(big: string, small?: string, max = 2.2) {
@@ -525,14 +577,16 @@ export class Game {
     }
     if (this.mode === 'summary') {
       this.fx.update(dt);
-      // A beat before the card takes input, so a bark held through dusk
-      // does not skip the day's choice.
-      if ((this.summaryT += dt) < 0.6) {
-        this.input.clearQueue();
-        return;
+      // The cart for the day's goods (a press skips it), then a beat before
+      // the card takes input, so a bark held through dusk does not skip the
+      // day's choice.
+      if (summaryHold(this, dt, 0.6)) return;
+      if (this.input.pressed('build')) {
+        if (this.net?.role !== 'host' || this.net.canBuild(0)) this.fadeTo(() => this.enterBuild(true));
+      } else if (this.input.pressed('confirm') || this.input.pressed('bark')) {
+        // Co-op: the next day waits for friends (or a second press).
+        if (this.net?.role !== 'host' || this.net.nextDay(this)) this.fadeTo(() => this.startDay());
       }
-      if (this.input.pressed('build')) this.fadeTo(() => this.enterBuild(true));
-      else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.fadeTo(() => this.startDay());
       return;
     }
     if (this.mode === 'ledger') {
@@ -541,28 +595,25 @@ export class Game {
       return;
     }
     if (this.mode === 'build') {
-      this.fx.update(dt);
-      this.life.update(this, dt);
-      this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
+      if (this.friendsHere() && !this.buildFromSummary) this.stepWorld(dt, false, false); // friends play on
+      else {
+        this.fx.update(dt);
+        this.life.update(this, dt);
+        this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
+      }
+      if (this.mode !== 'build') return; // the day ended while building
       if (this.build.update(this, dt) === 'exit') {
         if (this.buildFromSummary) this.fadeTo(() => this.exitBuild());
         else this.exitBuild();
       }
-      // Keep the cursor in view without chasing it, so a tap or a mouse
-      // pointer stays put; the view pans when the cursor nears an edge.
-      const k = damp(6, dt);
-      const { W, H } = this.screen;
-      const bx = (this.build.cx + 0.5) * 8, by = (this.build.cy + 0.5) * 8;
-      const mx = Math.min(W / 2 - 4, 28), mt = Math.min(H / 2 - 4, 40), mb = Math.min(H / 2 - 4, 76);
-      this.cam.x += (clamp(this.cam.x, bx - W / 2 + mx, bx + W / 2 - mx) - this.cam.x) * k;
-      this.cam.y += (clamp(this.cam.y, by - H / 2 + mb, by + H / 2 - mt) - this.cam.y) * k;
-      this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
-      this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+      this.buildCamera(dt);
       return;
     }
     if (this.trials.result) {
-      // Trial result card: everything waits until it is closed.
-      this.fx.update(dt);
+      // Trial result card: everything waits until it is closed (with
+      // friends here the world goes on behind it).
+      if (this.friendsHere()) this.stepWorld(dt, false);
+      else this.fx.update(dt);
       // A beat before it takes input, so a press at the end of the run
       // does not skip the judge's card.
       if (resultAge(this, dt) < RESULT_READY) this.input.clearQueue();
@@ -600,7 +651,7 @@ export class Game {
 
   // The world going on: the clock, the night, the dogs, the herd, the ranch.
   // `control` is false while a co-op host is in a menu: their dog stands.
-  private stepWorld(dt: number, control: boolean) {
+  private stepWorld(dt: number, control: boolean, camera = true) {
     this.updateRest(dt);
     this.weather.update(dt);
     this.season.update(dt);
@@ -633,6 +684,7 @@ export class Game {
     this.dog.update(dt, this.input, this.map, this.fx, control);
     for (const ev of this.dog.events) this.onDogEvent(ev);
     this.dog.events.length = 0;
+    this.loot.update(this, dt); // scent, and the dog staying put while it digs
     updateHerd(this.animals, this.herdCtx(), dt);
     const night = this.day.phase === 'night';
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y, this.coop)) this.onRanchEvent(ev);
@@ -655,7 +707,7 @@ export class Game {
     this.folk.update(this, dt);
     this.favour.update(this, dt);
     this.achievements.update(this, dt);
-    this.updateCamera(dt);
+    if (camera) this.updateCamera(dt);
     this.updateTips(dt);
   }
 
@@ -843,6 +895,7 @@ export class Game {
       }
     } else {
       if (jobsAction(this)) return; // E at the trial post or a pen gate
+      if (this.loot.dig(this)) return; // E on a scent: dig (or bury a bone)
       for (const p of this.predators) {
         const dx = p.x - d.x, dy = p.y - d.y, dd = Math.hypot(dx, dy);
         if (p.active && dd < 12 && (dx * d.hx + dy * d.hy) / (dd || 1) > 0) p.scare(1.5 * d.stats.nipPower);
@@ -889,8 +942,16 @@ export class Game {
       if (label === 'CALM') this.totals.calmBatches++;
       this.achievements.drive(this, ev.batch, label);
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
+      // A big drove brought in calm pays extra: a twentieth more a head past
+      // five, up to half again at fifteen (stock of your own pays nothing).
+      const fresh = ev.batch.filter((a) => a.deliveryValue > 0).length;
+      const bonus = label === 'CALM' && fresh >= DROVE_FROM ? Math.round(value * Math.min(0.5, 0.05 * (fresh - DROVE_FROM + 1))) : 0;
+      if (bonus) {
+        this.earn(bonus);
+        this.stats.deliveredValue += bonus;
+      }
       const sp = ev.batch[0].sp;
-      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}`, 2.8);
+      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}${bonus ? ` +${bonus}$ DROVE` : ''}`, 2.8);
       this.feel.moment = 1.8;
       this.feel.kick(0, 2, 0.16);
       buzz(this.input.touchMode, [18, 50, 36]);
@@ -1017,7 +1078,7 @@ export class Game {
     if (this.tip) return this.tip.text;
     if (this.net) {
       const h = this.net.hint(this);
-      if (h || this.net.role === 'guest') return h;
+      if (h) return h;
     }
     const jh = jobsHint(this);
     if (jh) return jh;
@@ -1048,20 +1109,60 @@ export class Game {
     return best;
   }
 
+  private camGate: { x: number; y: number } | null = null;
+  private camGateT = 0;
+
+  // The gate a flock can go in: an open pen that takes them, a buyer's
+  // yard, a project's fold, the trial pen; the nearest within reach.
+  private flockGate(gr: Group): { x: number; y: number } | null {
+    const a = gr.members[0];
+    let best: { x: number; y: number } | null = null, bd = 240;
+    const consider = (x: number, y: number) => {
+      const dd = Math.hypot(x - gr.x, y - gr.y);
+      if (dd < bd) { bd = dd; best = { x, y }; }
+    };
+    for (const p of this.ranch.pens) if (p.open && !p.full && p.accepts(a)) { const gp = p.gatePoint(0); consider(gp.x, gp.y); }
+    for (const g of [...jobGates(this), ...this.projects.gates()]) if (g.open && g.accepts(a)) consider(g.x, g.y);
+    return best;
+  }
+
   updateCamera(dt: number) {
     const d = this.dog;
     let tx = d.x + d.vx * 0.35;
     let ty = d.y + d.vy * 0.35;
+    const { W, H } = this.screen;
+    const band = this.thumbBand();
     // Lean towards the flock you are working so you can see both (on a
     // trial outrun, from the post).
     const gr = this.nearestGroup(this.trials.run ? 200 : 110);
     if (gr) {
       tx += (gr.x - d.x) * 0.3;
       ty += (gr.y - d.y) * 0.3;
+      // Frame the dog, the flock and the gate they can go in together when
+      // they fit in the field (above the thumbs on a phone); whatever the
+      // lean, keep the dog and the whole flock in view when they fit.
+      if ((this.camGateT -= dt) <= 0) {
+        this.camGate = this.flockGate(gr);
+        this.camGateT = 0.3;
+      }
+      let r = 0;
+      for (const a of gr.members) r = Math.max(r, Math.abs(a.x - gr.x), Math.abs(a.y - gr.y));
+      let x0 = Math.min(d.x - 10, gr.x - r - 8), x1 = Math.max(d.x + 10, gr.x + r + 8);
+      let y0 = Math.min(d.y - 14, gr.y - r - 12), y1 = Math.max(d.y + 6, gr.y + r + 6);
+      const fw = W - 16, fh = H - band - 24;
+      const g = this.camGate;
+      if (g) {
+        const gx0 = Math.min(x0, g.x - 12), gx1 = Math.max(x1, g.x + 12), gy0 = Math.min(y0, g.y - 16), gy1 = Math.max(y1, g.y + 8);
+        if (gx1 - gx0 <= fw && gy1 - gy0 <= fh) {
+          [x0, x1, y0, y1] = [gx0, gx1, gy0, gy1];
+          tx = (x0 + x1) / 2;
+          ty = (y0 + y1) / 2;
+        }
+      }
+      if (x1 - x0 <= fw) tx = clamp(tx, x1 - fw / 2, x0 + fw / 2);
+      if (y1 - y0 <= fh) ty = clamp(ty, y1 - fh / 2, y0 + fh / 2);
     }
     // On a phone held upright, frame the dog in the field above the thumbs.
-    const { W, H } = this.screen;
-    const band = this.thumbBand();
     if (H > W) ty += band / 2;
     const k = damp(4, dt);
     this.cam.x += (tx - this.cam.x) * k;
@@ -1089,7 +1190,7 @@ export class Game {
 
   // Trial course, buyers' yards and carts, hidden places, valley projects, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...projectDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...projectDrawables(this, g), ...lootDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.

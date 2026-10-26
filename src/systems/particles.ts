@@ -1,8 +1,8 @@
 import { C } from '../palette';
 import { BAYER4, rect } from '../gfx/draw';
 import { quality } from '../gfx/quality';
-import { text } from '../gfx/font';
-import { drawSpr, tint, type Sprite } from '../gfx/sprite';
+import { text, textWidth } from '../gfx/font';
+import { drawSpr, sprW, tint, type Sprite } from '../gfx/sprite';
 
 const shadows = new Map<Sprite, Sprite>();
 const shadowOf = (s: Sprite) => {
@@ -11,9 +11,10 @@ const shadowOf = (s: Sprite) => {
   return t;
 };
 import { fxSprites } from '../art/fx';
+import { goodIcon } from '../art/goods';
 
 // 'anim' plays a sprite strip once over its life (puffs, the bark burst).
-export type PKind = 'anim' | 'ring' | 'float' | 'spark' | 'splash' | 'heart' | 'feather' | 'ripple' | 'clod';
+export type PKind = 'anim' | 'ring' | 'float' | 'spark' | 'splash' | 'heart' | 'feather' | 'ripple' | 'clod' | 'good';
 
 // What the ground is like underfoot: what a footfall throws up.
 export type Ground = 'dry' | 'wet' | 'snow';
@@ -94,6 +95,12 @@ export class Particles {
     this.add({ kind: 'ring', x, y, size: radius, max, color, dash });
   }
 
+  // A good just made: its icon and "+1" rising over the animal (`kind` is
+  // the species that made it). Friends see it too.
+  good(x: number, y: number, kind: string) {
+    this.add({ kind: 'good', x, y, vy: -12, max: 1.3, text: kind });
+  }
+
   float(x: number, y: number, s: string, color: string = C.butter, max = 1.4) {
     this.add({ kind: 'float', x, y, vy: -14, text: s, color, max });
   }
@@ -122,7 +129,7 @@ export class Particles {
           p.vy = p.vy * 0.9 - 4 * dt;
         }
       }
-      if (p.kind === 'float') p.vy *= 0.94;
+      if (p.kind === 'float' || p.kind === 'good') p.vy *= 0.94;
       if (p.kind === 'splash' || p.kind === 'clod') p.vy += 90 * dt;
       if (p.kind === 'heart') p.vy = -10;
     }
@@ -179,6 +186,18 @@ export class Particles {
         case 'heart':
           text(g, '@', p.x, p.y, p.color, { align: 'center' });
           break;
+        case 'good': {
+          // The good's icon and a buttercup "+1", hopping up as it appears
+          // and blinking out at the end.
+          if (k < 0.15 && Math.floor(p.life * 20) % 2) break;
+          const s = goodIcon(p.text ?? '');
+          const hop = p.max - p.life < 0.12 ? -1 : 0;
+          const iw = s ? Math.ceil(sprW(s)) + 1 : 0;
+          const x0 = Math.round(p.x - (iw + textWidth('+1')) / 2), y = Math.round(p.y) + hop;
+          if (s) drawSpr(g, s, x0 + sprW(s) / 2, y + 1);
+          text(g, '+1', x0 + iw, y - 4, C.butter, { shadow: C.plum });
+          break;
+        }
       }
     }
   }

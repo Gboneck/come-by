@@ -1,5 +1,6 @@
 import { C } from '../palette';
 import { px, rect } from '../gfx/draw';
+import { PX, fine } from '../gfx/screen';
 import { text, textWidth } from '../gfx/font';
 import type { Drawable } from './buildings';
 import { penDrawables } from './paddock';
@@ -12,21 +13,29 @@ import { isFairDay } from '../systems/seasonal';
 
 const ROSETTE = [C.butter, C.wool, C.teal, C.sage];
 
+// A rosette on the fine grid: a ring of ribbon round a plum button, two
+// tails hanging below.
 function rosette(g: CanvasRenderingContext2D, x: number, y: number, col: string) {
-  rect(g, x - 1, y - 1, 3, 3, col);
-  px(g, x, y, C.plum);
-  px(g, x - 1, y + 2, col);
-  px(g, x + 1, y + 2, col);
-  px(g, x - 1, y + 3, col);
-  px(g, x + 1, y + 3, col);
+  fine(g, (fg) => {
+    const X = x * PX, Y = y * PX;
+    rect(fg, X - 2, Y - 3, 5, 7, col);
+    rect(fg, X - 3, Y - 2, 7, 5, col);
+    rect(fg, X - 1, Y - 1, 3, 3, C.plum);
+    px(fg, X, Y, C.wool);
+    rect(fg, X - 2, Y + 4, 2, 4, col);
+    rect(fg, X + 1, Y + 4, 2, 4, col);
+    px(fg, X - 2, Y + 8, col);
+    px(fg, X + 2, Y + 8, col);
+  });
 }
 
 function pennant(g: CanvasRenderingContext2D, x: number, y: number, col: string, t: number) {
-  rect(g, x, y - 12, 1, 12, C.plum);
-  const flap = Math.floor(t * 3 + x) % 2;
-  rect(g, x + 1, y - 12, 3, 1, col);
-  rect(g, x + 1, y - 11, 2 + flap, 1, col);
-  px(g, x + 1, y - 10, col);
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    rect(fg, X, B - 24, 2, 24, C.plum);
+    const flap = Math.floor(t * 3 + x) % 2;
+    for (let r = 0; r < 6; r++) rect(fg, X + 2, B - 24 + r, 7 + flap - r, 1, col);
+  });
 }
 
 export function fairDrawables(game: Game, g: CanvasRenderingContext2D): Drawable[] {

@@ -71,10 +71,11 @@ export class Animal {
   trial = false; // the Show Ground's own flock, only for a trial run
   home = false; // has been penned before: bringing it back pays nothing
   // Seasons: lambs and their mothers, shearing, the fair.
-  young = false; // a lamb, at its mother's side until autumn
+  young = false; // a lamb (or duckling, kid, calf, foal), at its mother's side until autumn
   mother: Animal | null = null;
-  lamb: Animal | null = null; // a ewe's lamb (the first, if twins)
-  lambedYear = 0;
+  lamb: Animal | null = null; // a mother's young (the first, if more than one)
+  lambedYear = 0; // the year she last bore young
+  eveStress = 0; // stress at the end of the last day (whether she breeds)
   // The valley (src/systems/valley.ts, farmwork.ts): a log hitched behind a
   // cow for the old bridge, and the day she was last milked.
   load: 'log' | null = null;
@@ -123,9 +124,10 @@ export class Animal {
   }
 }
 
-// Room an animal takes in a pen, and what it is worth.
-export const spaceOf = (a: Animal) => (a.young ? 1 : a.sp.space);
-export const valueOf = (a: Animal) => (a.young ? 2 : a.rare ? a.sp.value * 2 : a.sp.value);
+// Room an animal takes in a pen, and what it is worth. Young take a place
+// (a calf or foal two) and are worth two-fifths of a grown one.
+export const spaceOf = (a: Animal) => (a.young ? Math.ceil(a.sp.space / 2) : a.sp.space);
+export const valueOf = (a: Animal) => (a.young ? Math.max(1, Math.round(a.sp.value * 0.4)) : a.rare ? a.sp.value * 2 : a.sp.value);
 
 export interface HerdCtx {
   map: WorldMap;

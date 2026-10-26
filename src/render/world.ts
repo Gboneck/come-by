@@ -1,5 +1,5 @@
 import { C } from '../palette';
-import { ellipse, ring } from '../gfx/draw';
+import { ring } from '../gfx/draw';
 import type { Game } from '../game';
 import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from './animals';
 import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
@@ -8,17 +8,21 @@ import { haystackDrawable } from '../art/hay';
 import { agilityDrawables, dairyDrawables, shedDrawables } from '../art/farm2';
 import { valleyLights } from '../art/valley';
 import { penDrawables } from '../art/paddock';
+import type { Look } from '../world/fineground';
 import { farmhouseWindows, windowGlow, barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
-import type { Light } from './night';
+import { hasFogField, setFogField, type Light } from './night';
+import { fogDensity } from '../world/fog';
+import { drawMoonEdges, moon, moonFrame } from '../art/moon';
+import { PX } from '../gfx/screen';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
 import { blueHour, goldenHour, skyDarkness, skySlope, sunShadow } from './sky';
 import { drawShafts } from './light';
 import { quality } from '../gfx/quality';
 import { tierOf } from '../systems/progression';
-import { TS } from '../world/map';
+import { TS, WORLD_H, WORLD_W } from '../world/map';
 import { drawSway, drawWater } from './sway';
 import { lightLook, setSeasonLook } from '../art/seasonlook';
-import { drawDog } from './dogpose';
+import { drawDog, drawDogShadow } from './dogpose';
 import { yardFire } from '../art/course';
 import { favourDrawables } from '../art/favour';
 import { trophyDrawables } from '../art/trophies';
@@ -43,6 +47,21 @@ function sunShift(game: Game): number {
 const sleeping = (game: Game) => game.dog.lying && game.rest > 1.3;
 import { settings } from '../ui/settings';
 
+// The look the fine ground is painted with, in small steps: the season,
+// how wet the ground is, how golden the light.
+function groundLook(game: Game): Look {
+  const q = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 4);
+  const fair = Math.max(0, 1 - game.weather.rain * 3) * Math.max(0, 1 - game.weather.fog * 2);
+  return {
+    snow: q(game.season.snow),
+    leaves: q(game.season.leaves),
+    bloom: q(game.season.bloom),
+    // Under snow the wet doesn't show, so it never repaints the ground.
+    wet: quality.shade && game.season.snow < 0.4 ? Math.round(Math.min(1, game.life.wx.wet) * 2) : 0,
+    golden: quality.shade ? Math.round(lightLook.golden * fair * 3) : 0,
+  };
+}
+
 export interface View {
   ox: number;
   oy: number;
@@ -57,17 +76,22 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // The season: recoloured layers (rebuilt only when a step changes) and
   // the look that roofs, fences and decor read as they draw.
   setSeasonLook(game.season);
-  game.life.seasons.sync(game.baked, game.season);
+  // Moonlit edges gather as the art draws (art/moon.ts).
+  const darkNow = skyDarkness(game.day);
+  moonFrame(darkNow > 0.35 ? Math.min(1, (darkNow - 0.35) / 0.4) : 0, 0);
   // The ground with the trees' shadows thrown by the sun (none at night);
   // buildings read the same light as they draw.
   const sh = sunShadow(game.day);
   lightLook.dx = sh.dx;
   lightLook.dy = sh.dy;
   lightLook.golden = goldenHour(game.day);
-  const ground = game.life.lit.picture(game.baked, game.life.seasons.ground ?? game.baked.ground, sh.dx, sh.dy, game.day.phase !== 'night');
-  g.drawImage(ground, ox, oy, W, H, 0, 0, W, H);
-  game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
-  drawWater(g, game.baked.water, ox, oy, W, H, game.life.vt);
+  // The fine ground and canopy, painted in chunks with this look.
+  game.life.lit.sync(game.baked, groundLook(game), sh.dx, sh.dy, game.day.phase !== 'night', ox, oy, W, H, game.t, true);
+  game.life.lit.drawGround(g, game.baked, ox, oy, W, H);
+  g.save();
+  g.translate(-ox, -oy);
+  drawWater(g, game.baked.water, game.baked.fine, game.baked.waterDist, ox, oy, W, H, game.life.vt);
+  g.restore();
 
   g.save();
   g.translate(-ox, -oy);
@@ -79,7 +103,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // east by evening (a time-lapse while resting shows them sweep round).
   const sun = sunShift(game);
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a, sun);
-  for (const d of [game.dog, ...game.helpers, ...game.coop]) if (inView(d.x, d.y)) ellipse(g, d.x - 1 + sun, d.y + 2, d.face === 'l' || d.face === 'r' ? 5 : 3, 1, C.sage);
+  for (const d of [game.dog, ...game.helpers, ...game.coop]) if (inView(d.x, d.y)) drawDogShadow(g, d, sun);
   for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
   game.folk.drawShadows(g);
   game.fx.drawLow(g);
@@ -126,7 +150,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   if (game.mode === 'build') game.build.drawWorld(game, g);
   g.restore();
 
-  g.drawImage(game.life.seasons.canopy ?? game.baked.canopy, ox, oy, W, H, 0, 0, W, H);
+  game.life.lit.drawCanopy(g, game.baked, ox, oy, W, H);
   // Low sun slanting through the treetops (light comes against the shadow).
   if (quality.fx >= 1 && game.weather.rain < 0.2 && game.weather.fog < 0.4) drawShafts(g, game.baked, ox, oy, W, H, sh.dx, sh.dy, lightLook.golden * 1.4, game.life.vt);
 
@@ -144,23 +168,59 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   if (fogged && dark <= 0) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
   if (dark > 0) {
     const fl = (i: number) => Math.sin(game.t * 7.3 + i * 2.1) * 0.8 + Math.sin(game.t * 13.1 + i) * 0.6;
-    lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 44 });
+    lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 50, soft: 1 }); // the dog's own glow: all falloff
     for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
     for (const o of game.coop) lights.push({ x: o.x - ox, y: o.y - oy, r: 36 });
     lights.push(...game.folk.lights(ox, oy));
     lights.push(...valleyLights(game, ox, oy)); // the village's windows and forge
     const f = game.ranch.farmhouse;
-    if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
+    if (f) {
+      // The farmhouse lit from within: its front graded from the windows out
+      // to the corners (the panes themselves are drawn above the dark, with
+      // windowGlow), light spilling from the ground floor's windows onto the
+      // yard, the door's pool.
+      lights.push({ x: f.cx - ox, y: f.y1 - 8 - oy, r: (f.x1 - f.x0) * 0.58 + fl(0), power: 0.8, soft: 0.7 });
+      for (const [wx, wy, ww] of farmhouseWindows(f)) if (wy >= f.y1 - 9) lights.push({ x: wx + ww / 2 - ox, y: f.y1 + 5 - oy, r: 16, power: 0.7, soft: 0.95 });
+      lights.push({ x: f.cx - ox, y: f.y1 + 5 - oy, r: 20 + fl(9), power: 0.85, soft: 0.85 });
+    }
     decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1), warm: true }));
-    for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
+    // The barn: its lit doorway spills a long pool out onto the yard.
+    for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 4 - oy, r: (b.level >= 2 ? 40 : 34) + fl(b.id), power: 0.85, soft: 0.85 });
     for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2, warm: true }); }
   }
-  // Morning mist, lying in drifts until the sun gets up (fair days only).
+  // (Round four's morning mist reused the fog dither; at double density that
+  // laid a grid of dots over every morning, so it is gone.)
   const sk = game.life.wx.sky(game, dark);
-  const f = game.day.frac, w = game.weather;
-  if (quality.shade && game.day.phase === "day" && f < 0.12 && w.rain < 0.1) sk.fog = Math.max(sk.fog ?? 0, 0.18 * (1 - f / 0.12) * (1 - w.wind * 0.7));
   if ((sk.fog ?? 0) > 0.03 && dark <= 0 && !lights.length) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
-  game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk });
+  // The flock catches what light there is: a faint halo round each animal,
+  // so they read as shapes in the dark (the predators' eyes are drawn above).
+  if (dark > 0.2) {
+    let n = 0;
+    for (const a of game.animals) {
+      if (a.gone || a.carried || n >= 48) continue;
+      const sx = a.x - ox, sy = a.y - 3 - oy;
+      if (sx < -12 || sy < -12 || sx > W + 12 || sy > H + 12) continue;
+      lights.push({ x: sx, y: sy, r: 11, power: 0.4, soft: 1 });
+      n++;
+    }
+  }
+  // Fog by place (render/night.ts), worked out once from the land.
+  if ((sk.fog ?? 0) > 0.03 && !hasFogField()) setFogField(WORLD_W, WORLD_H, fogDensity(game.baked)); // world/fog.ts: water, hollows, forest feet
+  // Lightning in the dark shows the land for a beat: the dark lifts with the
+  // flash and only a thin veil of wool and buttercup is left over it (then
+  // the afterglow), rather than a sheet of white. By day it flashes as ever.
+  const bolt = sk.flash ?? 0;
+  const inDark = dark > 0.25;
+  const reveal = !inDark ? 0 : bolt >= 8 ? 0.85 : bolt >= 3 ? 0.5 : bolt > 0 ? 0.2 : 0;
+  const veil = !inDark ? bolt : bolt >= 8 ? 3 : bolt >= 3 ? 1 : 0;
+  game.night.draw(g, W, H, ox, oy, { dark: dark * (1 - reveal), lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk, flash: veil });
+  // Moonlight on the treetops, roofs and rails, showing through the dark
+  // (and, for a beat, everything a lightning flash shows up).
+  if (moon.on > 0) {
+    moon.flash = bolt >= 3 ? 1 : 0;
+    game.life.lit.drawMoon(g, ox, oy, W, H);
+    drawMoonEdges(g, ox, oy, PX);
+  }
   game.life.wx.drawAir(g, game, W, H, dark > 0.25);
   if (sleeping(game)) {
     g.save();

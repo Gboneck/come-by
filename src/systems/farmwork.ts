@@ -49,6 +49,7 @@ interface Run {
   touched: Set<number>;
   lx: number;
   ly: number;
+  who?: number; // co-op: the player whose dog runs it (0 or absent: this screen's)
 }
 const STEPS = 9;
 
@@ -159,7 +160,7 @@ export function agilityPostNear(g: Game): AgilityYard | null {
 export function startAgility(g: Game): boolean {
   const y = agilityPostNear(g);
   if (!y || g.farmwork.run || g.day.phase === 'night') return false;
-  g.farmwork.run = { yard: y, t: 0, step: 0, faults: 0, touched: new Set(), lx: g.dog.x, ly: g.dog.y };
+  g.farmwork.run = { yard: y, t: 0, step: 0, faults: 0, touched: new Set(), lx: g.dog.x, ly: g.dog.y, who: g.actor };
   g.farmwork.result = null;
   g.showBanner('GO!', 'JUMP, WEAVE, JUMP, TUNNEL, JUMP, HOME', 1.6);
   g.audio?.play('whistle');
@@ -181,7 +182,7 @@ function crossed(x0: number, y0: number, x1: number, y1: number, a: { x: number;
 function agility(g: Game, dt: number) {
   const r = g.farmwork.run;
   if (!r) return;
-  const d = g.dog, y = r.yard;
+  const d = g.dogOf(r.who ?? 0), y = r.yard;
   r.t += dt;
   // Out of the yard, or far too long: the run is off.
   if (d.x < y.x0 - 4 || d.x > y.x1 + 4 || d.y < y.y0 - 4 || d.y > y.y1 + 8 || r.t > 40) {

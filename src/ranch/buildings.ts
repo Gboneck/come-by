@@ -79,12 +79,12 @@ export function getsAlong(a: SpeciesId, b: SpeciesId) {
 }
 
 // Room in a paddock scales with its area (the old 8x7 pen holds 16 space),
-// and a big one packs a little more a tile, as less of it is lost to the
-// fence: up to half again at four times the old pen's area (what the old
-// pen upgrade gave). An old upgraded (sturdy) pen keeps its half again.
+// and a big one packs more a tile, as less of it is lost to the fence: up
+// to three-quarters again at four times the old pen's area (a big herd
+// looks like one). An old upgraded (sturdy) pen keeps its half again.
 export function paddockCapacity(w: number, h: number, level = 1) {
   const a = w * h, base = PEN_W * PEN_H;
-  const big = 1 + 0.5 * Math.max(0, Math.min(1, (a - base) / (3 * base)));
+  const big = 1 + 0.75 * Math.max(0, Math.min(1, (a - base) / (3 * base)));
   return Math.round(((a * 16) / base) * big * (level >= 2 ? 1.5 : 1));
 }
 

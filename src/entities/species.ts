@@ -34,6 +34,8 @@ export interface Species {
   goodValue: number;
   spawnGroup: [number, number];
   coats: number;
+  young: string; // what its young are called
+  youngPlural: string;
   splitter?: boolean; // stress breaks the group up instead of bunching it
   momentum?: number; // seconds a push keeps them plodding on
 }
@@ -47,6 +49,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     stressGain: 0.22, stressDecay: 0.12, barkMul: 0.9, barkStress: 0.5, nipMul: 0.6, nipStress: 0.35,
     stubborn: 0, social: 0.03, wander: 0.08, climbs: false, balksWater: false,
     space: 1, value: 2, good: 'Eggs', goodEvery: 80, goodValue: 1, spawnGroup: [5, 7], coats: 1,
+    young: 'Duckling', youngPlural: 'Ducklings',
   },
   // The classic flock.
   sheep: {
@@ -56,6 +59,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     stressGain: 0.38, stressDecay: 0.09, barkMul: 1, barkStress: 0.7, nipMul: 0.8, nipStress: 0.3,
     stubborn: 0, social: 0.04, wander: 0.12, climbs: false, balksWater: false,
     space: 2, value: 5, good: 'Wool', goodEvery: 230, goodValue: 4, spawnGroup: [6, 9], coats: 1,
+    young: 'Lamb', youngPlural: 'Lambs',
   },
   // Independent; they split up and climb rocks the dog cannot.
   goat: {
@@ -65,6 +69,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     stressGain: 0.36, stressDecay: 0.1, barkMul: 1, barkStress: 0.7, nipMul: 0.9, nipStress: 0.25,
     stubborn: 0.1, social: 0, wander: 0.15, climbs: true, balksWater: false,
     space: 2, value: 8, good: 'Cheese', goodEvery: 220, goodValue: 6, spawnGroup: [5, 7], coats: 2, splitter: true,
+    young: 'Kid', youngPlural: 'Kids',
   },
   // Heavy and stubborn: only close pressure or a nip really moves them.
   cow: {
@@ -74,6 +79,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     stressGain: 0.2, stressDecay: 0.08, barkMul: 0.35, barkStress: 0.35, nipMul: 1.6, nipStress: 0.06,
     stubborn: 0.45, social: 0.02, wander: 0.1, climbs: false, balksWater: true,
     space: 4, value: 14, good: 'Milk', goodEvery: 190, goodValue: 9, spawnGroup: [4, 6], coats: 2, momentum: 1.6,
+    young: 'Calf', youngPlural: 'Calves',
   },
   // Fast and skittish with huge flight zones: the endgame.
   pony: {
@@ -83,6 +89,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     stressGain: 0.42, stressDecay: 0.07, barkMul: 1.3, barkStress: 0.9, nipMul: 0.8, nipStress: 0.4,
     stubborn: 0, social: 0.05, wander: 0.15, climbs: false, balksWater: false,
     space: 4, value: 30, good: null, goodEvery: 0, goodValue: 0, spawnGroup: [4, 6], coats: 3,
+    young: 'Foal', youngPlural: 'Foals',
   },
 };
 

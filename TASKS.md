@@ -1029,6 +1029,536 @@ Before → after, in plain words:
       guest badges and shared favour; savetest, ordertest, daytest pass;
       `tune.mjs --seed=7` is identical to main for all five species
 
+## M34 More animals: herds that grow (gameplay, round five)
+- [x] Every kind breeds in its season (`BREED` in `src/systems/seasonal.ts`):
+      ducks, sheep, goats and cattle on spring's first two mornings, ponies
+      in summer's, from tier 2. Only calm (at the day's end and in the
+      morning), fed stock with another of its kind in the paddock, and only
+      as many as the paddock has room for once they are grown: a full
+      paddock breeds nothing (a tip says so, once). Ducks hatch 2-3, goats
+      often twins, cattle and ponies one. Floats over each paddock say what
+      came; the young grow up in autumn and the herd is that much bigger
+- [x] Ducklings, kids, calves and foals at their mothers' sides, as lambs
+      are (the same bond: a mother turns back for her young, both fret
+      apart), with their own calls (the audio's young-and-mother calls now
+      key on the young, in each kind's voice, pitched up). Characters draws
+      them at 2x (`youngSprites`, characters-r5); on this branch alone they
+      draw as lambs
+- [x] Wild flocks grow as the valley does: a sixth bigger for each tier a
+      region has been open (up to two-thirds again), a fourth flock after
+      three tiers, and wild young at foot in each kind's season (from tier
+      2: day one's ducks come alone)
+- [x] Big droves (`src/systems/herds.ts`): from tier 3, now and then (not
+      in winter, not on fair day, never two mornings running) one flock
+      two and a half times the size comes into an older region, with a
+      banner saying where
+- [x] Buying stock: the sale yard has a lot each morning from tier 2 (one
+      kind in turn, a few head at four times what one pays delivered):
+      stand by one and NIP at the fence, then walk it home. The fair sets
+      out pairs of the smaller rare breeds (a pair breeds rare young)
+- [x] Goods that can be seen are UI's (piles per kind along the back fence,
+      a "+1" particle, the sale's cart, ui-r5); for them each paddock's
+      `goodsBy` now reaches co-op guests (shared.ts 'goodsBy'), so a mixed
+      paddock's piles show on a guest's screen too
+- [x] Paddock density: big paddocks now pack up to three-quarters again a
+      tile at four times the old pen's area (was half again); an 8x7 still
+      holds 16. A 16x12 holds 44 sheep and looks like a herd with room to
+      move. More land in use was what slowed the bot most
+- [x] `scripts/breedtest.mjs` (27 checks, 28 once the young's sprites are
+      merged); seasontest updated (room for
+      lambs, the new flock sizes, the fair's pairs); the pace bot buys the
+      lot when it has coin and room, and pacetest's year table counts the
+      young, stock bought and the herd
+
+**Herding is unchanged**: `node scripts/tune.mjs <species> --seed=1` gives
+identical results before and after for all five species. (Wild young start
+at tier 2 partly so day one's ducks, and the tune, stay exactly as they
+were.)
+
+**Pace** (`node scripts/pacetest.mjs`, six seeds; before is test/round-5):
+the valley thrives on days 8, 7, 12, 17, 6, 6 before (mean 9.3) and 7, 11,
+11, 7, 11, 8 after (mean 9.2): the same on average, and the worst seed
+went from 17 days to 11. Tier 4 takes longer (cattle in bigger groups, a
+big drove to bring in, more to house) and tier 5 is quicker (more stock
+about for the 50 penned):
+
+| tier | days before | days after | penned at tier end, before | after | enclosures, before | after | earned per day $, before | after |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2.0 | 2.0 | 27 | 27 | 3.3 | 3.5 | 126 | 125 |
+| 2 | 1.0 | 1.0 | 36 | 35 | 3.5 | 3.5 | 403 | 394 |
+| 3 | 1.0 | 1.0 | 43 | 42 | 4.9 | 4.7 | 551 | 466 |
+| 4 | 2.0 | 3.3 | 52 | 60 | 5.5 | 5.5 | 631 | 648 |
+| 5 | 3.4 | 1.8 | 61 | 64 | 5.7 | 5.8 | 981 | 1278 |
+
+The first pass was slower (mean 10.8, one seed 17 days): the bot spent
+whole drives on droves it had no room for and ran out of land at tier 5.
+Big paddocks now pack more a tile, and the bot leaves a drove far bigger
+than its room for another day.
+
+**A year** (`--year --days=22`, three seeds), after:
+
+| season | earned $ | spent $ | young born | stock bought | penned at end | wild stock about |
+|---|---|---|---|---|---|---|
+| y1 spring | 1138 | 984 | 0 | 1.3 | 41 | 35 |
+| y1 summer | 3115 | 432 | 0 | 2.7 | 60 | 135 |
+| y1 autumn | 4359 | 547 | 0 | 0 | 61 | 190 |
+| y1 winter | 3665 | 80 | 0 | 0 | 66 | 158 |
+| y2 spring | 4860 | 6 | 3.0 | 0 | 75 | 232 |
+| y2 summer | 2605 | 0 | 0 | 0 | 79 | 265 |
+
+Before, the same seeds saw 103 to 150 wild stock about by year two (now
+135 to 265) and 22 lambs in year two's spring. Those lambs came with no
+rule about room; now the bot keeps every paddock full, so its herds rarely
+breed (3 young). A player who leaves room in a paddock sees it grow; a full
+paddock gets the tip. The bot ends the year with 79 penned (89 before):
+land, not stock, is what limits it.
+
+**Phone frame work** (`node scripts/perftest.mjs --only=day,worst`, the
+tier-5 fixture with today's bigger wild flocks): day 11.2 to 13.0ms and
+worst 14.9 to 15.7ms at 4x CPU throttle; 17.8 to 20.8 and 22.4 to 24.6ms
+at 6x. The cost is the simulation of the extra wild animals; I left it
+alone rather than risk changing how they herd.
+## M35 Characters at double density (round five)
+Before: every living thing was drawn at world scale, a pixel to a world
+pixel, so faces were a dot or two, flecks were single scattered pixels
+(noise at a glance), and legs were one pixel thick. After, on the
+double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
+`spr2` in src/art/hd.ts), at the same size in the world:
+- [x] The dog, hand-drawn in fine pixels in all five views and every pose
+      from round four (trot, gallop, skid, bark, pant, proud, watching,
+      lying, settling, the idles): pointed ears, the mask round each eye
+      with a glint, the pale muzzle and nose, an open mouth for the bark
+      and the pant, the bandana with its fold and its point at the chest,
+      flecks in small clusters, a saddle over the shoulders, jointed legs
+      two fine pixels wide with paws, far legs drawn behind the near ones
+- [x] Customization in letters (dressFine): mask both/one/none, flecks
+      light/classic/heavy, saddle, tail tip, bandana/neckerchief/collar
+      reach every fine frame; the soaked twin darkens the flecks
+- [x] Sniffing and digging for the treasure hunt: `dog.sniff` (0..1) and
+      `dog.dig` (seconds left) drawn as a nose-down trot and stand, and a
+      dig (forepaws scraping in turn, rump up, a look into the hole) that
+      ends in a shake-off
+- [x] The sleeping curl in fine pixels with the player's own markings;
+      the z's, drips, wading line, ripples and wakes in fine pixels;
+      shadows as smooth fine ellipses that swing with the sun
+- [x] The herd hand-drawn at 2x: sheep in a curled fleece with dark faces
+      and topknots, ducks with a wing line and nostrilled bill, goats with
+      curved horns and a beard, cattle with a blaze, muzzle and tufted
+      tail (piebald and Highland coats drawn, not swapped), ponies with a
+      stranded mane, forelock and hocks; every coat, the scared twin with
+      the white of the eye showing, startles, gaits and chewing kept
+- [x] New young for every species (Gameplay's breeding): a duckling that
+      swims, a goat kid with horn buds, a stocky calf and a leggy foal,
+      `youngSprites(id, coat, scared)` next to the lamb
+- [x] Townsfolk at 2x: faces with eyes, nose and mouth, hats with crowns,
+      bands and brims, collars, buttons, belts, aprons with ties, skirts
+      with a fold, scarves with tails, boots with a shine, tools and loads
+      in the hand; every pose and season kept; folk placed to the fine
+      pixel so they walk smoothly
+- [x] Coyotes and wolves at 2x: tall ears with an inner ear, long muzzles,
+      teeth in the rush, the wolf's ruff and saddle tufts, a brush tail,
+      legs jointed at hock and wrist through every step; eye glints in
+      fine pixels on the eyes in every pose
+- [x] Checks: typecheck, build, shot, regions; `tune.mjs <species>
+      --seed=7` identical for all five; every sprite scanned (about
+      3,500): all in the palette, red only on the player's dog, nothing
+      half transparent; cooptest 51/52 (the brace's guest flock count
+      fails on platform-r5 alone too); perftest against platform-r5 (see
+      Decisions)
+## M36 UI round five: goods you can see, what to do, readable text
+- [x] Goods you can see: the good's icon and "+1" over the animal that made
+      it (friends see it too); goods wait in the paddock as things, a pile
+      of each kind along the back fence (a nest box of eggs, wool bales,
+      cheese wheels on a board, milk churns; `src/art/goods.ts`); today's
+      goods and what they fetch by the purse ("6 3 2 = 24$ AT DUSK")
+- [x] The day's sale as a moment: before the journal, the buyer's pony cart
+      rolls in, each paddock's goods arc into it, coins fly to the purse as
+      it counts up, the cart rolls on (`src/ui/sale.ts`; a tap skips it)
+- [x] One objective, always (`src/ui/objective.ts`): the goal card says the
+      one thing to do now (the night, a trial, the flock you are driving, the
+      first day, a buyer's order, the tier's goal), an arrow by the dog
+      slides towards it with its name, a marker bobs over it in view, BUILD
+      pulses when building is the answer
+- [x] What's this (`src/ui/whatsthis.ts`): the first time something new is
+      near (a paddock, each kind of building, a buyer's yard, the trial
+      crook, a locked gate, the first goods) a card points at it with what
+      it is for; once each, remembered in the save's tips; others can add
+      things to `THINGS`
+- [x] The first day: a welcome card as a new ranch opens (who you are, what
+      to do, how to move), and the first day's hints are gilt with their
+      step ("FIRST DAY 2/7")
+- [x] Build mode for co-op guests: every change is a `BuildAction` done by
+      `applyBuild`; a guest sets `build.remote` to ask the host and hears
+      back through `build.answer`
+- [x] Readable text on Platform's 2x font (merged platform-r5): prose in
+      sentence case where it is drawn (`src/ui/case.ts`: `sentence()`,
+      `prose()`, `sentenceLines()`; names, keys and pad buttons keep their
+      capitals), headings, buttons and signs still capitals; the journal's
+      header reflowed (the CALM stamp no longer covers the figures); the
+      build and decor bars go to two rows when cells would be too narrow
+      to tap; dense sprites sized in world pixels (sprW/sprH); the goods
+      icons in fine pixels with a plum outline
+- [x] Pad prompts match whatever the case and answer in the case they find
+- [x] Both views (VIEW: CLOSE and WIDE, platform): every layout spaces its
+      lines by `lineHeight()` and sizes one-line boxes to their text
+      (`src/ui/metrics.ts`: `pitch`, `boxH`, `textIn`), so WIDE's stepped-up
+      text fits and CLOSE is unchanged pixel for pixel; touch buttons, HUD
+      buttons, build tabs and the build and decor bars grow by
+      `touchScale()` in WIDE so they keep their size under a finger; uitour
+      has `phonewide` and `deskwide`
+## M37 World and light, round five (double density, less noise)
+From a playtester: "step up the pixels by a factor of two: more detail and
+less noise". The world is now drawn at two fine pixels to a world pixel
+(Platform's PX = 2 pipeline). Before → after, in plain words:
+- [x] Ground: it was speckled all over with random dots of darker grass and
+      single-pixel flowers. Now it's clean meadow with:
+      - grass marks in drifts (little clusters of blades)
+      - broad soft patches of darker grass edged by a short fade
+      - drawn clover, stones and molehills
+      - worn patches that fade out
+      - ferns and mushrooms in the trees' shade
+      - logs and boulders at the forest edge
+- [x] Paths: smooth outlines instead of a ragged pixel jitter, two wheel
+      ruts, a shaded lip, and the grass edge darker on the shady side. In
+      rain the ruts hold water; in snow only the edges stay white.
+- [x] Water:
+      - Shallows are rippled lines instead of a checkerboard.
+      - The north bank shows a dark lip.
+      - Still water mirrors the trees in banded reflections.
+      - The river's highlights are fine dashes, glints and rings drawn each
+        frame (the 16 stored frames are gone).
+      - Lily pads and stepping stones are finer.
+- [x] Trees:
+      - The forest was teal speckled with plum marks. It's now heaped leaf
+        clumps, each lit on its upper right with a dark rim on its lower
+        left, so the edge scallops.
+      - Edge trees are rosettes of clumps.
+      - Pines are crisp tiered cones with boughs catching the light.
+      - Willows trail strands.
+      - Autumn turns whole clumps gold or late green, snow caps their tops,
+        and spring sets little blossoms on them.
+- [x] Rock: faceted tops with cracks, taller faces with strata, scree as
+      drawn pebbles.
+- [x] Seasons and weather are part of the ground's paint now, not a
+      speckle pass:
+      - snow with grass tufts poking through, and ice creeping from banks
+      - fallen leaves gathered under the trees
+      - flowers in drifts in spring
+      - grass tips catching the golden light
+      Rain is thin streaks, snow falls as small stars, puddles have rings.
+- [x] Swaying grass is fine blades with a lighter one beside them, bending
+      at the tip. Flowers are five-pixel heads; reeds are slim with cattails.
+- [x] Buildings, redrawn on the fine grid:
+      - the farmhouse: clapboard, shuttered windows with sills, a panelled
+        door, slate courses, a brick chimney, flower boxes, the porch
+      - barn, kennel, market, windmill, haystack
+      - shearing shed, dairy, agility yard
+      - the whole village
+      - the Show Ground and the buyers' yards
+- [x] Fences and paddocks: slim lit posts, round rails with a shadowed
+      underside, gates, and floors with clean trodden lanes and straw in
+      wisps. Trough, hay rack and shelter are finer.
+- [x] Props: all the ranch decor, the fields' scrub (bramble clumps and
+      thistles instead of noise), the bridge, logs, signs, the title's
+      landscape.
+- [x] Round four's morning mist is gone: at double density its dither laid
+      a grid of dots over every morning.
+- [x] The rest of the valley on the fine grid:
+      - the hidden places: stones rounded by Scale2x, cairns of shaded
+        pebbles, fruit trees and the willow as clump crowns, drystone walls
+        with ragged ruined tops, the hut floor, the wagon, the falls,
+        keepsakes and glints, the woven hurdle
+      - the valley projects: reeds with bulrushes, brambles and scrub, the
+        hayrick, the mended hut, the fold gate, slates, the mill pool and
+        its waterwheel, signboards, loads, the midsummer bonfire
+      - the trophy board, the buyers' yard dressing and gifts, the
+        placeable decor, build mode's road edges and gate arrow
+- [x] Wildlife and small life as fine sprites:
+      - rabbits, deer, crows, frogs, butterflies and birds
+      - smoke as round puffs, breath, falling leaves edge-on then flat,
+        drops, feathers, a fish with a flashing belly, rings, footprints,
+        fireflies with a glow
+- [x] Checks:
+      - typecheck, build and shot: clean
+      - picturetest: ok by day and night (and Platform's chunk test)
+      - regions in every season, weather and time of day
+      - tune --seed=7 identical to base, for sheep and for cattle in a
+        winter storm (the world data keeps its old outlines, see Decisions)
+      - perftest, back to back with platform-r5 (best batch, phone size):
+        | scene | 4x mine | 4x base | 6x mine | 6x base |
+        |---|---|---|---|---|
+        | title | 5.5 ms | 9.5 ms | 10.2 ms | 14.2 ms |
+        | day | 11.3 ms | 13.6 ms | 18.3 ms | 21.5 ms |
+        | worst | 18.4 ms | 18.7 ms | 25.6 ms | 28.8 ms |
+        Faster than base: the per-frame ground-shade and season pixel
+        passes are gone, and the chunks are painted once per moment.
+- [x] Evening, night and fog at double density (from the user: "make sure
+      the graphic density update makes the evening / night and fog
+      improved"):
+      - Golden hour: the low sun is in the west. Tree and building shadows
+        stretch out long to the east, and the trees' and roofs' west sides
+        warm to buttercup.
+      - Blue hour: the dark comes in teal first (Platform's ramp), calm,
+        with no extra marks.
+      - The farmhouse is lit from within. Its front is graded from the
+        windows out to the corners, the lit panes are drawn above the dark
+        with a soft halo each, and light spills from the ground floor onto
+        the yard. Lanterns have graded halos too. The barn's lit door
+        throws a long pool onto the yard.
+      - Moonlight catches the treetops, the roof ridges and the fence
+        rails. It is drawn above the dark, so they read as edges at night.
+      - Fireflies follow the season: all of them on a summer night, two in
+        five as the leaves turn, none in snow. It is chosen when they are
+        drawn, so the random numbers (and the seeded runs) don't change.
+      - Fog lies by place (world/fog.ts):
+        - thick over the river and ponds and along their banks
+        - pooled in the Rolling Hills' hollows
+        - in a band at the forest's feet
+        - thin on the rock tops and in the High Range
+        At night a bank stands in for some of the dark, so fog nights show
+        pale drifting banks instead of looking like any other night (a
+        small change in render/night.ts, Platform's file, sent to them).
+      - Lightning shows the land for a beat: the dark lifts and the moonlit
+        edges go bright under a thin veil. It used to put a sheet of wool
+        dots over everything.
+      - Dig spots for the loot session (art/dig.ts `digSpot`):
+        - turned earth with clods, and a glint when the dog is close
+        - an open hole with a lit far wall, a lip of soil and a heap
+          beside it (white in snow)
+        - a mound with a bone end showing
+        - stones laid in an X
+      - Before/after shots: `node scripts/skyshots.mjs --tag=...`, then
+        `--compare=before,after` (golden, blue, dusk, night, fog, fog
+        night, storm and a lightning strike, on the tier-5 ranch at phone
+        size).
+      - Checks:
+        - typecheck, build and shot: clean
+        - picturetest: ok
+        - tune --seed=7 identical to before, for sheep and for cows in a
+          winter storm
+        - nighttest and weathertest: the same kind of results as before
+          (both unseeded)
+        - perftest against the commit before (best batch; the machine was
+          busy, so numbers moved about 1 ms run to run):
+          | scene | 4x now | 4x before | 6x now | 6x before |
+          |---|---|---|---|---|
+          | title | 5.7 ms | 5.3 ms | 10.1 ms | 9.5 ms |
+          | day | 10.9 ms | 10.5 ms | 17.1 ms | 17.7 ms |
+          | worst | 18.1 ms | 17.0 ms | 27.2 ms | 26.1 ms |
+          | fog night | | | 29.4 ms (median 30.9) | 26.8 ms (median 31.0) |
+          Drawing one night frame over and over costs the same as before
+          (17.45 vs 17.53 ms at 4x). Three costs found on the way were cut:
+          - Moon edges went from a fill per pixel to slices of a
+            pre-dithered strip, with runs merged and only rails and ridges
+            kept.
+          - The lantern halo is a cached picture.
+          - The farmhouse lost its per-pane light holes and the faint glows.
+
+## M38 Double density: fine pixels and a readable font (platform, round five)
+- [x] Two grids: world pixels (the sim, the map, layout, the old art) and
+      fine pixels, PX = 2 to a world pixel. The screen canvas is fine pixels
+      (about 432 on the short side, a whole number of device pixels each);
+      every frame is drawn under scale(PX), so the old art is exact 2x2
+      blocks (`scripts/densitytest.mjs`: the world layer is pixel-for-pixel
+      round four at 2x)
+- [x] Fine drawing: `fine(g, fn)`, `toFine`/`snapFine`, dense sprites
+      (`spr(..., { density: 2 })`, placed on the fine grid), `sprW/sprH/
+      drawSprAt`, fine offscreen canvases (`makeCanvas(w, h, PX)`); the
+      picture cache keeps fine pixels and follows fine() inside cached art
+- [x] A new font in fine pixels with lower case, proportional and kerned:
+      body (capitals 9, a line every 6 world px, a drop-in for the old
+      face), small (capitals 7), heading (Scale2x of the body: capitals 18);
+      the pad prompts hook kept and now case-insensitive
+- [x] Night, fog, flash and lamp rings, and the ground's cloud, wet and
+      golden-hour dither, laid in fine pixels (world pixels at MEDIUM and
+      LOW); ditherRect and the dim/fade covers as fine dither patterns
+- [x] `FineLayer` (src/gfx/chunks.ts): world-sized pictures in fine pixels,
+      painted in chunks around the camera with a world-pixel fallback, for
+      2x terrain; terrain and canopy stay world pixels until then
+- [x] Checks: densitytest, picturetest (FineLayer too), padtest (sentence
+      case prompts), perftest before and after, the other scripts
+- [x] Dusk, night and fog improved at 2x: 64-step ordered ramps in fine
+      pixels, soft light pools (Light power/soft) graded from the ground
+      through teal to plum, flames' warm rings at their pools' edges, the
+      dog's light a soft glow, a faint halo on animals at night, fog in
+      drifting banks with clean edges and thicker by water (setFogField),
+      the night a little deeper at the screen's edges
+      (`scripts/skyshots.mjs` before/after)
+- [x] VIEW in the pause menu: CLOSE (the default) or WIDE (one whole-number
+      scale down: an iPhone 293 x 633 world px); a large face (capitals 12
+      fine px, line 8 world px); text sizes step up a face where fine pixels
+      are physically small, so text keeps its size in WIDE
+- [x] Camera: the dog, the worked flock and the open gate it can go in are
+      framed together when they fit (`scripts/cameratest.mjs`: flock and
+      gate on screen 10/12 in CLOSE, was 4/12; 12/12 in WIDE, was 8/12)
+- [x] Fog as mist: short level streaks (4 fine px) on a ramp of its own,
+      sliding with the drift, in place of the night's even dots (World's
+      idea); the touch stick keeps its travel under the thumb in WIDE (its
+      radii scale like the touch buttons)
+
+Performance (perftest at 390x844@3, stepped seeded frames with every
+pixel drawn, best of two interleaved runs of 7 batches; other sessions
+were loading the machine, so treat differences under ~2 ms as noise).
+Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
+844 fine pixels, 2.8x as many pixels filled, in software here:
+
+| scene | CPU | round four (HIGH) | now, HIGH | now, LOW |
+|---|---|---|---|---|
+| title | 4x | 5.9 ms | 9.3 ms | 6.9 ms |
+| day: tier-5 ranch | 4x | 13.1 ms | 15.3 ms | 11.2 ms |
+| worst: winter storm night | 4x | 16.6 ms | 16.4 ms | 14.5 ms |
+| title | 6x | 11.4 ms | 8.1 ms | 11.5 ms |
+| day | 6x | 19.0 ms | 20.7 ms | 17.8 ms |
+| worst | 6x | 25.5 ms | 26.9 ms | 22.5 ms |
+
+## M39 Co-op, round five: both players do everything
+- [x] Build mode for guests: the host's build screen (paddocks dragged,
+      extended and gated, fixtures, buildings, decor, the ranch's paint,
+      kennel training, helpers, selling), each change sent to the host and
+      played there through build mode's own methods; what it says comes
+      back; the ranch comes back at once. One builder at a time ("ZIGGY IS
+      BUILDING" on the other screen and on their name tag)
+- [x] E for guests does all E does: start a trial at the post (their run:
+      the judge's eye is on their dog), pen gates and letting stock out,
+      buying at the sale yard or the fair, the agility course, buying fields
+- [x] Helper commands (H) and closing the judge's card from either screen
+- [x] The day's end: the same summary card on both screens (READY on the
+      guest's), who is ready shown over it; either may build from it; the
+      next day starts when everyone is ready, or on the host's second press
+- [x] Busy screens: the host's build mode and the judge's card no longer
+      stop the world while friends are there; a guest in build mode or a
+      menu still sees the ranch go on
+- [x] The same goals, hints, coach tips and arrows for the guest; the
+      tutorial step comes from the host; no more "it's the host's" lines
+- [x] cooptest: the guest builds a paddock, extends it and puts a trough in
+      it; the lock both ways; the host's build mode does not stop the
+      guest; the guest lets stock out for an order, starts and closes a
+      trial; both say ready for the next day
+
+## M40 Sniff and dig: loot (world, round five)
+- [x] Scent (`src/systems/loot.ts`, drawn in `src/art/loot.ts`): walking
+      slowly or standing still near something buried, curls of scent drift
+      from it to the dog's nose (faint on the move, bright when it stands to
+      sniff; further in rain; none at night or lying down); close up the
+      ground is turned and glints, and the dog puts its nose down
+- [x] NIP digs on a scent (E: DIG over the dog; the phone's NIP button
+      reads DIG with a paw), never with an animal at the nose or a fox at
+      its heels, never lying down; a bot's nip stays a nip. The dog digs
+      nearly a second, earth flying, and leaves a hole until morning; the
+      find hops out with a sparkle and a FOUND IT! banner (rare: a stinger;
+      the hoard: the tier-up stinger and confetti)
+- [x] Dig spots, new each morning, the same on every screen (seeded by the
+      day): two or three in the meadows round the ranch, three out in the
+      pastures, two in hidden places (which places by season); one more of
+      each after rain, one fewer in winter; regions open by tier
+- [x] 29 things to find in four rarities: coins (1-3$), old coins (6-10$), a
+      purse (20-30$); bones to bury on the ranch and dig up aged another day
+      (full wind); curios (button, horseshoe, marble, pipe, thimble,
+      arrowhead, fossil); seeds (sunflowers, herbs, roses, a pippin) and the
+      fossil open free decor; things to wear (brass, bone-shaped and golden
+      collar tags, a spotted kerchief, white socks, a blaze) join the dog's
+      look; relics: the shepherd's whistle (bark +10% reach) and the
+      bellwether's bell (the flock near the dog settles quicker)
+- [x] The old shepherd's map, four pages, each where the last says: a lost
+      ewe in the Old Orchard, a way to a hidden place, a lost billy goat in
+      the Hidden Valley, and X marks the spot by the cairn on Lookout Knoll:
+      the hoard (100$ and the golden tag). Lost animals wait each morning
+      until penned (a bonus, by calm); the next page is an X on the Ledger map
+- [x] The Ledger's FINDS page (`src/ui/loot.ts`): every find in a grid, "?"
+      for what is still in the ground, framed by rarity, the one picked
+      written up (or where to look), bones, the map and how to dig
+- [x] Saved (old saves start with nothing); co-op: the day's holes are
+      shared, a guest's finds go to their travels and home with them, and
+      every dog's sniff and dig travel as two flag bits so friends see the
+      poses (dust at the paws, earth flying)
+- [x] `scripts/loottest.mjs`; seeded tune.mjs identical for all five
+      species; discoverytest, projecttest, savetest, seasontest, cooptest
+## M41 Balance pass: everything together (gameplay, round six)
+Many sources of coin and stock landed in parallel in rounds four and five
+(buyer favour, loot, breeding, valley projects, market days, fields, the
+shed, dairy and agility yard). Played together by the pace bot, two things
+stood out: goods made by stock sitting at home came to two-thirds to
+three-quarters of all income from tier 3 on (a penned animal earned its
+own delivery price again every day), so herding mattered less and less;
+and the purse outran everything worth buying by about day 8 (1,760$ of
+one-off buildings, training and land against 1,556$ in hand at the end of
+tier 4, 4,394$ at the end of tier 5, 25,000$ by year three). The tier-5
+goals then stalled on land, not coin.
+- [x] A packed paddock makes less (`crowding` in `src/systems/economy.ts`):
+      full rate up to three-fifths of its room, half when full. A roomy
+      paddock makes as much as a crowded one, and has room for young, so
+      there is no reason to pack one; a tip says so the first time
+- [x] A calm drove pays a bonus at the gate (game.ts): six head or more
+      brought in calm, a twentieth more a head past five, up to half again
+      at fifteen (the banner shows it). Bigger flocks and droves are worth
+      herding well
+- [x] Late prices rise so tiers 4 and 5 still end with a choice: the
+      windmill (a tier-5 goal) 260$ to 500$, the dairy 110$ to 180$, the
+      fields 200$/300$ to 250$/450$, the top level of each training
+      100-120$ to 140-160$. Day one is untouched (the kennel is still 15$;
+      daytest passes)
+- [x] The valley holds at most 260 wild animals (`WILD_CAP` in
+      `src/systems/spawner.ts`): no new flocks or droves past it. Breeding
+      at home needed no cap: young are born only into room they can grow
+      into, so a paddock never overruns, and a packed one breeds nothing
+- [x] The pace bot buys a field when land is short (it had walked into its
+      own fences to reach the sign, or never tried) and leaves a drove far
+      bigger than its room; pacetest now tags every coin by the system that
+      paid it, and logs what is still worth buying and how many animals
+      the world holds; perftest `--animals=N` measures a herd-heavy year
+- [x] breedtest gained the drove bonus, the wild cap and crowding (31 checks)
+
+**Herding is unchanged**: `node scripts/tune.mjs <species> --seed=1` is
+identical before and after for all five species.
+
+**Pace** (six seeds; before is test/round-5 with the same pace bot): the
+valley thrives on days 8, 10, 9, 10, 6, 7 before (mean 8.3) and 8, 10, 8,
+8, 9, 6 after (mean 8.2). With the old bot the same build took 8, 10, 16,
+15, 8, 7 (mean 10.7): the stalls were the bot's, at tier 5, short of land.
+
+| tier | days, before | after | earned a day $, before | after | goods' share, before | after | herding's share (stock, orders, favour, trials), before | after | purse at tier end $, before | after | worth buying left at tier end $ (and how much of it affordable), before | after |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2.0 | 2.0 | 133 | 125 | 42% | 33% | 58% | 67% | 89 | 75 | 1261 (10 of 16) | 1621 (9 of 16) |
+| 2 | 1.0 | 1.0 | 406 | 342 | 51% | 42% | 45% | 54% | 85 | 75 | 853 (3 of 6) | 1288 (2 of 7) |
+| 3 | 1.0 | 1.0 | 470 | 421 | 63% | 47% | 34% | 45% | 180 | 60 | 702 (3 of 5) | 1145 (1 of 6) |
+| 4 | 2.2 | 1.5 | 575 | 472 | 73% | 46% | 26% | 46% | 697 | 304 | 365 (3 of 4) | 1220 (3 of 5) |
+| 5 | 2.2 | 2.7 | 1036 | 729 | 64% | 42% | 26% | 43% | 2570 | 1260 | 265 (3 of 3) | 402 (3 of 3) |
+
+(The rest of the income is legacy prizes, places found and stock sold to
+make room. The bot never digs, does no valley projects and passes up the
+shed, dairy and agility yard while land is short, so a player who does
+them earns a little more. All of those but the loot pay for herding
+work.)
+
+**Two years** (`--year --days=34`, three seeds):
+
+| season | purse at end $, before | after | goods' share, before | after | animals in the world, before | after | young | penned, before | after |
+|---|---|---|---|---|---|---|---|---|---|
+| y1 spring | 190 | 57 | 53% | 41% | 144 | 160 | 19 | 39 | 37 |
+| y1 summer | 2181 | 1126 | 72% | 44% | 257 | 252 | 0 | 65 | 59 |
+| y1 autumn | 5503 | 2957 | 74% | 57% | 255 | 224 | 0 | 74 | 79 |
+| y1 winter | 9056 | 4949 | 78% | 70% | 311 | 266 | 15 | 80 | 80 |
+| y2 spring | 13823 | 8065 | 81% | 62% | 358 | 336 | 32 | 88 | 87 |
+| y2 summer | 19062 | 10807 | 76% | 77% | 395 | 355 | 0 | 88 | 99 |
+| y2 winter | 27153 | 15603 | 91% | 71% | 372 | 328 | 11 | 98 | 105 |
+| y3 spring | 29875 | 17232 | 82% | 69% | 392 | 339 | 16 | 101 | 110 |
+
+After the valley thrives, coin still piles up (700-850$ a day) with little
+left to buy, and goods are most of it again (the bot's herds are home and
+it has no room for more). That is a design question beyond a balance pass:
+late-game things to buy (more land, a second holding, things for the
+village) would give it somewhere to go.
+
+**Frame work** (perftest at 4x CPU throttle, the tier-5 fixture, best
+batches of repeated runs; the two builds measure the same at the same
+count): about 13ms a day frame and 17-18.6ms in the worst scene (a storm
+night with predators) at 340 animals. The cap keeps year two's world at
+about 340 animals instead of about 390. The worst scene is over 16.7ms even
+at the fixture's 170 animals, on the base as on this branch.
+
+Known, not from this branch (they fail on test/round-5 too): achievetest
+"a tapped card opens the Ledger at its badge", picturetest "day".
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1919,6 +2449,42 @@ Before → after, in plain words:
   whether the file exists), so each branch works alone and merged.
 - With mixed flocks a fair entry goes home to any paddock it can share
   (the fair's goat to the sheep's), as everywhere else.
+- Balance (round six): herding stays the best way to earn by cutting the
+  passive side, not by paying herding more across the board. Goods stay
+  a reward for calm herds (stress still cuts them) but a packed paddock
+  makes half, and the one new bonus is for the hardest herding: a big
+  drove brought in calm. Crowding is a production factor only, not
+  stress, so it does not spill into order pay, the fair or breeding's calm
+  test (breeding has its own room rule).
+- Prices raised are the late ones only, so the early game (and day one's
+  kennel) plays as before and tiers 4-5 still end with a choice.
+- The wild cap (260) counts animals that are not yours (not penned, not
+  home, not entries or for sale), checked each morning before a new flock
+  or a drove.
+- Breeding (round five): once a year, on the first two mornings of the
+  kind's season (spring; ponies summer), from tier 2. Chances a season:
+  ducks 0.5 (2-3 ducklings), sheep 0.93 (15% twins), goats 0.8 (40% twins),
+  cattle 0.65, ponies 0.55. Calm means stress at most 0.4 at the last day's
+  end and in the morning (the night takes most stress off, so the morning
+  alone tells nothing). Room is for the young once grown, so a paddock
+  never ends up over-full when they grow up in autumn. No sexes: any grown
+  one with another of its kind in the paddock can bear.
+- Young take a place (a calf or foal two) and are worth two-fifths of a
+  grown one; they make nothing; buyers never take them.
+- Wild flocks: a sixth bigger for each tier the region has been open, up to
+  two-thirds again; a fourth flock once open three tiers; 40% of wild
+  mothers with young in season, from tier 2.
+- Big droves: 30% a morning from tier 3 (not winter, not fair day, not two
+  mornings running), 2.5 flocks' worth in an older region, at the spawn
+  point farthest from its flocks.
+- The sale yard's lot: one kind a day in turn (of the kinds whose region is
+  open), at four times its delivered value (duck 8$, sheep 20$, goat 32$,
+  cow 56$, pony 120$). The lot makes way for the fair's breeders.
+- Goods as items lying where they were laid were built and then dropped:
+  UI shows each paddock's goods as piles by kind, which read better (a
+  churn of milk where a cow stood would look odd) and need no save change.
+- The audio's mother-and-young calls keyed on the mother's `lamb` link, so
+  ewes called as if lost; they now key on `young`.
 - The unseeded ordertest is flaky on this branch and on the base (the bot
   sometimes walks the order's flock into the empty open pen); seeded runs
   pass.
@@ -2102,3 +2668,161 @@ Before → after, in plain words:
   the tier card's slot and waits behind banners; the ribbon board stands
   just past the farmhouse's front right corner (World and light). The
   merge steps are in the session notes (favour-achievements.md).
+- Characters at double density are drawn by hand in fine pixels, not
+  upscaled: Scale2x (up2 in src/art/hd.ts) only smooths the old look and
+  adds no detail, so it is kept as a tool and nothing ships through it.
+  The dog is still built from parts (torso, head variants, tails, a fine
+  leg generator), so every view and gait stays consistent and the look's
+  letters reach every frame. Bobs are half a world pixel (one fine pixel)
+  at a trot.
+- The dog's sniff and dig are two plain fields on Dog that the treasure
+  hunt writes each frame; the drawing only reads them. Digging is shown
+  side on, whichever way the dog was heading.
+- Round five's perftest (6x throttle, phone size, three rounds alternating
+  with platform-r5 on a machine busy with other sessions): medians day
+  24.9 ms before / 23.1 ms after, worst 26.6 / 27.3 ms; within the noise.
+  Dense sprites cost the same pixels as the old ones drawn under scale(2);
+  fine shadows, ripples and drips are filled at half-pixel steps in world
+  space rather than switching transforms per call.
+- Goods are drawn from each paddock's `goodsBy` (counts per kind): piles,
+  not single items, so a paddock with 40 eggs still reads (a count goes on
+  a pile past a handful). The +1 is a particle ('good', the kind in its
+  text) so the co-op host's tap forwards it to guests unchanged.
+- The sale plays inside the summary (the mode stays 'summary'): friends
+  wait on their card as before, and `summaryHold` gives a press during the
+  sale to skipping it, then the journal's usual beat before it takes keys.
+- The objective is worked out each frame from the game, never stored, so
+  it can never go stale or disagree with the world; the tier goals stay in
+  the Ledger and on the card when nothing more pressing is on.
+- What's-this cards wait for the day's banner and the first steps of day
+  one (until the first flock is penned), so a new player sees one thing at
+  a time.
+- Sentence case is applied where prose is drawn, not in the strings
+  themselves: other features keep writing capitals (no sweep across a dozen
+  files mid-round), and a line drawn in capitals still works. Headings,
+  buttons, tabs, signs over the world and short status words stay capitals.
+- Pad prompts match case-insensitively and answer in the case they find,
+  so a sentence-case hint still turns "Hold Q" into "Hold (X)".
+- Round five's world is painted at double density in 128-fine-pixel chunks
+  round the camera (render/light.ts `FineWorld`): ground, canopy and a lit
+  ground with the sun's tree shadows. Each frame paints within 3ms, nearest
+  the middle first; until a chunk is painted the old world-pixel ground
+  shows there. The 160 most recently seen chunks are kept (about 40MB). The
+  painters (world/fineground.ts, world/finecanopy.ts) take any rectangle,
+  and their detail is decided per grid cell in world space, so chunks
+  agree.
+- Outlines (paths, water, rock, forest) are one smooth function
+  (terrain.ts `edgeAt`) used by both the world data and the fine painter.
+  The per-pixel jitter that made them ragged is gone. The 1x data (soil,
+  masks, canopy kind) stays for the sim and footprints.
+- Seasons, wet ground and the golden hour are part of the paint key (in
+  small steps), so the old per-frame pixel passes (weather.ts ground shade,
+  render/seasons.ts) no longer run. The cloud shadows went with them for
+  now.
+- Chunks paint once per game moment (`now`), so drawing a moment twice
+  gives the same picture (picturetest).
+- `art/fine.ts` `grid()` draws palette-letter pictures on the fine grid,
+  compiled into runs once, because cached art is recorded every frame.
+- Moonlit edges (art/moon.ts) are collected as the art draws (roof ridges,
+  rails; the canopy's rims come baked with each chunk) and drawn
+  just above the night overlay. Drawn under it, they would be dithered
+  away like everything else.
+- In the golden hour the sun is taken to be in the west (the shadows fall
+  east), so the warm highlights go on the west side of trees and roofs,
+  not the usual upper right. Long shadows are the shadow silhouette laid
+  again along the sun's line. They are baked into each chunk's lit ground,
+  so they cost nothing per frame.
+- The farmhouse at night is a few lights, not one big disc: a graded
+  pool over the front, spills under the ground-floor windows, the door's
+  pool. The lit panes are drawn above the dark (windowGlow), so they stay
+  clear without a light each. With only the windows' own pools, the front
+  was left in the dither and read as noise at dusk.
+- Moonlit edges are kept to long runs (rails, ridges): post caps and
+  one-pixel roof-slope steps were hundreds of tiny draws a frame, the
+  costliest part of the night work, for glints too small to see.
+- Lightning at night lowers the dark for its beat (by 85%, then 50%, 20%)
+  and keeps only a 3-step veil, rather than a 10-step sheet of wool and
+  buttercup: the scene shows, which is what a flash is for. By day (no
+  dark to lift) it flashes as before.
+- Fog at night lifts some of the dark where it lies (0.45 of its level), so
+  banks show as paler mist. Before, the night's ~2/3 cap left no room for
+  fog at full dark.
+- The screen aims for 432 fine pixels on the short side, not 480: the scale
+  must be a whole number of device pixels per fine pixel, and on an upright
+  iPhone (1170 device px) that is 3 (195 world px wide) or 2 (292 wide with
+  everything a fifth smaller and fine text too small to read). Bigger
+  pixels won; the world shown is a little less than round four's 234.
+- The old art is drawn under scale(PX) rather than redrawn: it is exact
+  2x2 blocks, so day one looks as before and the art sessions move each
+  piece to fine pixels when they redraw it.
+- The night and ground dithers work out their light per world pixel and
+  dither per fine pixel: a finer dither for about 1.5x the work, not 4x.
+  MEDIUM and LOW keep the world-pixel dither, so AUTO can win the cost
+  back on a slow phone.
+- The heading size is the body face scaled by Scale2x (it rounds diagonals
+  as it doubles strokes) rather than a third hand-drawn alphabet: it keeps
+  the body's letterforms and costs nothing to maintain.
+- perftest's numbers are software rasterising (headless Chromium without a
+  GPU): the new pipeline fills 2.8x as many pixels, which a phone's GPU
+  does off the main thread. The JavaScript parts that grew were optimised
+  (the night pass, the ground dither), and LOW is cheaper than round
+  four's HIGH.
+- TARGET_FINE = 432 confirmed with the main session (readable first);
+  VIEW WIDE is there for players who want more field: an iPhone is 195 x
+  422 world px in CLOSE, 293 x 633 in WIDE (round four: 234 x 507).
+- Text sizes are roles that step up one face when a fine pixel is under
+  0.85 CSS px, rather than scaling text by a fraction: every face stays a
+  whole-pixel design, and the steps (9 -> 12 fine px capitals) match the
+  2/3 drop in pixel size between CLOSE and WIDE.
+- The sky's per-fine-pixel pass dithers each world pixel's light over its
+  four fine pixels without easing between world pixels: easing measured
+  at about half again the pass's cost for a difference too small to see
+  in the 64-step ramp.
+- Animals get a faint halo at night (power 0.4, radius 11) so the flock
+  reads in the dark; predators' eyes are drawn above the dark as before.
+- Touch targets are sized in CSS pixels, not world pixels: `touchScale()`
+  is 1 / `screen.cssPerFine` (1 in the close view on an upright phone, about
+  1.5 in WIDE), so BARK is the same size under a thumb in both views. The
+  virtual stick's radii live in input.ts (platform's).
+- Fog has its own threshold ramp (the 8x8 ramp over 4-pixel runs, each
+  band of 8 rows shifted by a hash) instead of sharing the night's: thin
+  mist then reads as level streaks, not a grid of dots. It falls only
+  where the night leaves a pixel clear, so its level is scaled by 16 /
+  (16 - night) to cover the same share as before.
+
+- Co-op, everyone does everything: the guest's build mode is the real one,
+  run on their copy of the ranch; each change is the UI's `BuildAction`,
+  sent to the host (`build.remote`) and done there by `applyBuild`, the
+  same code a local build runs, so no rule or price is copied; the answer
+  comes back through `build.answer`. The guest's screen checks first for a
+  quick "NEED 40$", the host's check is the one that counts. Buildings go
+  over the wire by corner tile and kind (`src/net/buildwire.ts`): each
+  browser numbers its own buildings, so ids would not match.
+- One builder at a time: two editors would each be looking at a ranch the
+  other is changing. The other player keeps herding meanwhile.
+- Kennel training is the ranch's: every dog on the ranch, guests' included,
+  runs with the ranch's upgrades, and a guest training at the kennel trains
+  them all from the shared purse. A guest's own save keeps its own
+  training at home. (Simpler than carrying two sets of stats, and it makes
+  the kennel a shared project.)
+- A guest's E is played as if their dog were the ranch's dog for that
+  moment (`game.dog` swapped, `game.actor` = their slot), so every E rule
+  in jobs, orders, trials, the sale yard, farmwork and the valley applies
+  unchanged; a trial or agility run remembers whose dog it is
+  (`runner` / `who`) and follows that dog.
+- The next day waits for everyone (napping or dropped friends do not
+  count); the host's second press goes without them, so nobody is stuck.
+  Building from the day's card counts as ready when you leave it.
+- Loot (round five): every roll is seeded by the day and the spot, so a
+  spot holds the same thing for anyone who digs it and seeded runs match;
+  things found once (seeds, wear, relics, pages) are not found twice, and
+  a roll that lands on one falls back to coins. Coins stay modest (about
+  15$ for a whole day dug, the hoard once) so herding stays the living.
+- Digging is NIP on a spot rather than a new button: nothing to learn on a
+  phone, and an animal at the nose always gets the nip, so it never gets in
+  the way of herding. Lying down stays lying down (no digging, no scent).
+- Things to wear are drawn by the look's template rewrite (dogstyle.ts):
+  the spotted kerchief stays Bandana red with wool spots, tags hang where a
+  neckerchief's point would, socks and a blaze are wool. The poses read
+  `dog.sniff` (0..1) and `dog.dig` (seconds left), which loot sets; until
+  Characters' fine-pixel poses merge, both use the side sniff pose.

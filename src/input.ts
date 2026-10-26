@@ -111,9 +111,21 @@ export class Input {
   // units: full walk well inside the rim, sprint once pushed past it.
   stick = { id: -1, ox: 0, oy: 0, x: 0, y: 0, active: false, sprint: false };
   stickEnabled = true;
-  readonly stickRadius = 20;
-  readonly sprintRadius = 26; // thumb this far out (internal px) runs
-  readonly stickReach = 30; // the base follows the thumb beyond this
+  // In world px, kept the same size under the thumb where a world pixel is
+  // physically smaller (VIEW WIDE on a phone): the same factor as the touch
+  // buttons (touchScale in src/ui/metrics.ts).
+  private get thumbK() {
+    return Math.min(1.8, Math.max(1, 1 / this.screen.cssPerFine));
+  }
+  get stickRadius() {
+    return 20 * this.thumbK;
+  }
+  get sprintRadius() {
+    return 26 * this.thumbK; // thumb this far out runs
+  }
+  get stickReach() {
+    return 30 * this.thumbK; // the base follows the thumb beyond this
+  }
   // Scripted control (debug bots and tests).
   override: { x: number; y: number; sprint: boolean; lie: boolean } | null = null;
 

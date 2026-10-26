@@ -107,8 +107,8 @@ export const VILLAGE = { cx: 86, cy: 78.5, rx: 11.5, ry: 6.5 };
 // scrub until stock has grazed it clear (src/systems/valley.ts).
 export interface FieldSite { id: 'southwest' | 'southeast'; name: string; price: number; cx: number; cy: number; rx: number; ry: number }
 export const FIELDS: FieldSite[] = [
-  { id: 'southwest', name: 'THE SOUTH-WEST FIELD', price: 200, cx: 78, cy: 119, rx: 8, ry: 5 },
-  { id: 'southeast', name: 'THE SOUTH-EAST FIELD', price: 300, cx: 116, cy: 118, rx: 8, ry: 5 },
+  { id: 'southwest', name: 'THE SOUTH-WEST FIELD', price: 250, cx: 78, cy: 119, rx: 8, ry: 5 },
+  { id: 'southeast', name: 'THE SOUTH-EAST FIELD', price: 450, cx: 116, cy: 118, rx: 8, ry: 5 },
 ];
 // The old bridge over the ford (tiles across the river on the ford road),
 // and the woodpile in the ford meadow its timber comes from.

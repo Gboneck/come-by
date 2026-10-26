@@ -1,7 +1,8 @@
 import { C } from '../palette';
+import { prose } from './case';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
-import { text, textWidth, wrap } from '../gfx/font';
+import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import { edgeArrow, type Margins } from './hud';
 import { safeArea } from './safe';
@@ -12,6 +13,7 @@ import { tToClock, yardOf, type Order } from '../systems/orders';
 import { orderTag } from '../systems/favour';
 import { CLASSES, PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, prizeToday, type TrialResult } from '../systems/trials';
 import { LEGACY, goalDone } from '../systems/progression';
+import { pitch } from './metrics';
 
 // Orders and trials on screen: a card in the HUD's left column (under the
 // goal tracker), edge arrows to where the work is, the judge's card at the
@@ -62,11 +64,11 @@ export function jobCard(game: Game, g: CanvasRenderingContext2D, x: number, y: n
   if (!lines.length) return 0;
   const tagW = Math.max(...lines.map((l) => textWidth(l.tag)));
   const w = tagW + 4 + Math.max(...lines.map((l) => textWidth(l.s))) + 8;
-  const h = lines.length * 7 + 5;
+  const h = lines.length * pitch() + 5;
   panel(g, x, y, w, h, C.plum, C.butter);
   lines.forEach((l, i) => {
-    text(g, l.tag, x + 4, y + 3 + i * 7, C.butter);
-    text(g, l.s, x + 8 + tagW, y + 3 + i * 7, l.c, { iconColor: C.butter });
+    text(g, l.tag, x + 4, y + 3 + i * pitch(), C.butter);
+    text(g, l.s, x + 8 + tagW, y + 3 + i * pitch(), l.c, { iconColor: C.butter });
   });
   return h + 2;
 }
@@ -164,7 +166,7 @@ function drawResult(game: Game, g: CanvasRenderingContext2D, W: number, H: numbe
   const lines: Row[] = [];
   for (const row of rows) {
     if (row.v || row.big) lines.push(row);
-    else wrap(row.k, pw - 14).forEach((l, i) => lines.push({ ...row, k: l, gap: i === 0 && row.gap }));
+    else prose(row.k, pw - 14).forEach((l, i) => lines.push({ ...row, k: l, gap: i === 0 && row.gap }));
   }
   const big = (l: Row) => l.big && textWidth(l.k, 2) <= pw - 14;
   const bh = touch ? 15 : 11;
@@ -227,7 +229,7 @@ function drawResult(game: Game, g: CanvasRenderingContext2D, W: number, H: numbe
 
 export function jobsLedger(game: Game, w: number): { s: string; c: string; x?: number }[] {
   const out: { s: string; c: string; x?: number }[] = [];
-  const add = (s: string, c: string) => wrap(s, w).forEach((l) => out.push({ s: l, c }));
+  const add = (s: string, c: string) => prose(s, w).forEach((l) => out.push({ s: l, c }));
   if (game.won) {
     const done = LEGACY.filter((goal) => goalDone(game, goal)).length;
     out.push({ s: '', c: C.wool });

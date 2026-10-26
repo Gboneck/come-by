@@ -1,5 +1,6 @@
 import type { Game } from '../game';
 import type { PenFixture, Rot } from '../ranch/buildings';
+import type { SpeciesId } from '../world/map';
 import { stacks, type Seasonal } from '../systems/seasonal';
 import { valleyApply, valleyShared, type ValleySave } from '../systems/valley';
 import type { FavourSave } from '../systems/favour';
@@ -26,10 +27,15 @@ export const SHARED: Shared[] = [
   // Each paddock's size, gate and fixtures, in building order: extending a
   // side or moving a gate does not add a building, so it is sent here.
   { key: 'paddocks', get: (g) => g.ranch.pens.map((p) => [p.tx, p.ty, p.w, p.h, p.rot, p.gateAt, p.fixtures]), set: (g, v) => applyPaddocks(g, v as PaddockRec[]) },
+  // Each paddock's goods by the kind that made them, in building order (the
+  // snapshot has only the total): what a mixed paddock's piles show.
+  { key: 'goodsBy', get: (g) => g.ranch.pens.map((p) => p.goodsBy), set: (g, v) => g.ranch.pens.forEach((p, i) => (p.goodsBy = { ...((v as Partial<Record<SpeciesId, number>>[])[i] ?? {}) })) },
   // The village, the paddocks' scrub, the old bridge (systems/valley.ts).
   { key: 'valley', get: (g) => valleyShared(g), set: (g, v) => valleyApply(g, v as ValleySave) },
   // Valley projects: progress, what is done, the fold's gate (systems/projects.ts).
   { key: 'projects', get: (g) => g.projects.shared(), set: (g, v) => g.projects.applyShared(g, v) },
+  // Today's dug holes (systems/loot.ts): the spots themselves are the same on every screen.
+  { key: 'loot', get: (g) => g.loot.shared(g), set: (g, v) => g.loot.applyShared(g, v) },
 ];
 
 type PaddockRec = [number, number, number, number, Rot, number | null, PenFixture[]];

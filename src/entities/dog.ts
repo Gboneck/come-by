@@ -59,6 +59,10 @@ export class Dog {
   stats: DogStats = { ...BASE_STATS };
   skin: DogSprites | null = null; // a co-op friend's dog; null = the player's own look
   tag = ''; // a co-op friend's name, shown over their dog
+  // The treasure hunt's (set each frame after update, read only by the
+  // drawing): how far the nose is down, 0..1, and seconds of digging left.
+  sniff = 0;
+  dig = 0;
 
   constructor(x: number, y: number) {
     this.x = x;

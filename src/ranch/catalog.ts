@@ -79,7 +79,7 @@ export const CATALOG: BuildDef[] = [
     icon: icon('agility', ['p.......p', 'p.y...y.p', 'pwyw.wywp', 'p.y...y.p', 'p...t...p', 'p..ttt..p', 'ppp...ppp']),
   },
   {
-    id: 'dairy', kind: 'dairy', name: 'DAIRY', cost: 110, tier: 4, w: 7, h: 7, rotates: false, max: 1,
+    id: 'dairy', kind: 'dairy', name: 'DAIRY', cost: 180, tier: 4, w: 7, h: 7, rotates: false, max: 1,
     desc: 'MORNINGS, WALK COWS INTO ITS YARD TO BE MILKED. CALM COWS GIVE MORE.',
     icon: icon('dairy', ['..ppppp..', '.ppppppp.', '.wwwwwww.', '.wwpwpww.', 'p.......p', 'p.......p', 'ppp...ppp']),
   },
@@ -89,7 +89,7 @@ export const CATALOG: BuildDef[] = [
     icon: icon('gate', ['.........', 'p.......p', 'pwwwwwwwp', 'p.w.w.w.p', 'pwwwwwwwp', 'p.......p']),
   },
   {
-    id: 'windmill', kind: 'windmill', name: 'MILL', cost: 260, tier: 5, w: 3, h: 3, rotates: false, max: 1,
+    id: 'windmill', kind: 'windmill', name: 'MILL', cost: 500, tier: 5, w: 3, h: 3, rotates: false, max: 1,
     desc: 'THE VALLEY PROSPERS: +20% GOODS.',
     icon: icon('windmill', ['p.....p', '.p...p.', '..pwp..', '...w...', '..pwp..', '.p.w.p.', 'p.www.p']),
   },

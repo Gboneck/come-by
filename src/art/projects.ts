@@ -1,6 +1,8 @@
 import { C } from '../palette';
 import { ellipse, line, px, rect } from '../gfx/draw';
 import { drawSpr } from '../gfx/sprite';
+import { PX, fine } from '../gfx/screen';
+import { crown } from './fine';
 import { cached } from '../gfx/picture';
 import { hash2 } from '../rng';
 import { gust } from '../render/wind';
@@ -23,215 +25,276 @@ import { LOAD_OF, blessed, loaded, projectById, type ProjectId } from '../system
 
 const ground = (draw: () => void, k = 0): Drawable => ({ y: -1e8 + k, draw });
 
+// Everything here is drawn on the fine grid (two fine pixels to a world
+// pixel); positions come in world pixels.
+const F = PX;
+
 // ---- Overgrowth ----
 
 function reedClump(g: CanvasRenderingContext2D, x: number, y: number, v: number, t: number) {
   const k = gust(x, y, t) > 0.7 ? 1 : 0;
-  rect(g, x - 3, y, 7, 1, C.sage);
-  const n = 4 + (v % 3);
-  for (let i = 0; i < n; i++) {
-    const bx = x - 3 + ((i * 3 + v) % 7);
-    const h = 6 + ((i * 7 + v * 3) % 5);
-    const col = i % 3 === 0 ? C.moss : C.teal;
-    for (let j = 0; j < h; j++) px(g, bx + (j > h - 3 ? k : 0), y - j, j === 0 ? C.plum : col);
-  }
-  if (v % 2 === 0) {
-    rect(g, x + 1 + k, y - 12, 1, 3, C.plum); // a bulrush head
-    px(g, x + 1 + k, y - 13, C.sage);
-  }
+  fine(g, (fg) => {
+    const X = x * F, B = y * F + 1;
+    rect(fg, X - 6, B, 14, 1, C.sage);
+    const n = 7 + (v % 3);
+    for (let i = 0; i < n; i++) {
+      const bx = X - 6 + ((i * 5 + v * 2) % 13);
+      const h = 12 + ((i * 7 + v * 3) % 9);
+      const col = i % 3 === 0 ? C.moss : i % 3 === 1 ? C.teal : C.sage;
+      rect(fg, bx, B - h * 0.6, 1, h * 0.6, col);
+      rect(fg, bx + k, B - h, 1, h * 0.4, col);
+      px(fg, bx, B, C.plum);
+    }
+    if (v % 2 === 0) {
+      rect(fg, X + 2 + k, B - 26, 2, 6, C.plum); // a bulrush head
+      px(fg, X + 2 + k, B - 27, C.sage);
+      rect(fg, X + 3, B - 20, 1, 20, C.sage);
+    }
+  });
 }
 
 function bramble(g: CanvasRenderingContext2D, x: number, y: number, v: number) {
-  ellipse(g, x - 1, y + 1, 6, 1.5, C.sage);
-  ellipse(g, x, y - 2, 5, 3, C.plum);
-  ellipse(g, x, y - 3, 4, 2, C.teal);
-  // Arching canes with thorns.
-  for (let i = -5; i <= 5; i++) {
-    const hy = y - 4 - Math.round(Math.sqrt(Math.max(0, 25 - i * i)) * 0.5);
-    if ((i + v) % 3 !== 0) px(g, x + i, hy, C.plum);
-  }
-  px(g, x + 2, y - 5, C.moss);
-  px(g, x - 3, y - 4, C.moss);
-  // Blossom (or berries, by the variant).
-  px(g, x - 1 + (v % 3), y - 4, v % 2 ? C.wool : C.plum);
-  px(g, x + 3 - (v % 2), y - 2, C.wool);
+  fine(g, (fg) => {
+    const X = x * F, B = y * F + 1;
+    ellipse(fg, X - 2, B + 2, 12, 3, C.sage);
+    crown(fg, X, B - 6, [[-5, 1, 5], [5, 0, 5], [0, -2, 6]]);
+    // Arching canes with thorns.
+    for (let i = -11; i <= 11; i++) {
+      const hy = B - 8 - Math.round(Math.sqrt(Math.max(0, 121 - i * i)) * 0.5);
+      if ((i + v) % 3 !== 0) px(fg, X + i, hy, C.plum);
+      if ((i + v) % 5 === 0) px(fg, X + i, hy - 1, C.plum);
+    }
+    // Blossom, or berries, by the variant.
+    for (const [dx, dy] of [[-2 + (v % 3) * 2, -8], [5 - (v % 2) * 2, -4], [-6, -3]]) {
+      if (v % 2) { rect(fg, X + dx - 1, B + dy, 3, 1, C.wool); rect(fg, X + dx, B + dy - 1, 1, 3, C.wool); px(fg, X + dx, B + dy, C.butter); }
+      else { rect(fg, X + dx, B + dy, 2, 2, C.plum); px(fg, X + dx, B + dy, C.wool); }
+    }
+  });
 }
 
 function scrubBush(g: CanvasRenderingContext2D, x: number, y: number, v: number) {
   const w = 5 + (v % 3), h = 3 + (v % 2);
-  ellipse(g, x - 2, y + 1, w + 1, 1.5, C.sage);
-  ellipse(g, x, y - h, w, h, C.plum);
-  ellipse(g, x, y - h - 1, w - 1, h - 1, C.teal);
-  rect(g, x + 1, y - h * 2, w - 2, 1, C.moss);
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + v;
-    px(g, x + Math.round(Math.cos(a) * (w + 1)), y - h + Math.round(Math.sin(a) * (h + 1)), C.plum); // twigs
-  }
+  fine(g, (fg) => {
+    const X = x * F, B = y * F + 1;
+    ellipse(fg, X - 4, B + 2, (w + 1) * F, 3, C.sage);
+    crown(fg, X, B - h * F, [[-w, 1, w + 1], [w, 1, w + 1], [0, -2, w + 2]]);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + v;
+      const ex = X + Math.round(Math.cos(a) * (w + 2) * F * 0.9), ey = B - h * F + Math.round(Math.sin(a) * (h + 2) * F * 0.7);
+      line(fg, X + Math.round(Math.cos(a) * w * F * 0.7), B - h * F + Math.round(Math.sin(a) * h), ex, ey, C.plum); // twigs
+    }
+  });
 }
 
 // ---- Willow Pool: the hay meadow ----
 
 function hayrick(g: CanvasRenderingContext2D, x: number, y: number, snow: boolean) {
-  ellipse(g, x - 3, y + 1, 9, 2, C.sage);
-  // Straight sides, a rounded top, bound with twine; thatched against rain.
-  rect(g, x - 7, y - 8, 15, 9, C.plum);
-  ellipse(g, x, y - 9, 7, 4, C.plum);
-  rect(g, x - 6, y - 8, 13, 8, C.butter);
-  ellipse(g, x, y - 9, 6, 3, C.butter);
-  rect(g, x - 6, y - 8, 2, 8, C.moss); // the shaded west side
-  for (let i = -5; i <= 6; i += 2) px(g, x + i, y - 4, C.plum); // twine
-  for (let i = -4; i <= 5; i += 3) px(g, x + i, y - 7, C.moss);
-  rect(g, x - 4, y - 13, 9, 2, snow ? C.wool : C.sage);
-  rect(g, x - 2, y - 14, 5, 1, snow ? C.wool : C.sage);
-  px(g, x, y - 15, C.plum);
+  fine(g, (fg) => {
+    const X = x * F, B = y * F + 1;
+    ellipse(fg, X - 6, B + 2, 18, 4, C.sage);
+    // Straight sides, a rounded top, bound with twine; thatched against rain.
+    rect(fg, X - 14, B - 16, 30, 17, C.plum);
+    ellipse(fg, X, B - 18, 14, 8, C.plum);
+    rect(fg, X - 12, B - 16, 26, 16, C.butter);
+    ellipse(fg, X, B - 18, 12, 6, C.butter);
+    rect(fg, X - 12, B - 16, 4, 16, C.moss); // the shaded west side
+    for (let r = B - 14; r < B; r += 3) for (let i = X - 10 + ((r >> 1) % 2) * 2; i < X + 13; i += 5) px(fg, i, r, C.wool);
+    for (let i = X - 11; i <= X + 13; i += 2) px(fg, i, B - 8, C.plum); // twine
+    rect(fg, X - 8, B - 27, 18, 4, snow ? C.wool : C.sage);
+    for (let i = X - 7; i < X + 10; i += 3) px(fg, i, B - 24, snow ? C.sage : C.moss);
+    rect(fg, X - 4, B - 29, 10, 2, snow ? C.wool : C.sage);
+    rect(fg, X, B - 31, 2, 2, C.plum);
+  });
 }
 
 function lilies(g: CanvasRenderingContext2D) {
-  for (let i = 0; i < 7; i++) {
-    const x = 1476 + Math.round(hash2(i, 1, 61) * 18), y = 830 + Math.round(hash2(i, 2, 61) * 10);
-    ellipse(g, x, y, 2, 1, C.moss);
-    px(g, x + 1, y, C.teal);
-    if (i % 3 === 0) px(g, x, y - 1, i % 2 ? C.butter : C.wool);
-  }
+  fine(g, (fg) => {
+    for (let i = 0; i < 7; i++) {
+      const X = (1476 + Math.round(hash2(i, 1, 61) * 18)) * F, Y = (830 + Math.round(hash2(i, 2, 61) * 10)) * F;
+      ellipse(fg, X, Y, 4, 2, C.sage);
+      ellipse(fg, X, Y, 3, 1, C.moss);
+      rect(fg, X + 1, Y - 1, 3, 1, C.teal); // the notch
+      if (i % 3 === 0) { const c = i % 2 ? C.butter : C.wool; rect(fg, X - 1, Y - 2, 3, 1, c); px(fg, X, Y - 3, c); }
+    }
+  });
 }
 
-// Wildflowers scattered over a place once it is grazed clear.
+// Wildflowers scattered over a place once it is grazed clear: little
+// five-pixel flowers.
 function flowers(g: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, n: number, seed: number) {
   const cols = [C.butter, C.wool, C.butter, C.teal];
-  for (let i = 0; i < n; i++) {
-    const a = hash2(i, seed, 71) * Math.PI * 2, r = Math.sqrt(hash2(i, seed, 72));
-    const x = Math.round(cx + Math.cos(a) * rx * r), y = Math.round(cy + Math.sin(a) * ry * r);
-    px(g, x, y, cols[i % cols.length]);
-    if (i % 4 === 0) px(g, x, y + 1, C.moss);
-  }
+  fine(g, (fg) => {
+    for (let i = 0; i < n; i++) {
+      const a = hash2(i, seed, 71) * Math.PI * 2, r = Math.sqrt(hash2(i, seed, 72));
+      const X = Math.round((cx + Math.cos(a) * rx * r) * F), Y = Math.round((cy + Math.sin(a) * ry * r) * F);
+      const c = cols[i % cols.length];
+      rect(fg, X - 1, Y, 3, 1, c);
+      rect(fg, X, Y - 1, 1, 3, c);
+      px(fg, X, Y, c === C.wool ? C.butter : C.moss);
+      px(fg, X, Y + 2, C.moss);
+    }
+  });
 }
 
 // ---- The Shepherd's Hut, mended ----
 
 function mendedHut(g: CanvasRenderingContext2D, x: number, base: number, w: number, night: boolean) {
-  ellipse(g, x + w / 2 - 6, base + 1, w / 2 + 4, 3, C.sage);
+  fine(g, (fg) => ellipse(fg, (x + w / 2 - 6) * F, base * F + 2, (w / 2 + 4) * F, 6, C.sage));
   // Drystone front, whole again, with a door and a window.
   hWall(g, x, base, w, 8, x + base, false);
-  rect(g, x + 20, base - 9, 8, 9, C.plum);
-  rect(g, x + 21, base - 8, 6, 8, C.sage);
-  rect(g, x + 21, base - 8, 1, 8, C.plum);
-  px(g, x + 26, base - 4, C.wool);
-  rect(g, x + 34, base - 7, 6, 4, C.plum);
-  rect(g, x + 35, base - 6, 4, 2, night ? C.butter : C.teal);
-  // Slate roof, courses lit from the upper right.
-  const top = base - 30, eave = base - 9;
-  rect(g, x - 2, top, w + 4, eave - top + 1, C.plum);
-  for (let yy = top + 1; yy < eave; yy++) {
-    const row = yy - top;
-    rect(g, x - 1, yy, w + 2, 1, row % 3 === 0 ? C.plum : C.teal);
-    if (row % 3 !== 0) for (let xx = x + ((row >> 1) % 2) * 2; xx < x + w; xx += 5) px(g, xx, yy, row % 3 === 1 ? C.sage : C.plum);
-  }
-  rect(g, x - 1, top + 1, 3, eave - top - 1, C.plum); // the shaded gable end
-  rect(g, x + w / 2, top + 1, w / 2, 1, C.sage); // light along the ridge
-  rect(g, x - 2, eave, w + 4, 1, C.plum);
+  fine(g, (fg) => {
+    const X = x * F, B = base * F + 1, Wd = w * F;
+    rect(fg, X + 40, B - 18, 16, 18, C.plum);
+    rect(fg, X + 42, B - 16, 12, 16, C.sage);
+    for (let i = X + 44; i < X + 54; i += 3) rect(fg, i, B - 15, 1, 14, C.moss);
+    px(fg, X + 52, B - 8, C.wool);
+    rect(fg, X + 68, B - 14, 12, 8, C.plum);
+    rect(fg, X + 70, B - 12, 8, 4, night ? C.butter : C.teal);
+    rect(fg, X + 73, B - 12, 1, 4, C.plum);
+    // Slate roof: courses with staggered joints, the gable end shaded,
+    // light along the ridge.
+    const T = (base - 30) * F, E = (base - 9) * F;
+    rect(fg, X - 4, T, Wd + 8, E - T + 2, C.plum);
+    for (let yy = T + 2; yy < E; yy++) {
+      const row = yy - T;
+      rect(fg, X - 2, yy, Wd + 4, 1, row % 4 === 0 ? C.plum : C.teal);
+      if (row % 4 === 2) for (let xx = X + ((row >> 2) % 2) * 5; xx < X + Wd; xx += 10) px(fg, xx, yy, C.plum);
+      if (row % 4 === 1) for (let xx = X + 3 + ((row >> 2) % 2) * 5; xx < X + Wd; xx += 10) px(fg, xx, yy, C.sage);
+    }
+    rect(fg, X - 2, T + 2, 6, E - T - 2, C.plum);
+    rect(fg, X + Wd / 2, T + 2, Wd / 2, 1, C.sage);
+    rect(fg, X - 4, E, Wd + 8, 2, C.plum);
+  });
   // Chimney.
-  stones(g, x + 36, top - 6, 5, 8, 7, 0.4);
-  rect(g, x + 35, top - 7, 7, 1, C.plum);
+  stones(g, x + 36, base - 36, 5, 8, 7, 0.4);
+  fine(g, (fg) => rect(fg, (x + 35) * F, (base - 37) * F, 14, 2, C.plum));
 }
 
 function chimneySmoke(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  for (let i = 0; i < 4; i++) {
-    const ph = (t * 0.6 + i * 0.25) % 1;
-    const sx = Math.round(x + ph * 6 + Math.sin((t + i) * 2) * 1.5), sy = Math.round(y - ph * 14);
-    if (ph < 0.85) px(g, sx, sy, ph < 0.4 ? C.wool : C.sage);
-    if (ph < 0.5) px(g, sx + 1, sy, C.sage);
-  }
+  fine(g, (fg) => {
+    for (let i = 0; i < 4; i++) {
+      const ph = (t * 0.6 + i * 0.25) % 1;
+      if (ph >= 0.85) continue;
+      const X = Math.round((x + ph * 6 + Math.sin((t + i) * 2) * 1.5) * F), Y = Math.round((y - ph * 14) * F);
+      const r = 1 + Math.round(ph * 3);
+      ellipse(fg, X, Y, r, Math.max(1, r - 1), ph < 0.4 ? C.wool : C.sage);
+    }
+  });
 }
 
 function foldGate(g: CanvasRenderingContext2D, x: number, base: number, w: number, shut: boolean) {
-  rect(g, x - 1, base - 7, 2, 8, C.plum);
-  rect(g, x + w - 1, base - 7, 2, 8, C.plum);
-  if (shut) {
-    for (const ry of [base - 6, base - 4, base - 2]) rect(g, x + 1, ry, w - 2, 1, ry === base - 4 ? C.moss : C.wool);
-    line(g, x + 1, base - 2, x + w - 2, base - 6, C.wool); // the brace
-  } else {
-    rect(g, x + 1, base - 14, 2, 9, C.plum); // swung back into the fold
-    for (let j = 0; j < 8; j += 2) px(g, x + 2, base - 13 + j, C.wool);
-  }
+  fine(g, (fg) => {
+    const X = x * F, B = base * F + 1, Wd = w * F;
+    for (const px0 of [X - 2, X + Wd - 2]) { rect(fg, px0, B - 15, 4, 16, C.plum); px(fg, px0 + 3, B - 13, C.sage); }
+    if (shut) {
+      for (const ry of [B - 12, B - 8, B - 4]) { rect(fg, X + 2, ry, Wd - 4, 1, C.wool); rect(fg, X + 2, ry + 1, Wd - 4, 1, C.sage); }
+      line(fg, X + 2, B - 4, X + Wd - 4, B - 12, C.wool); // the brace
+    } else {
+      rect(fg, X + 2, B - 28, 4, 18, C.plum); // swung back into the fold
+      for (let j = 0; j < 16; j += 4) rect(fg, X + 3, B - 26 + j, 2, 1, C.wool);
+    }
+  });
 }
 
 // ---- The slate quarry's pile ----
 
 function slatePile(g: CanvasRenderingContext2D, x: number, y: number, n: number) {
-  ellipse(g, x - 2, y + 1, 10, 2, C.sage);
+  fine(g, (fg) => {
+    const X = x * F, B = y * F + 1;
+    ellipse(fg, X - 4, B + 2, 20, 4, C.sage);
+    for (let i = 0; i < n; i++) {
+      const sx = X - 12 + (i % 2) * 14, sy = B - 2 - Math.floor(i / 2) * 6;
+      rect(fg, sx - 2, sy - 4, 16, 7, C.plum);
+      rect(fg, sx, sy - 3, 12, 2, C.teal);
+      rect(fg, sx, sy - 1, 12, 1, C.sage);
+      rect(fg, sx, sy + 1, 12, 1, C.teal);
+      px(fg, sx + 9, sy - 3, C.wool);
+    }
+  });
   pebble(g, x - 9, y, 1, 1);
   pebble(g, x + 8, y - 1, 1, 1);
-  for (let i = 0; i < n; i++) {
-    const sx = x - 6 + (i % 2) * 7, sy = y - 1 - Math.floor(i / 2) * 3 - (i === 4 ? 0 : 0);
-    rect(g, sx - 1, sy - 2, 8, 4, C.plum);
-    rect(g, sx, sy - 1, 6, 2, C.teal);
-    rect(g, sx, sy, 6, 1, C.sage);
-    px(g, sx + 4, sy - 1, C.wool);
-  }
 }
 
 // ---- The mill at the falls ----
 
 function mud(g: CanvasRenderingContext2D, x: number, y: number, v: number) {
-  ellipse(g, x, y, 5 + (v % 3), 2, C.sage);
-  for (let i = 0; i < 5; i++) px(g, x - 4 + ((i * 3 + v) % 9), y - 1 + (i % 3), C.plum);
-  px(g, x + 2, y, C.teal);
+  fine(g, (fg) => {
+    const X = x * F, Y = y * F;
+    ellipse(fg, X, Y, (5 + (v % 3)) * F, 4, C.sage);
+    ellipse(fg, X + 1, Y + 1, (3 + (v % 3)) * F, 2, C.plum);
+    rect(fg, X + 3, Y - 1, 3, 1, C.teal);
+    px(fg, X - 4, Y - 2, C.wool);
+  });
 }
 
 function wheelPit(g: CanvasRenderingContext2D, x: number, y: number) {
   stones(g, x - 7, y - 4, 14, 4, 13, 0.5);
-  // What is left of the old wheel, lying askew in its pit.
-  line(g, x - 6, y - 4, x - 1, y - 12, C.plum);
-  line(g, x - 1, y - 12, x + 5, y - 9, C.plum);
-  line(g, x - 3, y - 8, x + 2, y - 6, C.plum);
-  px(g, x + 6, y - 7, C.plum);
-  px(g, x - 1, y - 7, C.sage);
+  fine(g, (fg) => {
+    const X = x * F, Y = y * F;
+    // What is left of the old wheel, lying askew in its pit.
+    for (const [a, b, c, d] of [[-12, -8, -2, -24], [-2, -24, 10, -18], [-6, -16, 4, -12], [-9, -12, 6, -21]]) {
+      line(fg, X + a, Y + b, X + c, Y + d, C.plum);
+      line(fg, X + a + 1, Y + b, X + c + 1, Y + d, C.sage);
+    }
+    rect(fg, X + 11, Y - 15, 2, 3, C.plum);
+  });
 }
 
 function waterwheel(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  const cx = x, cy = y - 10, r = 8;
-  // A plank flume from the pool down to the top of the wheel.
-  rect(g, cx - 2, cy - r - 9, 5, 9, C.plum);
-  rect(g, cx - 1, cy - r - 9, 3, 9, C.teal);
-  for (let j = 0; j < 9; j++) if ((j + Math.floor(t * 12)) % 3 === 0) px(g, cx, cy - r - 9 + j, C.wool);
-  // Stone footings either side, the rim, turning spokes and paddles.
-  stones(g, cx - 9, y - 3, 4, 3, 13, 0.5);
-  stones(g, cx + 6, y - 3, 4, 3, 14, 0.5);
-  for (let a = 0; a < 56; a++) {
-    const ang = (a / 56) * Math.PI * 2;
-    px(g, cx + Math.round(Math.cos(ang) * r), cy + Math.round(Math.sin(ang) * r), C.plum);
-  }
-  const turn = t * 1.4;
-  for (let k = 0; k < 8; k++) {
-    const ang = turn + (k * Math.PI) / 4;
-    const ex = cx + Math.round(Math.cos(ang) * (r - 1)), ey = cy + Math.round(Math.sin(ang) * (r - 1));
-    line(g, cx, cy, ex, ey, k % 2 ? C.sage : C.plum);
-    rect(g, cx + Math.round(Math.cos(ang) * r) - 1, cy + Math.round(Math.sin(ang) * r) - 1, 2, 2, C.moss);
-  }
-  rect(g, cx - 1, cy - 1, 3, 3, C.plum);
-  px(g, cx, cy, C.wool);
-  // Water spilling off the downstream side, foam below.
-  for (let i = 0; i < 6; i++) {
-    const ph = (t * 3 + i / 6) % 1;
-    px(g, cx + r + 1 - (i % 2), cy - 3 + Math.round(ph * 12), C.wool);
-  }
-  for (let i = -4; i <= 4; i += 2) if (hash2(i, Math.floor(t * 8), 93) < 0.6) px(g, cx + i, y + 1, C.wool);
+  stones(g, x - 9, y - 3, 4, 3, 13, 0.5);
+  stones(g, x + 6, y - 3, 4, 3, 14, 0.5);
+  fine(g, (fg) => {
+    const CX = x * F, CY = (y - 10) * F, R = 8 * F;
+    // A plank flume from the pool down to the top of the wheel.
+    rect(fg, CX - 4, CY - R - 18, 10, 18, C.plum);
+    rect(fg, CX - 2, CY - R - 18, 6, 18, C.teal);
+    for (let j = 0; j < 18; j++) if ((j + Math.floor(t * 24)) % 5 === 0) rect(fg, CX, CY - R - 18 + j, 2, 1, C.wool);
+    // The rim, turning spokes and paddles.
+    for (let a = 0; a < 112; a++) {
+      const ang = (a / 112) * Math.PI * 2;
+      px(fg, CX + Math.round(Math.cos(ang) * R), CY + Math.round(Math.sin(ang) * R), C.plum);
+      px(fg, CX + Math.round(Math.cos(ang) * (R - 1)), CY + Math.round(Math.sin(ang) * (R - 1)), C.sage);
+    }
+    const turn = t * 1.4;
+    for (let k = 0; k < 8; k++) {
+      const ang = turn + (k * Math.PI) / 4;
+      const ex = CX + Math.round(Math.cos(ang) * (R - 2)), ey = CY + Math.round(Math.sin(ang) * (R - 2));
+      line(fg, CX, CY, ex, ey, k % 2 ? C.sage : C.plum);
+      const bx = CX + Math.round(Math.cos(ang) * R), by = CY + Math.round(Math.sin(ang) * R);
+      rect(fg, bx - 2, by - 2, 4, 4, C.moss);
+      px(fg, bx - 2, by - 2, C.plum);
+    }
+    rect(fg, CX - 2, CY - 2, 5, 5, C.plum);
+    px(fg, CX, CY, C.wool);
+    // Water spilling off the downstream side, foam below.
+    for (let i = 0; i < 10; i++) {
+      const ph = (t * 3 + i / 10) % 1;
+      px(fg, CX + R + 2 - (i % 3), CY - 6 + Math.round(ph * 24), C.wool);
+    }
+    for (let i = -8; i <= 8; i += 2) if (hash2(i, Math.floor(t * 8), 93) < 0.6) rect(fg, CX + i, y * F + 2, 2, 1, C.wool);
+  });
 }
 
 // ---- Signboards: how far along, at each site ----
 
 function signboard(g: CanvasRenderingContext2D, x: number, y: number, frac: number, done: boolean) {
-  rect(g, x, y - 9, 1, 10, C.plum);
-  rect(g, x - 6, y - 15, 13, 7, C.plum);
-  rect(g, x - 5, y - 14, 11, 5, C.moss);
-  if (done) {
-    px(g, x, y - 13, C.butter);
-    rect(g, x - 1, y - 12, 3, 1, C.butter);
-    px(g, x, y - 11, C.butter);
-    px(g, x, y - 12, C.wool);
-    return;
-  }
-  for (let i = 0; i < 5; i++) rect(g, x - 4 + i * 2, y - 13, 1, 3, frac >= (i + 1) / 5 ? C.butter : C.sage);
+  fine(g, (fg) => {
+    const X = x * F, B = y * F + 1;
+    rect(fg, X, B - 18, 2, 19, C.plum);
+    px(fg, X + 1, B - 16, C.sage);
+    rect(fg, X - 12, B - 30, 26, 14, C.plum);
+    rect(fg, X - 10, B - 28, 22, 10, C.moss);
+    rect(fg, X - 10, B - 19, 22, 1, C.sage);
+    if (done) {
+      // A buttercup star.
+      rect(fg, X - 3, B - 24, 7, 1, C.butter);
+      rect(fg, X, B - 27, 1, 7, C.butter);
+      rect(fg, X - 1, B - 25, 3, 3, C.butter);
+      px(fg, X, B - 24, C.wool);
+      return;
+    }
+    for (let i = 0; i < 5; i++) rect(fg, X - 8 + i * 4, B - 26, 2, 6, frac >= (i + 1) / 5 ? C.butter : C.sage);
+  });
 }
 
 // ---- Loads, on the animals carrying them ----
@@ -241,15 +304,12 @@ function drawLoad(g: CanvasRenderingContext2D, a: Animal) {
   const x = Math.round(a.x), y = Math.round(a.y);
   if (load === 'slate') {
     // Panniers of slate either side of a goat's back.
-    if (a.face === 'l' || a.face === 'r') {
-      rect(g, x - 2, y - 6, 4, 4, C.plum);
-      rect(g, x - 1, y - 5, 2, 2, C.teal);
-    } else {
-      rect(g, x - 5, y - 6, 3, 4, C.plum);
-      rect(g, x + 2, y - 6, 3, 4, C.plum);
-      px(g, x - 4, y - 5, C.teal);
-      px(g, x + 3, y - 5, C.teal);
-    }
+    fine(g, (fg) => {
+      const X = x * F, Y = y * F;
+      const bag = (bx: number) => { rect(fg, bx, Y - 12, 6, 8, C.plum); rect(fg, bx + 1, Y - 11, 4, 2, C.teal); rect(fg, bx + 1, Y - 8, 4, 1, C.sage); };
+      if (a.face === 'l' || a.face === 'r') bag(X - 3);
+      else { bag(X - 10); bag(X + 4); }
+    });
     return;
   }
   // A stone on a travois behind a pony.
@@ -257,8 +317,10 @@ function drawLoad(g: CanvasRenderingContext2D, a: Animal) {
   const [dx, dy] = f === 'r' ? [-1, 0] : f === 'l' ? [1, 0] : f === 'd' ? [0, -1] : [0, 1];
   const rx = x + dx * 4, ry = y + dy * 4 - (dy ? 0 : 3);
   const sx = x + dx * 14, sy = y + dy * 12 - (dy ? 2 : 0);
-  line(g, rx - (dy ? 2 : 0), ry, sx - (dy ? 2 : 0), sy + (dy ? 0 : 1), C.plum);
-  line(g, rx + (dy ? 2 : 0), ry + (dy ? 0 : 1), sx + (dy ? 2 : 0), sy + 2, C.plum);
+  fine(g, (fg) => {
+    line(fg, (rx - (dy ? 2 : 0)) * F, ry * F, (sx - (dy ? 2 : 0)) * F, (sy + (dy ? 0 : 1)) * F, C.plum);
+    line(fg, (rx + (dy ? 2 : 0)) * F, (ry + (dy ? 0 : 1)) * F, (sx + (dy ? 2 : 0)) * F, (sy + 2) * F, C.plum);
+  });
   pebble(g, sx, sy, 3, 1, true);
 }
 
@@ -274,17 +336,21 @@ const FOLK: Look[] = [
 
 function bunting(g: CanvasRenderingContext2D, xa: number, xb: number, y: number) {
   const cols = [C.butter, C.wool, C.teal];
-  const w = xb - xa;
-  for (let x = xa; x <= xb; x++) {
-    const u = (x - xa) / w;
-    const sag = Math.round(3 * 4 * u * (1 - u));
-    px(g, x, y + sag, C.plum);
-    if ((x - xa) % 4 === 1 && x < xb - 1) {
-      const c = cols[Math.floor((x - xa) / 4) % 3];
-      rect(g, x, y + sag + 1, 3, 1, c);
-      px(g, x + 1, y + sag + 2, c);
+  fine(g, (fg) => {
+    const XA = xa * F, XB = xb * F, Y = y * F;
+    const w = XB - XA;
+    for (let x = XA; x <= XB; x++) {
+      const u = (x - XA) / w;
+      const sag = Math.round(6 * 4 * u * (1 - u));
+      px(fg, x, Y + sag, C.plum);
+      if ((x - XA) % 8 === 2 && x < XB - 4) {
+        const c = cols[Math.floor((x - XA) / 8) % 3];
+        rect(fg, x, Y + sag + 1, 5, 1, c);
+        rect(fg, x + 1, Y + sag + 2, 3, 2, c);
+        px(fg, x + 2, Y + sag + 4, c);
+      }
     }
-  }
+  });
 }
 
 function folkAt(g: CanvasRenderingContext2D, i: number, x: number, y: number, t: number) {
@@ -294,18 +360,22 @@ function folkAt(g: CanvasRenderingContext2D, i: number, x: number, y: number, t:
 }
 
 function bonfire(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  ellipse(g, x - 1, y + 1, 6, 2, C.sage);
-  line(g, x - 5, y, x + 4, y - 3, C.plum);
-  line(g, x - 4, y - 3, x + 5, y, C.plum);
-  for (let i = 0; i < 14; i++) {
-    const h = hash2(i, Math.floor(t * 10), 81);
-    const fx = x - 3 + (i % 7), fy = y - 3 - Math.floor(h * (7 - Math.abs(3 - (i % 7))));
-    px(g, fx, fy, h > 0.6 ? C.wool : C.butter);
-  }
-  for (let i = 0; i < 3; i++) {
-    const ph = (t * 0.8 + i / 3) % 1;
-    if (ph < 0.7) px(g, x - 1 + Math.round(Math.sin((t + i) * 3) * 2), y - 10 - Math.round(ph * 14), C.butter);
-  }
+  fine(g, (fg) => {
+    const X = x * F, B = y * F + 1;
+    ellipse(fg, X - 2, B + 2, 12, 4, C.sage);
+    // Logs crossed, stones round them, flames licking up, sparks rising.
+    for (const [a, b, c, d] of [[-10, 0, 8, -6], [-8, -6, 10, 0], [-6, 2, 6, -8]]) { line(fg, X + a, B + b, X + c, B + d, C.plum); line(fg, X + a, B + b - 1, X + c, B + d - 1, C.sage); }
+    for (let i = 0; i < 20; i++) {
+      const h = hash2(i, Math.floor(t * 10), 81);
+      const col = i % 10;
+      const fx = X - 7 + col + (i >= 10 ? 1 : 0), top = Math.floor(h * (16 - Math.abs(5 - col) * 2));
+      rect(fg, fx, B - 6 - top, 1, top, h > 0.65 ? C.wool : C.butter);
+    }
+    for (let i = 0; i < 4; i++) {
+      const ph = (t * 0.8 + i / 4) % 1;
+      if (ph < 0.7) px(fg, X - 2 + Math.round(Math.sin((t + i) * 3) * 4), B - 20 - Math.round(ph * 28), C.butter);
+    }
+  });
 }
 
 const CELEBRATE: Record<ProjectId, [number, number]> = {
@@ -339,7 +409,7 @@ export function projectDrawables(game: Game, g: CanvasRenderingContext2D): Drawa
       const behind = LOAD_OF[a.sp.id] === 'stone' && a.face !== 'u';
       out.push({ y: a.y + (behind ? -0.5 : 0.5), draw: () => drawLoad(g, a) });
     }
-    if (blessed.has(a) && !a.pen && Math.floor(t * 4 + a.id) % 3 === 0) out.push({ y: 1e8, draw: () => px(g, a.x, a.y - a.sp.r * 2 - 5, C.butter) });
+    if (blessed.has(a) && !a.pen && Math.floor(t * 4 + a.id) % 3 === 0) out.push({ y: 1e8, draw: () => fine(g, (fg) => { const X = Math.round(a.x * F), Y = Math.round((a.y - a.sp.r * 2 - 5) * F); rect(fg, X - 1, Y, 3, 1, C.butter); rect(fg, X, Y - 1, 1, 3, C.butter); }) });
   }
 
   // The day it was done: bunting and a few folk by the sign.
@@ -397,8 +467,8 @@ function workDrawable(game: Game, g: CanvasRenderingContext2D, pr: Prop, t: numb
     case 'fieldstone':
       if (P.isDone('circle') || P.atPile('circle', pr.pile ?? 0) <= 0) return null;
       return cached(g, `proj-fs${v}`, (cg) => [
-        ground(() => ellipse(cg, x - 2, y + 1, 8, 2, C.sage), 1),
-        { y, draw: () => { fallenStone(cg, x, y); px(cg, x - 5, y, C.moss); px(cg, x + 4, y + 1, C.moss); } },
+        ground(() => fine(cg, (fg) => ellipse(fg, (x - 2) * F, y * F + 2, 16, 4, C.sage)), 1),
+        { y, draw: () => { fallenStone(cg, x, y); fine(cg, (fg) => { rect(fg, (x - 5) * F, y * F, 2, 1, C.moss); px(fg, (x - 5) * F, y * F - 1, C.moss); rect(fg, (x + 4) * F, (y + 1) * F, 2, 1, C.moss); }); } },
       ]);
     case 'mud':
       return cached(g, `proj-mud${v}`, (cg) => [ground(() => mud(cg, x, y, v), 1)]);

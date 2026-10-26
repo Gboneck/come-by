@@ -1,8 +1,8 @@
 import { C } from '../palette';
 import { panel, px, rect } from '../gfx/draw';
 import { text, textWidth, wrap } from '../gfx/font';
-import { drawSpr, type Sprite } from '../gfx/sprite';
-import { makeCanvas } from '../gfx/screen';
+import { drawSpr, drawSprAt, sprH, sprW, type Sprite } from '../gfx/sprite';
+import { PX, makeCanvas } from '../gfx/screen';
 import type { Game } from '../game';
 import { ACHIEVEMENTS, achById, isBig, type AchDef } from '../systems/achievements';
 import { PTS, buyerDef, buyerLines, maxLevel, titleOf, type BuyerId } from '../systems/favour';
@@ -10,6 +10,7 @@ import { BADGE, drawBadge } from '../art/badges';
 import { Person, type FolkId } from '../entities/folk';
 import { peopleSprites } from '../art/people';
 import { playerDogSprites } from '../art/dogstyle';
+import { whatsThisUp } from './whatsthis';
 import type { LedgerInk, LedgerPage } from './ledger';
 import { sharePng } from './photo';
 
@@ -31,7 +32,6 @@ function say(s: string) {
 }
 
 const PORTRAIT: Partial<Record<BuyerId, Sprite>> = {};
-const BIG: Partial<Record<BuyerId, HTMLCanvasElement>> = {};
 function portrait(id: BuyerId): Sprite {
   let s = PORTRAIT[id];
   if (!s) {
@@ -227,10 +227,11 @@ export const BADGES_PAGE: LedgerPage = { id: 'badges', tab: 'BADGES', draw: draw
 // ---- The card that drops in ----
 //
 // In the tier card's place (a third of the way down the screen), one at a
-// time, never over the tier card, the judge's card or a banner: the HUD
-// draws it in place of the banner (ui/hud.ts), and it waits its turn.
+// time, never over the tier card, the judge's card, a banner or a what's-
+// this card (which would take its tap): the HUD draws it in place of the
+// banner (ui/hud.ts), and it waits its turn.
 
-export const badgeUp = (game: Game) => !!game.achievements.card && !game.feel.tierCard && !game.trials.result && !game.banner;
+export const badgeUp = (game: Game) => !!game.achievements.card && !game.feel.tierCard && !game.trials.result && !game.banner && !whatsThisUp();
 
 export function drawBadgeCard(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
   const A = game.achievements;
@@ -292,10 +293,10 @@ function badgeCard(game: Game, g: CanvasRenderingContext2D, id: string, x0: numb
 
 function favourLayout(buyer: BuyerId, level: number, pw: number) {
   const s = portrait(buyer);
-  const tw = pw - (10 + s.w * 2) - 5;
+  const tw = pw - (10 + sprW(s) * 2) - 5;
   const step = buyerDef(buyer).steps[level - 1];
   const line = wrap(`"${step.line}"`, tw).slice(0, 4), perk = wrap(step.perk, tw).slice(0, 2);
-  return { line, perk, h: Math.max(s.h * 2 + 10, 4 + 14 + line.length * 7 + 1 + perk.length * 7 + (level >= maxLevel(buyer) ? 10 : 2)) };
+  return { line, perk, h: Math.max(sprH(s) * 2 + 10, 4 + 14 + line.length * 7 + 1 + perk.length * 7 + (level >= maxLevel(buyer) ? 10 : 2)) };
 }
 
 function favourCard(game: Game, g: CanvasRenderingContext2D, buyer: BuyerId, level: number, x0: number, y0: number, pw: number, ph: number, age: number) {
@@ -304,15 +305,10 @@ function favourCard(game: Game, g: CanvasRenderingContext2D, buyer: BuyerId, lev
   const s = portrait(buyer);
   const { line, perk } = favourLayout(buyer, level, pw);
   // The buyer, twice the size, on a teal ground.
-  panel(g, x0 + 3, y0 + 3, s.w * 2 + 4, ph - 6, C.teal, C.sage);
-  let c = BIG[buyer];
-  if (!c) {
-    const [cv, cg] = makeCanvas(s.w, s.h);
-    drawSpr(cg, s, s.ax, s.ay);
-    BIG[buyer] = c = cv;
-  }
-  g.drawImage(c, x0 + 5, y0 + Math.round(ph / 2 - s.h), s.w * 2, s.h * 2);
-  const tx = x0 + 10 + s.w * 2;
+  // Sizes in world pixels (a dense sprite's grid is finer).
+  panel(g, x0 + 3, y0 + 3, sprW(s) * 2 + 4, ph - 6, C.teal, C.sage);
+  drawSprAt(g, s, x0 + 5, y0 + Math.round(ph / 2 - sprH(s)), 2);
+  const tx = x0 + 10 + sprW(s) * 2;
   text(g, def.name, tx, y0 + 4, C.wool);
   // The hearts fill to the new level, the last one popping in.
   for (let i = 0; i < max; i++) {
@@ -339,7 +335,7 @@ function pastCard(game: Game, g: CanvasRenderingContext2D, n: number, x0: number
 
 function postcard(game: Game, a: AchDef): HTMLCanvasElement {
   const w = 200, h = 112;
-  const [c, g] = makeCanvas(w, h);
+  const [c, g] = makeCanvas(w, h, PX); // fine pixels: the text is drawn finely
   // Card stock with an airmail edge of teal and buttercup.
   rect(g, 0, 0, w, h, C.plum);
   for (let i = 0; i < w + h; i += 6) {
@@ -400,8 +396,9 @@ export function postcardUrl(game: Game, id: string): string | null {
   const a = achById(id);
   if (!a || !game.achievements.has(id)) return null;
   const src = postcard(game, a);
-  const [c, cg] = makeCanvas(src.width * 5, src.height * 5);
+  const k = Math.max(1, Math.round(5 / PX));
+  const [c, cg] = makeCanvas(src.width * k, src.height * k);
   cg.imageSmoothingEnabled = false;
-  cg.drawImage(src, 0, 0, src.width * 5, src.height * 5);
+  cg.drawImage(src, 0, 0, src.width * k, src.height * k);
   return c.toDataURL('image/png');
 }

@@ -32,6 +32,7 @@ interface TravelsData {
   ribbons: number; // brace placings as a guest
   seen?: string[]; // first-time co-op hints shown
   badges?: string[]; // achievements earned while visiting (systems/achievements.ts)
+  loot?: string[]; // things dug up while visiting (systems/loot.ts)
 }
 
 function store(): Storage | null {
@@ -124,6 +125,13 @@ export class Travels {
 
   ribbon() {
     this.d.ribbons++;
+    this.save();
+  }
+
+  // Something dug up here (and any coins it was worth), for our own save.
+  addLoot(id: string, coins: number) {
+    (this.d.loot ??= []).push(id);
+    this.d.coins += coins;
     this.save();
   }
 
@@ -232,14 +240,17 @@ export function mergeTravels(game: Game) {
   }
   const places = disc.found.size - before.found, keeps = disc.keepsakes.size - before.keep;
   for (const id of d.badges ?? []) game.achievements.grant(game, id); // badges earned visiting
+  const dug = d.loot ?? [];
+  game.loot.merge(game, dug); // things dug up visiting
   if (d.coins > 0) game.earn(d.coins);
-  if (places || keeps || d.coins > 0) {
-    const bits = [places ? `${places} HIDDEN PLACE${places > 1 ? 'S' : ''}` : '', keeps ? `${keeps} KEEPSAKE${keeps > 1 ? 'S' : ''}` : '', d.coins ? `+${d.coins}$` : ''].filter(Boolean);
+  if (places || keeps || dug.length || d.coins > 0) {
+    const bits = [places ? `${places} HIDDEN PLACE${places > 1 ? 'S' : ''}` : '', keeps ? `${keeps} KEEPSAKE${keeps > 1 ? 'S' : ''}` : '', dug.length ? `${dug.length} FIND${dug.length > 1 ? 'S' : ''}` : '', d.coins ? `+${d.coins}$` : ''].filter(Boolean);
     game.tip = { text: `FROM YOUR TRAVELS: ${bits.join(', ')}.`, t: 7 };
     game.ledgerNew = true;
   }
-  if (d.coins > 0) {
+  if (d.coins > 0 || dug.length) {
     d.coins = 0;
+    d.loot = [];
     try {
       store()?.setItem(KEY, JSON.stringify(d));
     } catch { /* fine */ }

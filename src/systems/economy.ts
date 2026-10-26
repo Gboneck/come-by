@@ -1,4 +1,3 @@
-import { C } from '../palette';
 import type { Game } from '../game';
 import { BASE_STATS, type DogStats } from '../entities/dog';
 import type { Pen } from '../ranch/buildings';
@@ -10,20 +9,28 @@ import { isMarketDay } from './valley';
 // ---- Goods ----
 
 // Penned animals make goods during the day. Calm animals make more; a
-// trough helps, and so does the windmill.
+// trough helps, and so does the windmill. A packed paddock makes less: full
+// rate up to three-fifths of its room, half when it is full, so a paddock
+// with room to spare makes as much as a crowded one (and has room for young).
+export const CROWD_FROM = 0.6;
+export function crowding(p: Pen): number {
+  return 1 - 0.5 * Math.max(0, Math.min(1, (p.used / Math.max(1, p.capacity) - CROWD_FROM) / (1 - CROWD_FROM)));
+}
+
 export function updateProduce(game: Game, dt: number) {
   const mill = game.ranch.buildings.some((b) => b.kind === 'windmill') ? 1.2 : 1;
   for (const p of game.ranch.pens) {
+    const crowd = crowding(p);
     for (const a of p.animals) {
       const sp = a.sp;
       if (!sp.good || a.young || p.hungry) continue; // lambs make nothing; a hungry pen neither
-      const rate = (1 - 0.75 * a.stress) * (p.hasTrough ? 1.4 : 1) * mill * (a.rare ? 1.5 : 1);
+      const rate = (1 - 0.75 * a.stress) * (p.hasTrough ? 1.4 : 1) * mill * (a.rare ? 1.5 : 1) * crowd;
       a.produceT += dt * rate;
       if (a.produceT >= sp.goodEvery) {
         a.produceT -= sp.goodEvery;
         p.goods++;
         p.goodsBy[sp.id] = (p.goodsBy[sp.id] ?? 0) + 1;
-        if (game.isOnScreen(a.x, a.y)) game.fx.float(a.x, a.y - 8, `+1 ${sp.good.toUpperCase().replace(/S$/, '')}`, C.wool, 0.9);
+        if (game.isOnScreen(a.x, a.y)) game.fx.good(a.x, a.y - 8, sp.id); // its icon and a +1
       }
     }
   }
@@ -70,10 +77,10 @@ export interface UpgradeDef {
 }
 
 export const UPGRADES: UpgradeDef[] = [
-  { key: 'stamina', name: 'STAMINA', costs: [15, 35, 110], desc: (l) => `${[100, 130, 165, 200][l - 1]} WIND` },
-  { key: 'speed', name: 'SPEED', costs: [20, 45, 120], desc: (l) => `${[46, 49, 52, 55][l - 1]} PACE` },
-  { key: 'bark', name: 'BARK', costs: [15, 35, 110], desc: (l) => `${[54, 64, 74, 86][l - 1]} REACH` },
-  { key: 'nip', name: 'NIP', costs: [15, 30, 100], desc: (l) => `X${[1, 1.3, 1.6, 2][l - 1]} SHOVE` },
+  { key: 'stamina', name: 'STAMINA', costs: [15, 35, 150], desc: (l) => `${[100, 130, 165, 200][l - 1]} WIND` },
+  { key: 'speed', name: 'SPEED', costs: [20, 45, 160], desc: (l) => `${[46, 49, 52, 55][l - 1]} PACE` },
+  { key: 'bark', name: 'BARK', costs: [15, 35, 150], desc: (l) => `${[54, 64, 74, 86][l - 1]} REACH` },
+  { key: 'nip', name: 'NIP', costs: [15, 30, 140], desc: (l) => `X${[1, 1.3, 1.6, 2][l - 1]} SHOVE` },
 ];
 
 export const MAX_UP = 4;
