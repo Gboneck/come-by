@@ -1073,7 +1073,8 @@ double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
 - [x] Checks: typecheck, build, shot, regions; `tune.mjs <species>
       --seed=7` identical for all five; every sprite scanned (about
       3,500): all in the palette, red only on the player's dog, nothing
-      half transparent; cooptest; perftest against platform-r5 (see
+      half transparent; cooptest 51/52 (the brace's guest flock count
+      fails on platform-r5 alone too); perftest against platform-r5 (see
       Decisions)
 
 ## Decisions
@@ -2159,3 +2160,9 @@ double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
 - The dog's sniff and dig are two plain fields on Dog that the treasure
   hunt writes each frame; the drawing only reads them. Digging is shown
   side on, whichever way the dog was heading.
+- Round five's perftest (6x throttle, phone size, three rounds alternating
+  with platform-r5 on a machine busy with other sessions): medians day
+  24.9 ms before / 23.1 ms after, worst 26.6 / 27.3 ms; within the noise.
+  Dense sprites cost the same pixels as the old ones drawn under scale(2);
+  fine shadows, ripples and drips are filled at half-pixel steps in world
+  space rather than switching transforms per call.
