@@ -36,6 +36,9 @@ export class Screen {
   fine = 1; // device pixels per fine pixel
   dpr = 1;
   readonly cssScale = CSS_SCALE;
+  // CLOSE: the scale TARGET_FINE gives. WIDE: one whole-number scale down,
+  // for more field and smaller sprites (pause menu, VIEW).
+  viewMode: 'close' | 'wide' = 'close';
   onResize: (() => void) | null = null;
 
   constructor(view: HTMLCanvasElement) {
@@ -61,7 +64,8 @@ export class Screen {
     const cssH = vv ? vv.height : window.innerHeight;
     const dw = Math.round(cssW * dpr);
     const dh = Math.round(cssH * dpr);
-    const fine = Math.max(1, Math.round(Math.min(dw, dh) / TARGET_FINE));
+    let fine = Math.max(1, Math.round(Math.min(dw, dh) / TARGET_FINE));
+    if (this.viewMode === 'wide' && fine > 1) fine--;
     const scale = fine * PX;
     // Never zero: a page opened in a hidden tab has no size yet.
     const W = Math.max(1, Math.ceil(dw / scale));
@@ -84,6 +88,19 @@ export class Screen {
     this.g.setTransform(PX, 0, 0, PX, 0, 0);
     this.g.imageSmoothingEnabled = false;
     this.onResize?.();
+  }
+
+  setView(v: 'close' | 'wide') {
+    if (v === this.viewMode) return;
+    this.viewMode = v;
+    this.W = -1; // force the resize
+    this.resize();
+  }
+
+  // CSS pixels a fine pixel takes on screen (about 1 on a phone held
+  // upright in CLOSE, two thirds in WIDE).
+  get cssPerFine() {
+    return this.fine / this.dpr;
   }
 
   present() {

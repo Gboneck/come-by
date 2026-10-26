@@ -1,5 +1,5 @@
 import { PX, makeCanvas } from './screen';
-import { BODY, SMALL } from './glyphs';
+import { BODY, LARGE, SMALL } from './glyphs';
 
 // The game's text.
 //
@@ -7,7 +7,11 @@ import { BODY, SMALL } from './glyphs';
 // src/gfx/glyphs.ts), with lower case, proportional and kerned:
 // - body: capitals 9 fine pixels, x-height 6, descenders 2, a line every 12
 //   fine pixels (LINE_H = 6 world pixels);
-// - small: capitals 7, x-height 5, a line every 10 (5 world pixels).
+// - small: capitals 7, x-height 5, a line every 10 (5 world pixels);
+// - large: capitals 12, x-height 8, a line every 16 (8 world pixels), for
+//   body text on phones;
+// - heading: the body face blown up by Scale2x (rounded, strokes two fine
+//   pixels): capitals 18, a line every 24 (12 world pixels).
 // text(g, s, x, y, colour, { size }) takes world pixels as everything else
 // does (x, y may be fractional: they snap to the fine grid); y is the top
 // of the capitals. Widths come back in world pixels, in halves.
@@ -41,18 +45,61 @@ function build(defs: Record<string, string>, rows?: number): Record<string, Glyp
   return out;
 }
 
-export type TextSize = 'body' | 'small';
-interface Face { tag: string; glyphs: Record<string, Glyph>; rows: number; line: number }
+export type TextSize = 'small' | 'body' | 'large' | 'heading';
+// gap: fine pixels between letters (kerning takes away as many).
+interface Face { tag: string; glyphs: Record<string, Glyph>; rows: number; line: number; gap: number }
 function face(tag: string, f: typeof BODY): Face {
   const glyphs = build(f.glyphs, f.rows);
   glyphs[' '] = { w: f.space, h: f.rows, bits: Array(f.space * f.rows).fill(0), left: [], right: [] };
-  return { tag, glyphs, rows: f.rows, line: f.line };
+  return { tag, glyphs, rows: f.rows, line: f.line, gap: 1 };
 }
-const FACES: Record<TextSize, Face> = { body: face('b', BODY), small: face('s', SMALL) };
+
+// The heading face: the body face blown up 2x with Scale2x, which rounds
+// the diagonals and curves as it doubles every stroke: capitals 18 fine
+// pixels (9 world), a line every 24.
+function scale2x(src: Face, tag: string): Face {
+  const glyphs: Record<string, Glyph> = {};
+  for (const [ch, gl] of Object.entries(src.glyphs)) {
+    const w = gl.w * 2, h = gl.h * 2;
+    const at = (x: number, y: number) => (x < 0 || y < 0 || x >= gl.w || y >= gl.h ? 0 : gl.bits[y * gl.w + x]);
+    const bits = new Array<number>(w * h).fill(0);
+    for (let y = 0; y < gl.h; y++)
+      for (let x = 0; x < gl.w; x++) {
+        const P = at(x, y), A = at(x, y - 1), B = at(x + 1, y), C = at(x - 1, y), D = at(x, y + 1);
+        const o = y * 2 * w + x * 2;
+        bits[o] = C === A && C !== D && A !== B ? A : P;
+        bits[o + 1] = A === B && A !== C && B !== D ? B : P;
+        bits[o + w] = D === C && D !== B && C !== A ? C : P;
+        bits[o + w + 1] = B === D && B !== A && D !== C ? D : P;
+      }
+    const left: number[] = [], right: number[] = [];
+    for (let y = 0; y < h; y++) {
+      if (bits[y * w]) left.push(y);
+      if (bits[y * w + w - 1]) right.push(y);
+    }
+    glyphs[ch] = { w, h, bits, left, right };
+  }
+  return { tag, glyphs, rows: src.rows * 2, line: src.line * 2, gap: 2 };
+}
+const FACES: Record<TextSize, Face> = { small: face('s', SMALL), body: face('b', BODY), large: face('L', LARGE as typeof BODY), heading: face('b', BODY) };
+FACES.heading = scale2x(FACES.body, 'H');
+
+// Sizes are roles. Where a fine pixel is physically small (the wide view on
+// a phone, about two thirds of a CSS pixel), every role steps up one face,
+// so text keeps its size on screen when the view widens (main.ts sets it
+// from the screen: setTextBoost). Lay out with lineHeight() and textWidth()
+// and a layout reads the same in either view.
+const ORDER: TextSize[] = ['small', 'body', 'large', 'heading'];
+let boost = 0;
+export function setTextBoost(n: number) {
+  boost = Math.max(0, Math.min(2, Math.round(n)));
+}
+export const textBoost = () => boost;
+const faceOf = (size: TextSize = 'body') => FACES[ORDER[Math.min(ORDER.length - 1, ORDER.indexOf(size) + boost)]];
 
 // 0 or -1: how much closer the second glyph may sit to the first.
 const kernCache = new Map<string, number>();
-function kern(face: Record<string, Glyph>, a: string, b: string, tag: string): number {
+function kern(face: Record<string, Glyph>, a: string, b: string, tag: string, rows = 2): number {
   const k = tag + a + b;
   let v = kernCache.get(k);
   if (v === undefined) {
@@ -61,7 +108,7 @@ function kern(face: Record<string, Glyph>, a: string, b: string, tag: string): n
     if (ga && gb && a !== ' ' && b !== ' ' && ga.right.length && gb.left.length) {
       let near = 99;
       for (const i of ga.right) for (const j of gb.left) near = Math.min(near, Math.abs(i - j));
-      if (near >= 2) v = -1;
+      if (near >= rows) v = -1;
     }
     kernCache.set(k, v);
   }
@@ -97,9 +144,10 @@ function glyphKey(f: Face, ch: string): string {
 }
 const isIcon = (k: string) => k === '$' || k === '@';
 
-// Line pitch in world pixels: body 6, small 5.
+// Line pitch in world pixels: small 5, body 6, large 8, heading 12 (one
+// face up each with the boost).
 export const LINE_H = BODY.line / PX;
-export const lineHeight = (size: TextSize = 'body') => FACES[size].line / PX;
+export const lineHeight = (size: TextSize = 'body') => faceOf(size).line / PX;
 
 // Rewrites text before it is measured or drawn: while a game pad is in use,
 // src/ui/pad.ts swaps keyboard prompts ("SPACE TO BARK") for pad buttons.
@@ -113,21 +161,21 @@ function fineWidth(f: Face, s: string): number {
   let w = 0, prev = '';
   for (const ch of s) {
     const k = glyphKey(f, ch);
-    w += f.glyphs[k].w + 1 + (prev ? kern(f.glyphs, prev, k, f.tag) : 0);
+    w += f.glyphs[k].w + f.gap + (prev ? kern(f.glyphs, prev, k, f.tag, 2 * f.gap) * f.gap : 0);
     prev = k;
   }
-  return Math.max(0, w - 1);
+  return Math.max(0, w - f.gap);
 }
 
 // Width in world pixels (halves are possible).
 export function textWidth(s: string, scale = 1, size: TextSize = 'body'): number {
   if (filter) s = filter(s);
-  return (fineWidth(FACES[size], s) * scale) / PX;
+  return (fineWidth(faceOf(size), s) * scale) / PX;
 }
 
 export interface TextOpts {
   align?: 'left' | 'center' | 'right';
-  shadow?: string; // one fine pixel below
+  shadow?: string; // one fine pixel below (two for headings)
   scale?: number; // whole number: every fine pixel drawn this many times
   size?: TextSize;
   // Per-character colour override for icons.
@@ -138,7 +186,7 @@ export interface TextOpts {
 
 export function text(g: CanvasRenderingContext2D, s: string, x: number, y: number, color: string, o: TextOpts = {}): number {
   if (filter) s = filter(s);
-  const f = FACES[o.size ?? 'body'];
+  const f = faceOf(o.size);
   const scale = o.scale ?? 1;
   const wf = fineWidth(f, s) * scale;
   // Placed on the fine grid, in fine pixels.
@@ -149,15 +197,15 @@ export function text(g: CanvasRenderingContext2D, s: string, x: number, y: numbe
   for (const ch of s) {
     const k = glyphKey(f, ch);
     const gl = f.glyphs[k];
-    if (prev) fx += kern(f.glyphs, prev, k, f.tag) * scale;
+    if (prev) fx += kern(f.glyphs, prev, k, f.tag, 2 * f.gap) * f.gap * scale;
     prev = k;
     if (k !== ' ') {
       const icon = isIcon(k);
       const gw = (gl.w * scale) / PX;
-      if (o.shadow) g.drawImage(glyphCanvas(f.glyphs, f.tag, k, o.shadow), fx / PX, (fy + scale) / PX, gw, gh);
+      if (o.shadow) g.drawImage(glyphCanvas(f.glyphs, f.tag, k, o.shadow), fx / PX, (fy + f.gap * scale) / PX, gw, gh);
       g.drawImage(glyphCanvas(f.glyphs, f.tag, k, icon && o.iconColor ? o.iconColor : color, icon ? o.iconRim : undefined), fx / PX, fy / PX, gw, gh);
     }
-    fx += (gl.w + 1) * scale;
+    fx += (gl.w + f.gap) * scale;
   }
   return wf / PX;
 }

@@ -13,6 +13,7 @@ import { safeArea } from './safe';
 import { SKY_WORD, skyIcon } from './icons';
 import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
+import { sentenceLines } from './case';
 import { discoveryLines, drawPaperFog, drawPlaceMarks, drawProjectMarks, projectLines } from './discovery';
 import { travelLines } from '../net/travels';
 import { valleyLedger } from './valley';
@@ -114,7 +115,10 @@ const INK: Record<string, string> = { [C.wool]: C.plum, [C.butter]: C.teal, [C.s
 const ink = (c: string) => INK[c] ?? C.plum;
 const COIN = { iconColor: C.butter, iconRim: C.plum };
 
-function drawLines(g: CanvasRenderingContext2D, lines: Line[], x0: number, y: number): number {
+function drawLines(g: CanvasRenderingContext2D, lines0: Line[], x0: number, y: number, wrapW = 0): number {
+  // In sentence case, a sentence carried over a line break left alone.
+  const cased = sentenceLines(lines0.map((l) => l.s), wrapW);
+  const lines = lines0.map((l, i) => ({ ...l, s: cased[i] }));
   for (const l of lines) {
     if (l.sky) {
       rect(g, x0 - 1, y - 2, 9, 9, C.plum);
@@ -248,13 +252,13 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   }
   if (page) page.draw(game, g, { x: x0 + 7, y: y0 + top, w: pw - 14, h: ph - top - foot - 2, spine: wide ? colW + 11 - 7 : 0 }, PAPER_INK);
   else if (wide) {
-    drawLines(g, A, x0 + 7, y0 + top);
+    drawLines(g, A, x0 + 7, y0 + top, colW - 12);
     const mx = x0 + colW + 12 + Math.round((rightW - mapW) / 2);
     drawMap(game, g, mx, y0 + top + 2);
-    drawLines(g, B, x0 + colW + 12, y0 + top + 2 + mapH + 6);
+    drawLines(g, B, x0 + colW + 12, y0 + top + 2 + mapH + 6, rightW - 2);
   } else {
-    let y = drawLines(g, A, x0 + 7, y0 + top);
-    y = drawLines(g, B, x0 + 7, y + 4);
+    let y = drawLines(g, A, x0 + 7, y0 + top, colW - 12);
+    y = drawLines(g, B, x0 + 7, y + 4, colW - 12);
     drawMap(game, g, Math.round(W / 2 - mapW / 2), y + 4);
   }
 

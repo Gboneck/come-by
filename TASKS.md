@@ -1165,6 +1165,78 @@ double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
       half transparent; cooptest 51/52 (the brace's guest flock count
       fails on platform-r5 alone too); perftest against platform-r5 (see
       Decisions)
+## M35 UI round five: goods you can see, what to do, readable text
+- [x] Goods you can see: the good's icon and "+1" over the animal that made
+      it (friends see it too); goods wait in the paddock as things, a pile
+      of each kind along the back fence (a nest box of eggs, wool bales,
+      cheese wheels on a board, milk churns; `src/art/goods.ts`); today's
+      goods and what they fetch by the purse ("6 3 2 = 24$ AT DUSK")
+- [x] The day's sale as a moment: before the journal, the buyer's pony cart
+      rolls in, each paddock's goods arc into it, coins fly to the purse as
+      it counts up, the cart rolls on (`src/ui/sale.ts`; a tap skips it)
+- [x] One objective, always (`src/ui/objective.ts`): the goal card says the
+      one thing to do now (the night, a trial, the flock you are driving, the
+      first day, a buyer's order, the tier's goal), an arrow by the dog
+      slides towards it with its name, a marker bobs over it in view, BUILD
+      pulses when building is the answer
+- [x] What's this (`src/ui/whatsthis.ts`): the first time something new is
+      near (a paddock, each kind of building, a buyer's yard, the trial
+      crook, a locked gate, the first goods) a card points at it with what
+      it is for; once each, remembered in the save's tips; others can add
+      things to `THINGS`
+- [x] The first day: a welcome card as a new ranch opens (who you are, what
+      to do, how to move), and the first day's hints are gilt with their
+      step ("FIRST DAY 2/7")
+- [x] Build mode for co-op guests: every change is a `BuildAction` done by
+      `applyBuild`; a guest sets `build.remote` to ask the host and hears
+      back through `build.answer`
+- [x] Readable text on Platform's 2x font (merged platform-r5): prose in
+      sentence case where it is drawn (`src/ui/case.ts`: `sentence()`,
+      `prose()`, `sentenceLines()`; names, keys and pad buttons keep their
+      capitals), headings, buttons and signs still capitals; the journal's
+      header reflowed (the CALM stamp no longer covers the figures); the
+      build and decor bars go to two rows when cells would be too narrow
+      to tap; dense sprites sized in world pixels (sprW/sprH); the goods
+      icons in fine pixels with a plum outline
+- [x] Pad prompts match whatever the case and answer in the case they find
+## M34 Double density: fine pixels and a readable font (platform, round five)
+- [x] Two grids: world pixels (the sim, the map, layout, the old art) and
+      fine pixels, PX = 2 to a world pixel. The screen canvas is fine pixels
+      (about 432 on the short side, a whole number of device pixels each);
+      every frame is drawn under scale(PX), so the old art is exact 2x2
+      blocks (`scripts/densitytest.mjs`: the world layer is pixel-for-pixel
+      round four at 2x)
+- [x] Fine drawing: `fine(g, fn)`, `toFine`/`snapFine`, dense sprites
+      (`spr(..., { density: 2 })`, placed on the fine grid), `sprW/sprH/
+      drawSprAt`, fine offscreen canvases (`makeCanvas(w, h, PX)`); the
+      picture cache keeps fine pixels and follows fine() inside cached art
+- [x] A new font in fine pixels with lower case, proportional and kerned:
+      body (capitals 9, a line every 6 world px, a drop-in for the old
+      face), small (capitals 7), heading (Scale2x of the body: capitals 18);
+      the pad prompts hook kept and now case-insensitive
+- [x] Night, fog, flash and lamp rings, and the ground's cloud, wet and
+      golden-hour dither, laid in fine pixels (world pixels at MEDIUM and
+      LOW); ditherRect and the dim/fade covers as fine dither patterns
+- [x] `FineLayer` (src/gfx/chunks.ts): world-sized pictures in fine pixels,
+      painted in chunks around the camera with a world-pixel fallback, for
+      2x terrain; terrain and canopy stay world pixels until then
+- [x] Checks: densitytest, picturetest (FineLayer too), padtest (sentence
+      case prompts), perftest before and after, the other scripts
+
+Performance (perftest at 390x844@3, stepped seeded frames with every
+pixel drawn, best of two interleaved runs of 7 batches; other sessions
+were loading the machine, so treat differences under ~2 ms as noise).
+Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
+844 fine pixels, 2.8x as many pixels filled, in software here:
+
+| scene | CPU | round four (HIGH) | now, HIGH | now, LOW |
+|---|---|---|---|---|
+| title | 4x | 5.9 ms | 9.3 ms | 6.9 ms |
+| day: tier-5 ranch | 4x | 13.1 ms | 15.3 ms | 11.2 ms |
+| worst: winter storm night | 4x | 16.6 ms | 16.4 ms | 14.5 ms |
+| title | 6x | 11.4 ms | 8.1 ms | 11.5 ms |
+| day | 6x | 19.0 ms | 20.7 ms | 17.8 ms |
+| worst | 6x | 25.5 ms | 26.9 ms | 22.5 ms |
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -2279,3 +2351,43 @@ double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
   Dense sprites cost the same pixels as the old ones drawn under scale(2);
   fine shadows, ripples and drips are filled at half-pixel steps in world
   space rather than switching transforms per call.
+- Goods are drawn from each paddock's `goodsBy` (counts per kind): piles,
+  not single items, so a paddock with 40 eggs still reads (a count goes on
+  a pile past a handful). The +1 is a particle ('good', the kind in its
+  text) so the co-op host's tap forwards it to guests unchanged.
+- The sale plays inside the summary (the mode stays 'summary'): friends
+  wait on their card as before, and `summaryHold` gives a press during the
+  sale to skipping it, then the journal's usual beat before it takes keys.
+- The objective is worked out each frame from the game, never stored, so
+  it can never go stale or disagree with the world; the tier goals stay in
+  the Ledger and on the card when nothing more pressing is on.
+- What's-this cards wait for the day's banner and the first steps of day
+  one (until the first flock is penned), so a new player sees one thing at
+  a time.
+- Sentence case is applied where prose is drawn, not in the strings
+  themselves: other features keep writing capitals (no sweep across a dozen
+  files mid-round), and a line drawn in capitals still works. Headings,
+  buttons, tabs, signs over the world and short status words stay capitals.
+- Pad prompts match case-insensitively and answer in the case they find,
+  so a sentence-case hint still turns "Hold Q" into "Hold (X)".
+- The screen aims for 432 fine pixels on the short side, not 480: the scale
+  must be a whole number of device pixels per fine pixel, and on an upright
+  iPhone (1170 device px) that is 3 (195 world px wide) or 2 (292 wide with
+  everything a fifth smaller and fine text too small to read). Bigger
+  pixels won; the world shown is a little less than round four's 234.
+- The old art is drawn under scale(PX) rather than redrawn: it is exact
+  2x2 blocks, so day one looks as before and the art sessions move each
+  piece to fine pixels when they redraw it.
+- The night and ground dithers work out their light per world pixel and
+  dither per fine pixel: a finer dither for about 1.5x the work, not 4x.
+  MEDIUM and LOW keep the world-pixel dither, so AUTO can win the cost
+  back on a slow phone.
+- The heading size is the body face scaled by Scale2x (it rounds diagonals
+  as it doubles strokes) rather than a third hand-drawn alphabet: it keeps
+  the body's letterforms and costs nothing to maintain.
+- perftest's numbers are software rasterising (headless Chromium without a
+  GPU): the new pipeline fills 2.8x as many pixels, which a phone's GPU
+  does off the main thread. The JavaScript parts that grew were optimised
+  (the night pass, the ground dither), and LOW is cheaper than round
+  four's HIGH.
+

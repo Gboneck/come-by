@@ -1,5 +1,7 @@
 // The 2x pipeline draws the old art exactly as before, only at two fine
-// pixels a world pixel: renders the same seeded frames here and in another
+// pixels a world pixel (the fine-pixel sky dithers switched off, as at
+// GRAPHICS MEDIUM, and the world layer alone: text is a new face on
+// purpose): renders the same seeded frames here and in another
 // checkout of the game (BASE=path, e.g. a worktree of main) at a size where
 // both show the same world, and checks each old pixel is a solid 2x2 block
 // of the same colour in the new frame.
@@ -46,6 +48,9 @@ async function frame(port, s) {
   await page.waitForFunction(() => window.game);
   const out = await page.evaluate(async ({ save, s }) => {
     const g = window.game;
+    // The fine-pixel dithers are new on purpose: compare without them.
+    const q = await import('/src/gfx/quality.ts');
+    if ('fineSky' in q.quality) q.quality.fineSky = false;
     if (s.ranch) {
       localStorage.setItem('comeby-save-v1', save);
       const { loadInto } = await import('/src/systems/save.ts');
@@ -58,7 +63,12 @@ async function frame(port, s) {
       g.dog.x = f.cx + 30; g.dog.y = f.y1 + 30;
     }
     for (let i = 0; i < 90; i++) { g.update(1 / 60); g.input.clearQueue(); }
-    g.render();
+    // The world layer only, and no text (the HUD, menus and signs use the
+    // new font): the font's filter hook blanks every string.
+    const { drawWorld } = await import('/src/render/world.ts');
+    (await import('/src/gfx/font.ts')).setTextFilter(() => '');
+    g.tip = null; g.banner = null;
+    drawWorld(g, g.g, g.view());
     g.screen.present();
     const c = g.screen.buf;
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;

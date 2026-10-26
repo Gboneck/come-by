@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { panel, px, rect } from '../gfx/draw';
 import { text, textWidth, wrap } from '../gfx/font';
-import { drawSpr, type Sprite } from '../gfx/sprite';
+import { drawSpr, drawSprAt, sprH, sprW, type Sprite } from '../gfx/sprite';
 import { PX, makeCanvas } from '../gfx/screen';
 import type { Game } from '../game';
 import { ACHIEVEMENTS, achById, isBig, type AchDef } from '../systems/achievements';
@@ -31,7 +31,6 @@ function say(s: string) {
 }
 
 const PORTRAIT: Partial<Record<BuyerId, Sprite>> = {};
-const BIG: Partial<Record<BuyerId, HTMLCanvasElement>> = {};
 function portrait(id: BuyerId): Sprite {
   let s = PORTRAIT[id];
   if (!s) {
@@ -292,10 +291,10 @@ function badgeCard(game: Game, g: CanvasRenderingContext2D, id: string, x0: numb
 
 function favourLayout(buyer: BuyerId, level: number, pw: number) {
   const s = portrait(buyer);
-  const tw = pw - (10 + s.w * 2) - 5;
+  const tw = pw - (10 + sprW(s) * 2) - 5;
   const step = buyerDef(buyer).steps[level - 1];
   const line = wrap(`"${step.line}"`, tw).slice(0, 4), perk = wrap(step.perk, tw).slice(0, 2);
-  return { line, perk, h: Math.max(s.h * 2 + 10, 4 + 14 + line.length * 7 + 1 + perk.length * 7 + (level >= maxLevel(buyer) ? 10 : 2)) };
+  return { line, perk, h: Math.max(sprH(s) * 2 + 10, 4 + 14 + line.length * 7 + 1 + perk.length * 7 + (level >= maxLevel(buyer) ? 10 : 2)) };
 }
 
 function favourCard(game: Game, g: CanvasRenderingContext2D, buyer: BuyerId, level: number, x0: number, y0: number, pw: number, ph: number, age: number) {
@@ -304,15 +303,10 @@ function favourCard(game: Game, g: CanvasRenderingContext2D, buyer: BuyerId, lev
   const s = portrait(buyer);
   const { line, perk } = favourLayout(buyer, level, pw);
   // The buyer, twice the size, on a teal ground.
-  panel(g, x0 + 3, y0 + 3, s.w * 2 + 4, ph - 6, C.teal, C.sage);
-  let c = BIG[buyer];
-  if (!c) {
-    const [cv, cg] = makeCanvas(s.w, s.h);
-    drawSpr(cg, s, s.ax, s.ay);
-    BIG[buyer] = c = cv;
-  }
-  g.drawImage(c, x0 + 5, y0 + Math.round(ph / 2 - s.h), s.w * 2, s.h * 2);
-  const tx = x0 + 10 + s.w * 2;
+  // Sizes in world pixels (a dense sprite's grid is finer).
+  panel(g, x0 + 3, y0 + 3, sprW(s) * 2 + 4, ph - 6, C.teal, C.sage);
+  drawSprAt(g, s, x0 + 5, y0 + Math.round(ph / 2 - sprH(s)), 2);
+  const tx = x0 + 10 + sprW(s) * 2;
   text(g, def.name, tx, y0 + 4, C.wool);
   // The hearts fill to the new level, the last one popping in.
   for (let i = 0; i < max; i++) {

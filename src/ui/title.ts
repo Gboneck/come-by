@@ -190,6 +190,17 @@ export const PAUSE_ITEMS: PauseItem[] = [
     },
   },
   { id: 'photo', label: () => 'TAKE A PHOTO', act: (g, dir) => { if (dir === 0) openPhoto(g); } },
+  // CLOSE (bigger, the default) or WIDE (more field, smaller sprites); text
+  // keeps its size either way (gfx/font.ts).
+  {
+    id: 'view',
+    label: () => `VIEW: ${settings.view === 'wide' ? 'WIDE' : 'CLOSE'}`,
+    act: (g) => {
+      settings.view = settings.view === 'wide' ? 'close' : 'wide';
+      saveSettings();
+      g.screen.setView(settings.view);
+    },
+  },
   { id: 'dog', label: (g) => `${g.look.name}'S LOOK`, act: (g, dir) => { if (dir === 0) g.openLook('pause'); }, show: (g) => g.net?.role !== 'guest' },
   // Co-op: invite a friend (or see who is here), or leave a friend's ranch.
   { id: 'coop', label: (g) => coopRowLabel(g), act: (g, dir) => { if (dir === 0) openCoop(g, 'invite'); }, show: (g) => g.net?.role !== 'guest' },
