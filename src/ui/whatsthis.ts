@@ -75,7 +75,7 @@ export function updateWhatsThis(game: Game, dt: number) {
   if ((gap -= dt) > 0 || (scan -= dt) > 0) return;
   scan = 0.3;
   // Not over the first steps, a trial run, the night or a menu.
-  if (game.mode !== 'play' || game.tut < 4 || game.trials.run || game.day.phase === 'night' || game.demo || game.input.override) return;
+  if (game.mode !== 'play' || game.tut < 4 || game.banner || game.trials.run || game.day.phase === 'night' || game.demo || game.input.override) return;
   const { ox, oy, W, H } = game.view();
   for (const source of THINGS)
     for (const th of source(game)) {

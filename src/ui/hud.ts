@@ -4,7 +4,7 @@ import { panel } from './frame';
 import { drawGoodsTally } from './goods';
 import { drawObjective, objective } from './objective';
 import { drawWhatsThis } from './whatsthis';
-import { FIRST_STEPS, drawWelcome, firstDayStep } from './firstday';
+import { FIRST_STEPS, drawWelcome, firstDayStep, welcomeUp } from './firstday';
 import { heading, headingWidth, text, textWidth } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
 import { animalSprites } from '../art/animals';
@@ -323,7 +323,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   }
   if (f.tierCard) drawTierCard(game, g, W, H);
   else if (badgeUp(game)) drawBadgeCard(game, g, W, H); // a badge earned, a buyer's favour
-  else if (game.banner) {
+  else if (game.banner && !welcomeUp(game)) {
     const b = game.banner;
     const age = b.max - b.t;
     const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
