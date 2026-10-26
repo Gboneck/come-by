@@ -56,7 +56,14 @@ function goodsThings(game: Game): Thing[] {
   return [{ id: 'goods', x: p.cx, y: p.iy0 + 6, name, line: `YOUR STOCK MADE THESE. A CART BUYS ALL THE GOODS AT DAY'S END: THE COUNT BY YOUR COINS SAYS WHAT THEY WILL FETCH.` }];
 }
 
-export const THINGS: ((game: Game) => Thing[])[] = [goodsThings, ranchThings];
+// The first scent of something buried (the loot feature, when it is here).
+function scentThings(game: Game): Thing[] {
+  const loot = (game as unknown as { loot?: { scent?: { x: number; y: number }[] } }).loot;
+  const s = loot?.scent?.[0];
+  return s ? [{ id: 'scent', x: s.x, y: s.y, name: 'A SCENT', line: 'SOMETHING IS BURIED HERE. STAND STILL TO SNIFF, THEN NIP TO DIG.' }] : [];
+}
+
+export const THINGS: ((game: Game) => Thing[])[] = [goodsThings, ranchThings, scentThings];
 
 let cur: { th: Thing; t: number } | null = null;
 let gap = 0;
@@ -77,6 +84,8 @@ export function updateWhatsThis(game: Game, dt: number) {
   scan = 0.3;
   // Not over the first steps, a trial run, the night or a menu.
   if (game.mode !== 'play' || game.tut < 4 || game.banner || game.trials.run || game.day.phase === 'night' || game.demo || game.input.override) return;
+  // Nor over another card: a badge or a buyer's favour, the tier card.
+  if (game.achievements.card || game.achievements.queue.length || game.feel.tierCard) return;
   const { ox, oy, W, H } = game.view();
   for (const source of THINGS)
     for (const th of source(game)) {

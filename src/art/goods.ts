@@ -14,19 +14,59 @@ import type { Drawable } from './buildings';
 export type GoodKind = 'duck' | 'sheep' | 'goat' | 'cow';
 const ROOM: Record<GoodKind, number> = { duck: 6, sheep: 6, goat: 6, cow: 3 };
 
-// Small icons (one char per pixel, as the sprites), anchored bottom centre.
+// Small icons in fine pixels (two to a world pixel), outlined in plum so
+// they read on grass and on a panel alike; anchored bottom centre.
 const ICON_ROWS: Record<GoodKind, string[]> = {
-  duck: ['.ww.', 'wwww', 'wwww', '.ss.'],
-  sheep: ['.www.', 'wwwww', 'wsws.', '.sss.'],
-  goat: ['...yy', '.yyyy', 'yyyyy', 'ooooo'],
-  cow: ['.pp.', 'wwww', 'pppp', 'wwww', 'swws'],
+  duck: [
+    '...pp...',
+    '..pwwp..',
+    '.pwwwwp.',
+    '.pwwwwp.',
+    'pwwwwwwp',
+    'pwwwwwsp',
+    'pwwwwssp',
+    '.pwssp..',
+    '..ppp...',
+  ],
+  sheep: [
+    '..pppppp..',
+    '.pwwwwwwp.',
+    'pwwwwwwwwp',
+    'pwwswwswwp',
+    'pwwwwwwwwp',
+    'pswwswwswp',
+    '.pssssssp.',
+    '..pppppp..',
+  ],
+  goat: [
+    '.......pp.',
+    '.....ppyyp',
+    '...ppyyyyp',
+    '.ppyyyyoyp',
+    'pyyyyyyyyp',
+    'pyoyyyyyyp',
+    'poooooooop',
+    'pppppppppp',
+  ],
+  cow: [
+    '..pppp..',
+    '..pwwp..',
+    '.pppppp.',
+    '.pwwwwp.',
+    '.pwwwsp.',
+    '.pppppp.',
+    '.pwwwwp.',
+    '.pwwwsp.',
+    '.pssssp.',
+    '..pppp..',
+  ],
 };
 const icons = new Map<string, Sprite>();
 export function goodIcon(kind: string): Sprite | null {
   const rows = ICON_ROWS[kind as GoodKind];
   if (!rows) return null;
   let s = icons.get(kind);
-  if (!s) icons.set(kind, (s = spr(rows)));
+  if (!s) icons.set(kind, (s = spr(rows, undefined, undefined, { density: 2 })));
   return s;
 }
 

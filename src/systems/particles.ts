@@ -2,7 +2,7 @@ import { C } from '../palette';
 import { BAYER4, rect } from '../gfx/draw';
 import { quality } from '../gfx/quality';
 import { text, textWidth } from '../gfx/font';
-import { drawSpr, tint, type Sprite } from '../gfx/sprite';
+import { drawSpr, sprW, tint, type Sprite } from '../gfx/sprite';
 
 const shadows = new Map<Sprite, Sprite>();
 const shadowOf = (s: Sprite) => {
@@ -192,12 +192,9 @@ export class Particles {
           if (k < 0.15 && Math.floor(p.life * 20) % 2) break;
           const s = goodIcon(p.text ?? '');
           const hop = p.max - p.life < 0.12 ? -1 : 0;
-          const iw = s ? s.w + 1 : 0;
+          const iw = s ? Math.ceil(sprW(s)) + 1 : 0;
           const x0 = Math.round(p.x - (iw + textWidth('+1')) / 2), y = Math.round(p.y) + hop;
-          if (s) {
-            drawSpr(g, shadowOf(s), x0 + s.ax + 1, y + 1);
-            drawSpr(g, s, x0 + s.ax, y);
-          }
+          if (s) drawSpr(g, s, x0 + sprW(s) / 2, y + 1);
           text(g, '+1', x0 + iw, y - 4, C.butter, { shadow: C.plum });
           break;
         }
