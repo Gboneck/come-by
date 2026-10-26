@@ -4,7 +4,7 @@ import { SPECIES, SPECIES_ORDER } from '../entities/species';
 import type { Coat } from '../art/animals';
 import { REGIONS, type SpeciesId } from '../world/map';
 import { ri } from '../rng';
-import { flockSize } from './spawner';
+import { WILD_CAP, flockSize, wildCount } from './spawner';
 import { isFairDay, type MorningBanner } from './seasonal';
 import { yardOf } from './orders';
 
@@ -92,6 +92,7 @@ function bigDrove(g: Game): MorningBanner | null {
   if (!at || clear(at) < 40) return null;
   const sp = SPECIES[reg.species!];
   const n = Math.round(flockSize(reg, g.tier) * DROVE_SIZE);
+  if (wildCount(g.animals) + n > WILD_CAP) return null; // the valley is full of wild stock already
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * (6 + n * 1.1);
     g.animals.push(new Animal(sp.id, at.x + Math.cos(a) * r, at.y + Math.sin(a) * r, Math.floor(Math.random() * sp.coats) as Coat));

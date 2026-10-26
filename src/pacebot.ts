@@ -286,7 +286,7 @@ export class Pacer {
   private buyLand(): boolean {
     const g = this.g;
     const f = g.valley.fields.find((p) => !p.owned && g.coins >= p.site.price + 60);
-    if (!f || !this.walkTo({ x: f.mouth.x, y: f.mouth.y + 6 }, 60, 6)) return false;
+    if (!f || !this.walkTo({ x: f.mouth.x, y: f.mouth.y + 6 }, 90, 6)) return false;
     const before = g.coins;
     if (!buyField(g) || g.coins >= before) return false;
     this.spent += before - g.coins;
@@ -863,6 +863,8 @@ export class Pacer {
       prize = g.totals.earned - before;
     }
     if (this.playing) this.doDairy();
+    // Short of land with the coin for a field: buy it first thing.
+    if (this.playing && this.landShort) this.buyLand();
     for (const o of [...g.orders.open].sort((a, b) => a.due - b.due)) if (this.playing) this.doOrder(o);
     if (isFairDay(g) && this.playing) this.doFair();
     else if (this.playing && g.herds.lot) this.doLot();
