@@ -15,6 +15,7 @@
 //   day    the built-up ranch on a clear summer day, the dog trotting about
 //   worst  the same ranch at night in a winter storm, coyotes and wolves
 //          about, two helpers out, the dog trotting about
+//   fognight  (only with --only) the ranch on a fog night: the mist's path
 //
 // The frame loop is stopped and frames are stepped by hand with a seeded
 // Math.random, so every run sees the same frames. Each batch times
@@ -56,6 +57,7 @@ const SCENES = {
   title: { query: 'title&debug' },
   day: { query: 'debug&weather=clear&season=summer', ranch: true },
   worst: { query: 'debug&weather=storm&season=winter', ranch: true, night: true },
+  fognight: { query: 'debug&weather=fog&season=autumn', ranch: true, night: true }, // --only=fognight
 };
 
 async function run(scene, rate) {
