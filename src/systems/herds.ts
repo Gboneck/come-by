@@ -80,10 +80,11 @@ function bigDrove(g: Game): MorningBanner | null {
   const regs = REGIONS.filter((r) => r.species && g.isUnlocked(r) && r.tier < g.tier);
   if (!regs.length) return null;
   const reg = regs[Math.floor(Math.random() * regs.length)];
+  // Where it comes in: the spawn point farthest from the region's flocks.
   const wild = g.animals.filter((a) => !a.pen && !a.gone && g.map.regionAt(a.x, a.y) === reg);
-  const pts = (g.map.spawns[reg.id] ?? []).filter((p) => !wild.some((a) => Math.hypot(a.x - p.x, a.y - p.y) < 110));
-  if (!pts.length) return null;
-  const at = pts[Math.floor(Math.random() * pts.length)];
+  const clear = (p: { x: number; y: number }) => Math.min(1e9, ...wild.map((a) => Math.hypot(a.x - p.x, a.y - p.y)));
+  const at = [...(g.map.spawns[reg.id] ?? [])].sort((p, q) => clear(q) - clear(p))[0];
+  if (!at || clear(at) < 40) return null;
   const sp = SPECIES[reg.species!];
   const n = Math.round(flockSize(reg, g.tier) * DROVE_SIZE);
   for (let i = 0; i < n; i++) {

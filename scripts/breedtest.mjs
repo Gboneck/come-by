@@ -151,6 +151,7 @@ const res = await page.evaluate(async () => {
   // ---- A big drove ----
   {
     let found = null;
+    g.herds.drove = null; // (this test runs the calendar back a few days)
     for (let d = 34; d < 34 + 24 && !found; d++) {
       g.animals = g.animals.filter((a) => a.pen); // a clear valley each morning
       morning(d);

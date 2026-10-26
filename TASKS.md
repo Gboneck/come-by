@@ -1029,6 +1029,45 @@ Before → after, in plain words:
       guest badges and shared favour; savetest, ordertest, daytest pass;
       `tune.mjs --seed=7` is identical to main for all five species
 
+## M34 More animals: herds that grow (gameplay, round five)
+- [x] Every kind breeds in its season (`BREED` in `src/systems/seasonal.ts`):
+      ducks, sheep, goats and cattle on spring's first two mornings, ponies
+      in summer's, from tier 2. Only calm (at the day's end and in the
+      morning), fed stock with another of its kind in the paddock, and only
+      as many as the paddock has room for once they are grown: a full
+      paddock breeds nothing (a tip says so, once). Ducks hatch 2-3, goats
+      often twins, cattle and ponies one. Floats over each paddock say what
+      came; the young grow up in autumn and the herd is that much bigger
+- [x] Ducklings, kids, calves and foals at their mothers' sides, as lambs
+      are (the same bond: a mother turns back for her young, both fret
+      apart), with their own sprites (`youngSprites` in `src/art/young.ts`;
+      ducklings swim) and their own calls (the audio's young-and-mother
+      calls now key on the young, in each kind's voice, pitched up)
+- [x] Wild flocks grow as the valley does: a sixth bigger for each tier a
+      region has been open (up to two-thirds again), a fourth flock after
+      three tiers, and wild young at foot in each kind's season (from tier
+      2: day one's ducks come alone)
+- [x] Big droves (`src/systems/herds.ts`): from tier 3, now and then (not
+      in winter, not on fair day, never two mornings running) one flock
+      two and a half times the size comes into an older region, with a
+      banner saying where
+- [x] Buying stock: the sale yard has a lot each morning from tier 2 (one
+      kind in turn, a few head at four times what one pays delivered):
+      stand by one and NIP at the fence, then walk it home. The fair sets
+      out pairs of the smaller rare breeds (a pair breeds rare young)
+- [x] Goods as items (`src/systems/economy.ts`, for UI to show): each good
+      is laid where its animal stands and lies in the paddock until sold at
+      day's end or taken (`takeGood` pays now); `onGood` events for laid,
+      taken and sold; saved, and shared with co-op guests
+- [x] Paddock density checked: a 16x12 paddock holds 38 sheep and looks
+      like a herd; left as it is
+- [x] `scripts/breedtest.mjs` (29 checks); seasontest updated (room for
+      lambs, the new flock sizes, the fair's pairs); the pace bot buys the
+      lot when it has coin and room, and pacetest's year table counts the
+      young, stock bought and the herd
+
+HERD_TABLES
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it

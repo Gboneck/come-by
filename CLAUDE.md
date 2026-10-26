@@ -77,6 +77,9 @@ original and drawn in code. No external art files, ever.
   `scripts/valleytest.mjs` checks the valley growing: the village's steps,
   market day, the festival parade, grazing a paddock clear, timber for the
   old bridge, the shearing shed, the dairy, the agility course, saves,
+  `scripts/breedtest.mjs` checks herds that grow: breeding by kind and
+  season (calm, fed, pairs, room), the young at their mothers, wild young,
+  bigger flocks, big droves, the sale yard's lot, goods as items, saves,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
   include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
@@ -190,8 +193,11 @@ needs a line there.
 - Stress: rises with pressure, barks, nips and isolation; decays with calm.
   Moderate stress bunches the flock, high stress causes panic and splitting.
   Delivery value and produce are scaled down by stress — calm always pays.
-- Lambs (spring) keep to their mothers; a ewe cut off from her lamb turns
-  back for it and both fret, so a flock with lambs is driven as pairs.
+- Young keep to their mothers; a mother cut off from her young turns back
+  for it and both fret, so a flock with young is driven as pairs. Every
+  kind breeds in its season (spring; ponies in summer): calm, fed stock
+  with another of its kind and room in the paddock for the young to grow
+  into (lambs, ducklings, kids, calves, foals); they grow up in autumn.
   Snow (winter) slows everyone a little. The calendar is in
   `src/systems/season.ts`, what each season brings in
   `src/systems/seasonal.ts`.
@@ -230,7 +236,9 @@ needs a line there.
   `valley.ts` (the village's steps, the paddocks, the old bridge, market
   day and festivals: `game.valley`, the village itself in
   `game.ranch.village`), `farmwork.ts` (the shearing shed, the dairy, the
-  agility yard: `game.farmwork`),
+  agility yard: `game.farmwork`), `herds.ts` (the sale yard's daily lot
+  of stock, big droves: `game.herds`; breeding is in `seasonal.ts`, flock
+  sizes in `spawner.ts`, goods as items with events in `economy.ts`),
   `projects.ts` (valley projects: herding work in the hidden places that
   changes them for good: `game.projects`; art in `src/art/projects.ts`),
   `favour.ts` (each buyer's favour and what it brings: `game.favour`),
