@@ -79,7 +79,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   lightLook.dy = sh.dy;
   lightLook.golden = goldenHour(game.day);
   // The fine ground and canopy, painted in chunks with this look.
-  game.life.lit.sync(game.baked, groundLook(game), sh.dx, sh.dy, game.day.phase !== 'night', ox, oy, W, H, true);
+  game.life.lit.sync(game.baked, groundLook(game), sh.dx, sh.dy, game.day.phase !== 'night', ox, oy, W, H, game.t, true);
   game.life.lit.drawGround(g, game.baked, ox, oy, W, H);
   g.save();
   g.translate(-ox, -oy);

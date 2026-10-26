@@ -73,6 +73,7 @@ interface Chunk {
 export class FineWorld {
   private chunks = new Map<number, Chunk>();
   private frame = 0;
+  private now = NaN;
   private look: Look = { snow: 0, leaves: 0, bloom: 0, wet: 0, golden: 0 };
   private key = '';
   private canopyKey = ''; // the canopy only cares about the season
@@ -84,8 +85,12 @@ export class FineWorld {
 
   // Once a frame before drawing: what the world looks like now, and paint
   // what the view needs within the budget.
-  sync(baked: Baked, look: Look, dx: number, dy: number, sun: boolean, ox: number, oy: number, W: number, H: number, urgent = false) {
-    this.frame++;
+  // `now` is the game's clock: drawing the same moment again (a photo, a
+  // test) paints nothing more, so it comes out the same.
+  sync(baked: Baked, look: Look, dx: number, dy: number, sun: boolean, ox: number, oy: number, W: number, H: number, now: number, urgent = false) {
+    const fresh = now !== this.now;
+    this.now = now;
+    if (fresh) this.frame++;
     this.look = look;
     this.key = lookKey(look);
     this.canopyKey = `${look.snow}${look.leaves}${look.bloom}`;
@@ -105,6 +110,7 @@ export class FineWorld {
         if (c.gKey !== this.key || c.cKey !== this.canopyKey || c.lKey !== this.litKey()) todo.push({ c, d: Math.hypot(cx + 0.5 - mx, cy + 0.5 - my) - (inView ? 100 : 0), vis: inView });
       }
     todo.sort((p, q) => p.d - q.d);
+    if (!fresh) return;
     const t0 = performance.now();
     for (const { c, vis: v } of todo) {
       // Painting a missing chunk in view is urgent the first time round;
