@@ -1545,7 +1545,14 @@ another origin are never answered from the cache.
   at once so the share sheet opens while the tap still counts.
 - Perf (perftest, 4x CPU, phone size, best batch): title 5.5 to 5.6 ms,
   day 10.1 to 9.7 ms, worst 11.7 to 12.2 ms: within the noise of a machine
-  shared with other sessions.
+  shared with other sessions. After the Ledger tabs and the paddock editor
+  (neither runs in play): 5.7, 10.2 and 12.4 ms, under a load average of
+  13 to 20.
+- Paddock rules come from Gameplay's src/ranch/paddock.ts through
+  src/ui/paddockrules.ts, found by `import.meta.glob` so this branch still
+  builds without them. The merge with valley-r4 (branch ui-r4-valley)
+  drops valley's stopgap "U extends the nearest side by two" and its
+  paddock info lines, which the editor replaces.
 - Paddock build UI: the rules (price, capacity, where it may go, building,
   extending, gates, fixtures) belong to the ranch and come in through one
   interface, `PaddockRules` in src/ui/paddockbuild.ts; build mode only
