@@ -103,7 +103,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // east by evening (a time-lapse while resting shows them sweep round).
   const sun = sunShift(game);
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) drawAnimalShadow(g, a, sun);
-  for (const d of [game.dog, ...game.helpers, ...game.coop]) if (inView(d.x, d.y)) drawDogShadow(g, d, sun);
+  for (const d of [game.dog, ...game.helpers, ...game.coop]) if (inView(d.x, d.y)) drawDogShadow(game, g, d, sun);
   for (const p of game.predators) if (inView(p.x, p.y)) p.drawShadow(g);
   game.folk.drawShadows(g);
   game.fx.drawLow(g);
