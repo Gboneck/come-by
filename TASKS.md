@@ -1139,6 +1139,20 @@ less noise". The world is now drawn at two fine pixels to a world pixel
       2x terrain; terrain and canopy stay world pixels until then
 - [x] Checks: densitytest, picturetest (FineLayer too), padtest (sentence
       case prompts), perftest before and after, the other scripts
+- [x] Dusk, night and fog improved at 2x: 64-step ordered ramps in fine
+      pixels, soft light pools (Light power/soft) graded from the ground
+      through teal to plum, flames' warm rings at their pools' edges, the
+      dog's light a soft glow, a faint halo on animals at night, fog in
+      drifting banks with clean edges and thicker by water (setFogField),
+      the night a little deeper at the screen's edges
+      (`scripts/skyshots.mjs` before/after)
+- [x] VIEW in the pause menu: CLOSE (the default) or WIDE (one whole-number
+      scale down: an iPhone 293 x 633 world px); a large face (capitals 12
+      fine px, line 8 world px); text sizes step up a face where fine pixels
+      are physically small, so text keeps its size in WIDE
+- [x] Camera: the dog, the worked flock and the open gate it can go in are
+      framed together when they fit (`scripts/cameratest.mjs`: flock and
+      gate on screen 10/12 in CLOSE, was 4/12; 12/12 in WIDE, was 8/12)
 
 Performance (perftest at 390x844@3, stepped seeded frames with every
 pixel drawn, best of two interleaved runs of 7 batches; other sessions
@@ -2268,4 +2282,17 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
   does off the main thread. The JavaScript parts that grew were optimised
   (the night pass, the ground dither), and LOW is cheaper than round
   four's HIGH.
+- TARGET_FINE = 432 confirmed with the main session (readable first);
+  VIEW WIDE is there for players who want more field: an iPhone is 195 x
+  422 world px in CLOSE, 293 x 633 in WIDE (round four: 234 x 507).
+- Text sizes are roles that step up one face when a fine pixel is under
+  0.85 CSS px, rather than scaling text by a fraction: every face stays a
+  whole-pixel design, and the steps (9 -> 12 fine px capitals) match the
+  2/3 drop in pixel size between CLOSE and WIDE.
+- The sky's per-fine-pixel pass dithers each world pixel's light over its
+  four fine pixels without easing between world pixels: easing measured
+  at about half again the pass's cost for a difference too small to see
+  in the 64-step ramp.
+- Animals get a faint halo at night (power 0.4, radius 11) so the flock
+  reads in the dark; predators' eyes are drawn above the dark as before.
 
