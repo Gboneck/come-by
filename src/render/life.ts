@@ -9,6 +9,7 @@ import { drift, stepWind } from './wind';
 import { WeatherFx } from './weather';
 import { SeasonLayers } from './seasons';
 import { SunShadows } from './light';
+import { Wildlife } from './wildlife';
 import { skyDarkness } from './sky';
 import { SHALLOW, TS, Ter, WORLD_H, WORLD_W, type SpeciesId } from '../world/map';
 import { seasonLook } from '../art/seasonlook';
@@ -69,6 +70,7 @@ export class Life {
   wx = new WeatherFx();
   seasons = new SeasonLayers();
   shadows = new SunShadows();
+  wild = new Wildlife();
   vt = 0; // the valley's own clock: runs up to x12 while the dog rests
 
   update(game: Game, dt: number) {
@@ -89,6 +91,7 @@ export class Life {
     this.updateFlies(game, quick, v, fair > 0.5 ? dark : 1, night);
     this.updateBirds(quick, v, fair > 0.3 ? dark : 1);
     this.updateGlows(game, dt, v, w.rain > 0.5 ? 0 : dark, night && w.rain < 0.5);
+    this.wild.update(game, dt, v, game.day.frac, night || dark > 0.35 || w.rain > 0.6, (x, y) => this.add({ kind: 'ring', x, y, max: 0.8, size: 4 }));
 
     // Chimney smoke, drifting downwind.
     const f = game.ranch.farmhouse;
@@ -340,6 +343,7 @@ export class Life {
   // On the ground, under everything that stands: prints, ripples, dust and
   // the shadows of things in the air.
   drawGround(g: CanvasRenderingContext2D) {
+    this.wild.drawGround(g, this.t);
     for (const p of this.prints) {
       const k = p.life / p.max;
       if (k < 0.4 && hash2(p.x, p.y, Math.floor(p.life * 5)) > k / 0.4) continue;
@@ -387,6 +391,7 @@ export class Life {
 
   // Above the canopy: things in the air.
   drawAir(g: CanvasRenderingContext2D) {
+    this.wild.drawAir(g, this.t);
     for (const b of this.bits) {
       const k = b.life / b.max;
       switch (b.kind) {

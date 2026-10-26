@@ -37,7 +37,7 @@ export function goldenHour(day: DayCycle): number {
   if (day.phase === 'night') return 0;
   const f = day.frac;
   const eve = f < 0.62 ? 0 : f < 0.74 ? (f - 0.62) / 0.12 : f < 0.86 ? 1 - (f - 0.74) / 0.12 : 0;
-  const morn = f < 0.06 ? 0.6 * (f / 0.06) : f < 0.14 ? 0.6 * (1 - (f - 0.06) / 0.08) : 0;
+  const morn = f < 0.06 ? 0.35 * (f / 0.06) : f < 0.14 ? 0.35 * (1 - (f - 0.06) / 0.08) : 0;
   return Math.max(eve, morn);
 }
 
