@@ -62,7 +62,7 @@ export interface Snap {
 // Animal flag bits (the low two are the facing).
 export const A_WATER = 4, A_ROCK = 8, A_CARRIED = 16, A_EAT = 32, A_PANIC = 64, A_HOP = 128, A_TRIAL = 256, A_HOME = 512;
 // Dog and helper flag bits.
-export const D_LYING = 4, D_SPRINT = 8, D_BARK = 16;
+export const D_LYING = 4, D_SPRINT = 8, D_BARK = 16, D_SNIFF = 32, D_DIG = 64; // sniff/dig: the treasure hunt's poses (systems/loot.ts)
 
 export const PHASES = ['day', 'dusk', 'night'] as const;
 export const PRED_STATES = ['wait', 'hunt', 'dig', 'carry', 'flee', 'gone'] as const;

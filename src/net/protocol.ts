@@ -182,6 +182,8 @@ export interface DogState {
   face: number;
   lying: boolean;
   sprint: boolean;
+  sniff?: boolean; // nose down on a scent (systems/loot.ts)
+  dig?: boolean; // digging
 }
 
 export interface DogEvent {
@@ -205,7 +207,7 @@ export function writeDog(w: Writer, t: number, d: DogState, events: DogEvent[]) 
   w.pos(d.vy);
   w.i8(d.hx * 127);
   w.i8(d.hy * 127);
-  w.u8(d.face | (d.lying ? 4 : 0) | (d.sprint ? 8 : 0));
+  w.u8(d.face | (d.lying ? 4 : 0) | (d.sprint ? 8 : 0) | (d.sniff ? 16 : 0) | (d.dig ? 32 : 0));
   w.u8(events.length);
   for (const e of events) {
     w.u8(e.kind === 'bark' ? 1 : e.kind === 'nip' ? 2 : 3);
@@ -223,7 +225,7 @@ export function readDog(r: Reader): { t: number; dog: DogState; events: DogEvent
   const x = r.pos(), y = r.pos(), vx = r.pos(), vy = r.pos();
   const hx = r.i8() / 127, hy = r.i8() / 127;
   const f = r.u8();
-  const dog: DogState = { x, y, vx, vy, hx, hy, face: f & 3, lying: !!(f & 4), sprint: !!(f & 8) };
+  const dog: DogState = { x, y, vx, vy, hx, hy, face: f & 3, lying: !!(f & 4), sprint: !!(f & 8), sniff: !!(f & 16), dig: !!(f & 32) };
   const events: DogEvent[] = [];
   const n = r.u8();
   for (let i = 0; i < n; i++) {

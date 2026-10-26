@@ -1062,7 +1062,9 @@ Before → after, in plain words:
       for what is still in the ground, framed by rarity, the one picked
       written up (or where to look), bones, the map and how to dig
 - [x] Saved (old saves start with nothing); co-op: the day's holes are
-      shared, a guest's finds go to their travels and home with them
+      shared, a guest's finds go to their travels and home with them, and
+      every dog's sniff and dig travel as two flag bits so friends see the
+      poses (dust at the paws, earth flying)
 - [x] `scripts/loottest.mjs`; seeded tune.mjs identical for all five
       species; discoverytest, projecttest, savetest, seasontest, cooptest
 ## Decisions
@@ -2148,5 +2150,6 @@ Before → after, in plain words:
   the way of herding. Lying down stays lying down (no digging, no scent).
 - Things to wear are drawn by the look's template rewrite (dogstyle.ts):
   the spotted kerchief stays Bandana red with wool spots, tags hang where a
-  neckerchief's point would, socks and a blaze are wool. Until Characters
-  draws a dig pose, digging uses the sniff pose with the paws going.
+  neckerchief's point would, socks and a blaze are wool. The poses read
+  `dog.sniff` (0..1) and `dog.dig` (seconds left), which loot sets; until
+  Characters' fine-pixel poses merge, both use the side sniff pose.

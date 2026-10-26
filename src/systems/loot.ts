@@ -280,12 +280,14 @@ export class Loot {
       d.vx = d.vy = 0;
       d.x += (dg.x - d.x) * Math.min(1, dt * 12);
       d.y += (dg.y - d.y) * Math.min(1, dt * 12);
-      setDog(d, 'dig', Math.max(0, dg.t));
+      d.dig = Math.max(0, dg.t); // for the dog's dig pose
+      // Dust kicked up at the paws now and then (fx: the eye only).
+      if (Math.floor(dg.t * 5) !== Math.floor((dg.t + dt) * 5)) game.fx.dust(dg.x - d.hx * 3, dg.y + 1, -d.hx * 20, 0);
       if (dg.t <= 0) {
         this.digging = null;
         this.finish(game, dg.spot, dg.x, dg.y);
       }
-    } else setDog(d, 'dig', 0);
+    } else d.dig = 0;
     // Scent: the nearest buried things within reach of the dog's nose.
     const slow = !d.lying && d.speed < d.stats.walk * 0.55;
     this.still = slow ? this.still + dt : 0;
@@ -303,7 +305,7 @@ export class Loot {
     }
     const want = this.scent.length ? (sniff ? 1 : 0.4) : 0;
     this.sniffing += (want - this.sniffing) * Math.min(1, dt * 4);
-    setDog(d, 'sniff', this.sniffing);
+    d.sniff = this.sniffing; // for the nose-down pose
     if (this.scent.length && !game.tipsSeen.has('scent') && !game.tip && !game.input.override) {
       game.tipsSeen.add('scent');
       game.tip = { text: game.input.touchMode ? 'A SCENT! WALK SLOWLY OR STAND STILL TO SNIFF. FOLLOW THE WISPS, THEN TAP DIG.' : 'A SCENT! WALK SLOWLY OR STAND STILL TO SNIFF. FOLLOW THE WISPS, THEN E TO DIG.', t: 9 };
@@ -391,6 +393,7 @@ export class Loot {
 
   // The dig is done: what comes up.
   private finish(game: Game, s: Spot, x: number, y: number) {
+    game.fx.puff(x, y + 1);
     if (this.buryingNow) {
       this.buryingNow = false;
       game.fx.float(x, y - 12, 'BURIED', C.wool, 1);
@@ -555,10 +558,14 @@ export class Loot {
   }
 }
 
-// Dog.sniff / Dog.dig drive the dog's poses (Characters' art); set through
-// a cast until Dog declares them.
-function setDog(d: Dog, k: 'sniff' | 'dig', v: number) {
-  (d as unknown as Record<string, number>)[k] = v;
+// A friend's dog drawn from co-op flags (host and guest): nose down while
+// its sniff bit is on; a dig plays out from 0.9s when its bit comes on.
+const digOn = new WeakSet<Dog>();
+export function puppetAct(d: Dog, sniff: boolean, dig: boolean, dt: number) {
+  d.sniff = sniff ? 1 : 0;
+  d.dig = dig && !digOn.has(d) ? 0.9 : Math.max(0, d.dig - dt);
+  if (dig) digOn.add(d);
+  else digOn.delete(d);
 }
 
 // Collision cells under a spot, for tests: open ground.

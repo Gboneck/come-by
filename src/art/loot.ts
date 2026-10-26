@@ -186,6 +186,8 @@ export function lootDrawables(game: Game, g: CanvasRenderingContext2D): Drawable
     out.push(ground(() => hole(g, Math.round(dg.x), Math.round(dg.y + 2), snow), 3));
     out.push({ y: d.y + 0.5, draw: () => earth(g, Math.round(d.x), Math.round(d.y), d.face, t, snow) });
   }
+  // Friends' dogs digging (co-op): the earth flies for them too.
+  for (const f of game.coop) if (f.dig > 0 && seen(f.x, f.y)) out.push({ y: f.y + 0.5, draw: () => earth(g, Math.round(f.x), Math.round(f.y), f.face, t, snow) });
   for (const [k, s] of L.scent.entries()) {
     out.push({ y: 1e8 - 1, draw: () => wisps(g, Math.round(d.x), Math.round(d.y - 4), s.x, s.y, s.k, L.sniffing, t, k * 13 + (s.x | 0)) });
     const dd = Math.hypot(s.x - d.x, s.y - d.y);

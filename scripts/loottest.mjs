@@ -422,6 +422,30 @@ check('a guest digs a spot; the find goes to their own save', coop.started && co
 check('the host marks the hole, and every screen shows it', coop.marked && coop.again && !coop.nowhere && coop.hostSees && coop.otherSees);
 check('nothing paid into the host\'s ranch; no burying on a friend\'s ranch', coop.hostCoins === 0 && !coop.buries);
 
+const wire = await page.evaluate(async () => {
+  const { Writer, Reader, writeDog, readDog } = await import('/src/net/protocol.ts');
+  const { puppetAct } = await import('/src/systems/loot.ts');
+  const { Dog } = await import('/src/entities/dog.ts');
+  const send = (sniff, dig) => {
+    const w = new Writer();
+    writeDog(w, 1, { x: 10, y: 20, vx: 0, vy: 0, hx: 1, hy: 0, face: 0, lying: false, sprint: false, sniff, dig }, []);
+    const r = new Reader(w.bytes());
+    r.u8();
+    r.u8();
+    const { dog } = readDog(r);
+    return [dog.sniff, dog.dig, dog.lying, dog.sprint];
+  };
+  const d = new Dog(0, 0);
+  puppetAct(d, true, true, 1 / 60);
+  const start = [d.sniff, d.dig];
+  for (let i = 0; i < 30; i++) puppetAct(d, false, true, 1 / 60);
+  const mid = d.dig;
+  for (let i = 0; i < 60; i++) puppetAct(d, false, false, 1 / 60);
+  return { a: send(true, false), b: send(false, true), start, mid, end: d.dig, sniffEnd: d.sniff };
+});
+check('a guest\'s dog sends its sniff and dig with its other flags', JSON.stringify(wire.a) === '[true,false,false,false]' && JSON.stringify(wire.b) === '[false,true,false,false]', JSON.stringify(wire));
+check('a friend\'s dog digs from 0.9s when its bit comes on, nose down while sniffing', wire.start[0] === 1 && wire.start[1] === 0.9 && wire.mid > 0.35 && wire.mid < 0.45 && wire.end === 0 && wire.sniffEnd === 0);
+
 const travels = await page.evaluate(async () => {
   const { Travels, mergeTravels } = await import('/src/net/travels.ts');
   const g = window.game, L = g.loot;

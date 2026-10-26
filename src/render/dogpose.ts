@@ -170,12 +170,13 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   idleIn.flip = p.view === 4;
   idleIn.stand = pickDogFrame(S, standIn).s;
   const raining = game.weather.rain > 0.3 && game.season.snow < 0.4;
-  // Digging up a find (systems/loot.ts): nose down, side on, the paws going
-  // (the earth flies in art/loot.ts); stood on a strong scent it sniffs.
-  const L = own && isDog && !lying && !inWater ? game.loot : null;
+  // Digging up a find (systems/loot.ts sets dog.dig and dog.sniff, for
+  // friends' dogs too): nose down, side on, the paws going (the earth flies
+  // in art/loot.ts); stood on a strong scent it sniffs. Characters' real
+  // dig and sniff poses replace this at the merge.
   const sn = S.poses.side.sniff;
-  if (L && sn && (L.digging || (L.sniffing > 0.7 && speed < 4))) {
-    const dig = !!L.digging, k = Math.floor(t * (dig ? 10 : 4));
+  if (d instanceof Dog && sn && !lying && !inWater && (d.dig > 0 || (d.sniff > 0.7 && speed < 4))) {
+    const dig = d.dig > 0, k = Math.floor(t * (dig ? 10 : 4));
     drawSpr(g, sn[k % 2], d.x + (dig ? k % 2 : 0), d.y + 2, p.view > 2 && p.view < 6);
     return;
   }

@@ -26,7 +26,8 @@ import { clamp } from '../util';
 import { Link, relayBase } from './link';
 import { ledgerKeys } from '../ui/ledger';
 import { COLOURS, DOG_HZ, FACES, INTERP_MS, K_JSON, K_SNAP, Reader, Writer, faceId, jsonFrame, writeDog, type DogEvent, type HostMode } from './protocol';
-import { A_CARRIED, A_EAT, A_HOME, A_HOP, A_PANIC, A_ROCK, A_TRIAL, A_WATER, D_LYING, D_SPRINT, FOLK_IDS, PHASES, POSES, PRED_STATES, allPens, applyAnimalExtra, decodeSnap, faceOf, type AnimalRec, type Snap } from './snapshot';
+import { puppetAct } from '../systems/loot';
+import { A_CARRIED, A_EAT, A_HOME, A_HOP, A_PANIC, A_ROCK, A_TRIAL, A_WATER, D_DIG, D_LYING, D_SNIFF, D_SPRINT, FOLK_IDS, PHASES, POSES, PRED_STATES, allPens, applyAnimalExtra, decodeSnap, faceOf, type AnimalRec, type Snap } from './snapshot';
 
 // Playing on a friend's ranch. Their browser runs the world; this one runs
 // only our own dog (moved here, so it never lags) and draws the rest from
@@ -464,7 +465,7 @@ export class GuestNet implements PingNet {
     if ((this.sendT -= dt) > 0 || !this.link?.open || this.status === 'ended') return;
     this.sendT = 1 / DOG_HZ;
     const d = game.dog;
-    writeDog(this.w, Math.round(performance.now()) >>> 0, { x: d.x, y: d.y, vx: d.vx, vy: d.vy, hx: d.hx, hy: d.hy, face: faceId(d.face), lying: d.lying, sprint: d.sprinting }, this.pending);
+    writeDog(this.w, Math.round(performance.now()) >>> 0, { x: d.x, y: d.y, vx: d.vx, vy: d.vy, hx: d.hx, hy: d.hy, face: faceId(d.face), lying: d.lying, sprint: d.sprinting, sniff: d.sniff > 0.4, dig: d.dig > 0 }, this.pending);
     this.pending = [];
     this.link.send(this.w.bytes());
   }
@@ -531,6 +532,7 @@ export class GuestNet implements PingNet {
       const ra = A.s.dogs.find((o) => o.slot === r.slot) ?? r;
       const fl = (k < 0.5 ? ra : r).fl;
       pd.puppet(dt, { x: P(ra.x, r.x), y: P(ra.y, r.y), vx: lerp(ra.vx, r.vx) / 8, vy: lerp(ra.vy, r.vy) / 8, face: faceOf(fl), lying: !!(fl & D_LYING), sprint: !!(fl & D_SPRINT) }, game.map, game.fx);
+      puppetAct(pd, !!(fl & D_SNIFF), !!(fl & D_DIG), dt); // nose down, digging
       pd.stats = game.dog.stats;
     }
     for (const slot of [...this.puppets.keys()]) if (!seenDogs.has(slot)) this.puppets.delete(slot);
