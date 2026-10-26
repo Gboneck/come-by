@@ -1118,7 +1118,7 @@ tier-5 fixture with today's bigger wild flocks): day 11.2 to 13.0ms and
 worst 14.9 to 15.7ms at 4x CPU throttle; 17.8 to 20.8 and 22.4 to 24.6ms
 at 6x. The cost is the simulation of the extra wild animals; I left it
 alone rather than risk changing how they herd.
-## M34 Characters at double density (round five)
+## M35 Characters at double density (round five)
 Before: every living thing was drawn at world scale, a pixel to a world
 pixel, so faces were a dot or two, flecks were single scattered pixels
 (noise at a glance), and legs were one pixel thick. After, on the
@@ -1165,7 +1165,7 @@ double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
       half transparent; cooptest 51/52 (the brace's guest flock count
       fails on platform-r5 alone too); perftest against platform-r5 (see
       Decisions)
-## M35 UI round five: goods you can see, what to do, readable text
+## M36 UI round five: goods you can see, what to do, readable text
 - [x] Goods you can see: the good's icon and "+1" over the animal that made
       it (friends see it too); goods wait in the paddock as things, a pile
       of each kind along the back fence (a nest box of eggs, wool bales,
@@ -1206,7 +1206,7 @@ double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
       buttons, build tabs and the build and decor bars grow by
       `touchScale()` in WIDE so they keep their size under a finger; uitour
       has `phonewide` and `deskwide`
-## M35 World and light, round five (double density, less noise)
+## M37 World and light, round five (double density, less noise)
 From a playtester: "step up the pixels by a factor of two: more detail and
 less noise". The world is now drawn at two fine pixels to a world pixel
 (Platform's PX = 2 pipeline). Before → after, in plain words:
@@ -1354,7 +1354,7 @@ less noise". The world is now drawn at two fine pixels to a world pixel
           - The lantern halo is a cached picture.
           - The farmhouse lost its per-pane light holes and the faint glows.
 
-## M34 Double density: fine pixels and a readable font (platform, round five)
+## M38 Double density: fine pixels and a readable font (platform, round five)
 - [x] Two grids: world pixels (the sim, the map, layout, the old art) and
       fine pixels, PX = 2 to a world pixel. The screen canvas is fine pixels
       (about 432 on the short side, a whole number of device pixels each);
@@ -1411,7 +1411,7 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
 | day | 6x | 19.0 ms | 20.7 ms | 17.8 ms |
 | worst | 6x | 25.5 ms | 26.9 ms | 22.5 ms |
 
-## M35 Co-op, round five: both players do everything
+## M39 Co-op, round five: both players do everything
 - [x] Build mode for guests: the host's build screen (paddocks dragged,
       extended and gated, fixtures, buildings, decor, the ranch's paint,
       kennel training, helpers, selling), each change sent to the host and
@@ -1435,7 +1435,7 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
       guest; the guest lets stock out for an order, starts and closes a
       trial; both say ready for the next day
 
-## M34 Sniff and dig: loot (world, round five)
+## M40 Sniff and dig: loot (world, round five)
 - [x] Scent (`src/systems/loot.ts`, drawn in `src/art/loot.ts`): walking
       slowly or standing still near something buried, curls of scent drift
       from it to the dog's nose (faint on the move, bright when it stands to
@@ -1473,7 +1473,7 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
       poses (dust at the paws, earth flying)
 - [x] `scripts/loottest.mjs`; seeded tune.mjs identical for all five
       species; discoverytest, projecttest, savetest, seasontest, cooptest
-## M36 Balance pass: everything together (gameplay, round six)
+## M41 Balance pass: everything together (gameplay, round six)
 Many sources of coin and stock landed in parallel in rounds four and five
 (buyer favour, loot, breeding, valley projects, market days, fields, the
 shed, dairy and agility yard). Played together by the pace bot, two things
