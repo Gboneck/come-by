@@ -3,7 +3,7 @@ import { ROOFS, TRIMS, farmLook } from './ranchstyle';
 import { line, rect, px } from '../gfx/draw';
 import { text } from '../gfx/font';
 import { hash2 } from '../rng';
-import { seasonLook, snowCap } from './seasonlook';
+import { lightLook, seasonLook, snowCap } from './seasonlook';
 import type { Building, Pen, RegionGate } from '../ranch/buildings';
 import type { FieldGate, Fence, Barn, Kennel, Market, Windmill } from '../ranch/structures';
 import { CS } from '../world/map';
@@ -18,6 +18,19 @@ export interface Drawable {
 // building's ground shadow is its own drawable sorted first, so it never
 // lands on anything standing in front of it.
 const shadowFirst = (b: Building, draw: () => void): Drawable => ({ y: -1e8 + b.id, draw });
+
+// A standing thing's shadow on the ground: its silhouette (x0..x1 across,
+// top..y1 tall) shifted the way the sun throws it (long and to the west at
+// sunrise, east in the golden hour), and a soft dithered contact shadow
+// hugging its foot.
+function groundShadow(g: CanvasRenderingContext2D, x0: number, top: number, x1: number, y1: number) {
+  const sx = Math.round(lightLook.dx * 0.8), sy = Math.round(lightLook.dy * 0.5);
+  rect(g, x0 + sx, top + sy, x1 - x0, y1 - top, C.sage);
+  for (let x = x0 - 1; x <= x1; x++) {
+    px(g, x, y1, C.sage);
+    if ((x & 1) === 0) px(g, x, y1 + 1, C.sage);
+  }
+}
 
 // ---- Fences ----
 // Plum posts every 8px, wool rails, a sage line of shadow on the ground.
@@ -306,11 +319,7 @@ export function chimneyTop(b: Building): { x: number; y: number } {
 
 export function farmhouseDrawable(g: CanvasRenderingContext2D, b: Building, night: boolean, t = 0): Drawable[] {
   return [
-    shadowFirst(b, () => {
-      const top = FH_TOP(b);
-      rect(g, b.x0 - 4, top + 6, 4, b.y1 - top - 3, C.sage);
-      rect(g, b.x0 - 4, b.y1, b.x1 - b.x0, 3, C.sage);
-    }),
+    shadowFirst(b, () => groundShadow(g, b.x0, FH_TOP(b) + 3, b.x1, b.y1)),
     { y: b.y1, draw: () => drawFarmhouse(g, b, night, t) },
   ];
 }
@@ -519,7 +528,7 @@ export function fieldGateDrawables(g: CanvasRenderingContext2D, gt: FieldGate): 
 }
 
 function shadowRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  rect(g, x - 4, y + 3, w, h, C.sage);
+  groundShadow(g, x, y, x + w, y + h);
 }
 
 // Barn: plum boards, wool trim and X-braced doors, a gambrel roof (teal)
@@ -530,10 +539,7 @@ export function barnDrawable(g: CanvasRenderingContext2D, b: Barn, night: boolea
   const wallH = 15, eave = y1 - wallH, roofTop = b.y0 - 8;
   const big = b.level >= 2;
   return [
-    shadowFirst(b, () => {
-      rect(g, x0 - 5, roofTop + 4, 5, y1 - roofTop - 1, C.sage);
-      rect(g, x0 - 5, y1, w, 3, C.sage);
-    }),
+    shadowFirst(b, () => groundShadow(g, x0, roofTop + 1, x1 + (big ? 5 : 0), y1)),
     {
       y: b.y1,
       draw: () => {

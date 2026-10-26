@@ -7,6 +7,7 @@ export interface Light {
   x: number; // screen coords
   y: number;
   r: number;
+  warm?: boolean; // a flame: its pool ends in a dithered buttercup ring
 }
 
 // Everything that changes the light, in one ordered-dither pass so the
@@ -28,6 +29,7 @@ export interface SkyOpts {
   fogNight?: boolean;
   fogX?: number; // drift of the wisps (world px)
   flash?: number; // lightning, in Bayer steps
+  blue?: number; // 0..1 the blue hour: the dark comes in partly teal
 }
 
 // Tileable value noise, 0..255, for clouds and fog wisps.
@@ -71,6 +73,7 @@ export class NightOverlay {
   // Per-pixel scratch, kept between frames: each light's hole is stamped
   // only over its own box, not tested at every pixel of the screen.
   private hole = new Float64Array(1);
+  private warm = new Float32Array(1); // how strongly a lamp's ring glows here
   private exs = new Float32Array(1);
 
   constructor() {
@@ -88,6 +91,7 @@ export class NightOverlay {
     this.img = this.g.createImageData(W, H);
     this.buf = new Uint32Array(this.img.data.buffer);
     this.hole = new Float64Array(W * H);
+    this.warm = new Float32Array(W * H);
     this.exs = new Float32Array(W);
   }
 
@@ -96,6 +100,7 @@ export class NightOverlay {
     const over = o.overcast ?? 0, fog = (o.fog ?? 0) * 16, flash = o.flash ?? 0;
     if (base <= 0 && over < 0.5 && fog < 0.5 && flash <= 0) return;
     this.ensure(W, H);
+    const blue = o.blue ?? 0, teal = U32.teal;
     const buf = this.buf, plum = U32.plum, fogCol = o.fogNight ? U32.sage : U32.wool, wool = U32.wool, butter = U32.butter;
     const slope = o.slope ?? 0;
     const L = o.lights.filter((l) => l.x + l.r > 0 && l.x - l.r < W && l.y + l.r > 0 && l.y - l.r < H);
@@ -105,9 +110,11 @@ export class NightOverlay {
     const hw = W / 2, hh = H / 2;
     const exs = this.exs;
     for (let x = 0; x < W; x++) exs[x] = ((x - hw) / hw) ** 2;
-    const hole = this.hole;
+    const hole = this.hole, warm = this.warm;
+    const anyWarm = base > 0 && L.some((l) => l.warm);
     if (L.length) {
       hole.fill(0);
+      if (anyWarm) warm.fill(0);
       for (const l of L) {
         const ry = l.r / SY, r2 = l.r * l.r;
         const x0 = Math.max(0, Math.floor(l.x - l.r)), x1 = Math.min(W - 1, Math.ceil(l.x + l.r));
@@ -117,8 +124,14 @@ export class NightOverlay {
           for (let x = x0, i = y * W + x0; x <= x1; x++, i++) {
             const dx = x - l.x, d2 = dx * dx + dy2;
             if (d2 < r2) {
-              const h = Math.min(1, (1 - Math.sqrt(d2) / l.r) * 1.8);
+              const k = 1 - Math.sqrt(d2) / l.r;
+              const h = Math.min(1, k * 1.8);
               if (h > hole[i]) hole[i] = h;
+              // The edge of a lamp's pool: a ring of warm light falling off.
+              if (l.warm && k < 0.34) {
+                const r = 1 - Math.abs(k - 0.17) / 0.17;
+                if (r > warm[i]) warm[i] = r;
+              }
             }
           }
         }
@@ -155,7 +168,9 @@ export class NightOverlay {
         // Night and fog together never cover more than ~2/3 of the pixels,
         // so the ground still reads between them.
         if (dark > 0 && level + f > 10) f = Math.max(0, 10 - level);
-        buf[i] = thr < level ? plum : thr < level + f ? fogCol : 0;
+        if (thr < level) buf[i] = blue > 0 && dark > 0 && thr >= level * (1 - blue * 0.7) ? teal : plum;
+        else if (anyWarm && thr < warm[i] * 3.2) buf[i] = butter;
+        else buf[i] = thr < level + f ? fogCol : 0;
       }
     }
     this.g.putImageData(this.img, 0, 0);

@@ -48,6 +48,9 @@ export interface Baked {
   canopyPx: Uint32Array;
   canopyKind: Uint8Array;
   waterDist: Uint8Array;
+  // The water as a plum mask over its bounding box, so a shadow falling on
+  // water can be drawn plum rather than sage.
+  waterMask: { c: HTMLCanvasElement; x: number; y: number };
 }
 
 function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32Array {
@@ -481,17 +484,17 @@ function bakeWorld(map: WorldMap): Baked {
       }
   }
 
-  // Canopy and rock shadows (down-left), sage on grass, plum on water.
+  // Rock shadows (down-left), sage on grass, plum on water. The trees'
+  // shadows are not baked: they move with the sun (render/light.ts). The
+  // mask still marks where the shade usually lies, for the ferns and such.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
       if (cm[i]) continue;
       const fromTree = at(cm, x - SHADOW_DX, y - SHADOW_DY) === 1;
       const fromRock = !rock[i] && (at(rock, x + 2, y - 3) === 1 || (y >= 3 && x < W - 3 && rh[i - 3 * W + 3] > 0.62));
-      if (fromTree || fromRock) {
-        shadow[i] = 1;
-        gp[i] = water[i] ? U32.plum : U32.sage;
-      }
+      if (fromTree || fromRock) shadow[i] = 1;
+      if (fromRock) gp[i] = water[i] ? U32.plum : U32.sage;
     }
   }
 
@@ -700,7 +703,13 @@ function bakeWorld(map: WorldMap): Baked {
     waterAnims.push(makeWaterAnim(src, x0, y0, x1 - x0, y1 - y0, flowing, flowing ? stones : []));
   });
 
-  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist };
+  let wx0 = W, wy0 = H, wx1 = 0, wy1 = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (water[y * W + x]) { if (x < wx0) wx0 = x; if (x > wx1) wx1 = x; if (y < wy0) wy0 = y; if (y > wy1) wy1 = y; }
+  const [wmc, wmg] = makeCanvas(Math.max(1, wx1 - wx0 + 1), Math.max(1, wy1 - wy0 + 1));
+  const wmi = wmg.createImageData(wmc.width, wmc.height), wmp = new Uint32Array(wmi.data.buffer);
+  for (let y = wy0; y <= wy1; y++) for (let x = wx0; x <= wx1; x++) if (water[y * W + x]) wmp[(y - wy0) * wmc.width + x - wx0] = U32.plum;
+  wmg.putImageData(wmi, 0, 0);
+  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist, waterMask: { c: wmc, x: wx0, y: wy0 } };
 }
 
 function makeSwayGrid(W: number, H: number): SwayGrid {

@@ -8,11 +8,11 @@ import { haystackDrawable } from '../art/hay';
 import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
 import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
-import { skyDarkness, skySlope } from './sky';
+import { blueHour, goldenHour, skyDarkness, skySlope, sunShadow } from './sky';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
-import { setSeasonLook } from '../art/seasonlook';
+import { lightLook, setSeasonLook } from '../art/seasonlook';
 import { idlePose } from './dogidle';
 import { playerDogSprites } from '../art/dogstyle';
 import { drawSpr } from '../gfx/sprite';
@@ -30,10 +30,10 @@ function drawPlayerDog(game: Game, g: CanvasRenderingContext2D) {
   else d.draw(g);
 }
 
-// Sideways shift of moving things' shadows with the time of day.
+// Sideways shift of moving things' shadows with the sun.
 function sunShift(game: Game): number {
   if (game.day.phase === 'night') return 0;
-  return Math.max(-2, Math.min(2, Math.round(-2 + (4 * game.day.frac) / 0.8)));
+  return Math.max(-3, Math.min(3, Math.round(sunShadow(game.day).dx / 3)));
 }
 
 // Resting: the dog curls up asleep while the day runs fast.
@@ -57,6 +57,12 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   game.life.seasons.sync(game.baked, game.season);
   g.drawImage(game.life.seasons.ground ?? game.baked.ground, ox, oy, W, H, 0, 0, W, H);
   game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
+  // The trees' shadows, thrown by the sun (and buildings' too, as they draw).
+  const sh = sunShadow(game.day);
+  lightLook.dx = sh.dx;
+  lightLook.dy = sh.dy;
+  lightLook.golden = goldenHour(game.day);
+  game.life.shadows.draw(g, game.baked, ox, oy, W, H, sh.dx, sh.dy);
   drawWater(g, game.baked.water, ox, oy, W, H, game.life.vt);
 
   g.save();
@@ -137,12 +143,12 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     for (const o of game.coop) lights.push({ x: o.x - ox, y: o.y - oy, r: 36 });
     lights.push(...game.folk.lights(ox, oy));
     const f = game.ranch.farmhouse;
-    if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
-    decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1) }));
+    if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0), warm: true });
+    decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1), warm: true }));
     for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
-    for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2 }); }
+    for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2, warm: true }); }
   }
-  game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), ...game.life.wx.sky(game, dark) });
+  game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...game.life.wx.sky(game, dark) });
   game.life.wx.drawAir(g, game, W, H, dark > 0.25);
   if (sleeping(game)) {
     g.save();
