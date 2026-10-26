@@ -2,6 +2,7 @@ import { C } from '../palette';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
 import { drawGoodsTally } from './goods';
+import { drawObjective, objective } from './objective';
 import { heading, headingWidth, text, textWidth } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
 import { animalSprites } from '../art/animals';
@@ -116,6 +117,10 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   const viewBottom = Math.min(hint ? hy - 2 : H, TL ? TL.top : H - S.bottom - 4);
 
   drawCoach(game, g, T + 12, viewBottom);
+  // The one thing to do now (ui/objective.ts): its arrow and marker here,
+  // its words on the goal card below.
+  const ob = objective(game);
+  drawObjective(game, g, ob, T + 12, viewBottom);
 
   // ---- Stamina: a bone by the dog that empties as it runs ----
   {
@@ -197,7 +202,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const label = touch ? 'BUILD' : 'B: BUILD';
     const w = textWidth(label) + 15;
     bx -= w;
-    const pulse = game.tut === 6 && game.coins >= defOf('kennel').cost;
+    const pulse = (game.tut === 6 && game.coins >= defOf('kennel').cost) || ob?.ui === 'build';
     if (button(game, g, 'hud-build', bx, rightY, w, bh, C.butter, pulse)) game.input.push('build');
     icon(g, 'build', bx + 4, rightY + Math.floor((bh - 6) / 2));
     text(g, label, bx + 11, rightY + ty, C.wool);
@@ -218,19 +223,24 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   // ---- Today's goods, and what they fetch at day's end ----
   drawGoodsTally(game, g, R, rightY, W >= 300);
 
-  // ---- Next goal (always visible; tap or Tab for the ledger) ----
+  // ---- What to do now (always visible; tap or Tab for the ledger) ----
   let cardY = T + 20;
   {
     const ng = nextGoal(game);
-    const label = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
+    const goal = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
+    const label = ob ? `${ob.text}${ob.progress ? ` ${ob.progress[0]}/${ob.progress[1]}` : ''}` : goal;
     const tag = game.ledgerNew ? 'NEW' : '';
-    const w = textWidth(label) + 14 + (tag ? textWidth(tag) + 5 : 0);
-    if (button(game, g, 'hud-ledger', L, cardY, w, bh, C.butter, game.ledgerNew || game.tut === 5)) game.input.push('ledger');
+    // Clear of the right-hand buttons: long ones wrap onto a second line.
+    const maxW = Math.max(90, W - L - 2 - S.right - 80);
+    const lines = wrap(label, maxW - 14 - (tag ? textWidth(tag) + 5 : 0)).slice(0, 2);
+    const w = Math.max(...lines.map((l) => textWidth(l))) + 14 + (tag ? textWidth(tag) + 5 : 0);
+    const ch = bh + (lines.length - 1) * 7;
+    if (button(game, g, 'hud-ledger', L, cardY, w, ch, C.butter, game.ledgerNew || game.tut === 5)) game.input.push('ledger');
     // The Ledger's own little book.
     icon(g, 'ledger', L + 3, cardY + ty);
-    text(g, label, L + 10, cardY + ty, C.wool, { iconColor: C.butter });
+    lines.forEach((l, i) => text(g, l, L + 10, cardY + ty + i * 7, C.wool, { iconColor: C.butter }));
     if (tag) text(g, tag, L + w - 4, cardY + ty, C.butter, { align: 'right' });
-    cardY += bh + 2;
+    cardY += ch + 2;
   }
 
   // ---- Orders and trials: the day's jobs, under the goal ----
