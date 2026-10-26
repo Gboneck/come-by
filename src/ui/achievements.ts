@@ -2,7 +2,7 @@ import { C } from '../palette';
 import { panel, px, rect } from '../gfx/draw';
 import { text, textWidth, wrap } from '../gfx/font';
 import { drawSpr, type Sprite } from '../gfx/sprite';
-import { makeCanvas } from '../gfx/screen';
+import { PX, makeCanvas } from '../gfx/screen';
 import type { Game } from '../game';
 import { ACHIEVEMENTS, achById, isBig, type AchDef } from '../systems/achievements';
 import { PTS, buyerDef, buyerLines, maxLevel, titleOf, type BuyerId } from '../systems/favour';
@@ -339,7 +339,7 @@ function pastCard(game: Game, g: CanvasRenderingContext2D, n: number, x0: number
 
 function postcard(game: Game, a: AchDef): HTMLCanvasElement {
   const w = 200, h = 112;
-  const [c, g] = makeCanvas(w, h);
+  const [c, g] = makeCanvas(w, h, PX); // fine pixels: the text is drawn finely
   // Card stock with an airmail edge of teal and buttercup.
   rect(g, 0, 0, w, h, C.plum);
   for (let i = 0; i < w + h; i += 6) {
@@ -400,8 +400,9 @@ export function postcardUrl(game: Game, id: string): string | null {
   const a = achById(id);
   if (!a || !game.achievements.has(id)) return null;
   const src = postcard(game, a);
-  const [c, cg] = makeCanvas(src.width * 5, src.height * 5);
+  const k = Math.max(1, Math.round(5 / PX));
+  const [c, cg] = makeCanvas(src.width * k, src.height * k);
   cg.imageSmoothingEnabled = false;
-  cg.drawImage(src, 0, 0, src.width * 5, src.height * 5);
+  cg.drawImage(src, 0, 0, src.width * k, src.height * k);
   return c.toDataURL('image/png');
 }
