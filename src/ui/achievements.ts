@@ -137,7 +137,7 @@ function bar(g: CanvasRenderingContext2D, x: number, y: number, w: number, f: nu
 function frame(game: Game, g: CanvasRenderingContext2D, W: number, H: number, ph: number) {
   const S = safeArea(game.screen);
   const wide = W >= 300;
-  const pw = wide ? Math.min(W - 20, 330) : Math.min(W - 16, 220);
+  const pw = wide ? Math.min(W - 20, 330) : Math.min(W - 16, 200);
   ph = Math.min(ph, H - 6 - S.top - S.bottom);
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
   dimView(g, game.view());
@@ -223,7 +223,7 @@ function badgesPage(game: Game, g: CanvasRenderingContext2D, W: number, H: numbe
   const n = ACHIEVEMENTS.length;
   const S = safeArea(game.screen);
   const wide = W >= 300;
-  const pw = wide ? Math.min(W - 20, 330) : Math.min(W - 16, 220);
+  const pw = wide ? Math.min(W - 20, 330) : Math.min(W - 16, 200);
   const cell = BADGE + 3;
   cols = Math.max(4, Math.floor((pw - 12) / cell));
   const rows = Math.ceil(n / cols);

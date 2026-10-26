@@ -98,6 +98,32 @@ const STATES = {
       return 10;
     },
   },
+  buyers: {
+    fn: async () => {
+      const g = window.game;
+      g.setTier(4, false);
+      g.favour.pts = { mill: 14, drover: 33, sale: 24, shear: 4 };
+      g.favour.filled = { mill: 3, drover: 8, sale: 5, shear: 1 };
+      (await import('/src/ui/achievements.ts')).openLedgerAt(g, 1);
+      return 10;
+    },
+  },
+  badges: {
+    fn: async () => {
+      const g = window.game;
+      for (const id of ['home', 'steady', 'quiet', 'ribbon', 'cup', 'sold', 'trusted', 'friend', 'lambs', 'visit']) g.achievements.got.set(id, 3);
+      (await import('/src/ui/achievements.ts')).openLedgerAt(g, 2, 'friend');
+      return 10;
+    },
+  },
+  badgecard: {
+    fn: () => {
+      const g = window.game;
+      g.tut = 99;
+      g.achievements.grant(g, 'friend');
+      return 25;
+    },
+  },
   pause: {
     fn: () => {
       const g = window.game;
