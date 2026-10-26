@@ -5,7 +5,7 @@ import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from './animals';
 import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
 import { Barn, FieldGate, Fence, Haystack, Kennel, Market, Windmill } from '../ranch/structures';
 import { haystackDrawable } from '../art/hay';
-import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
+import { farmhouseWindows, windowGlow, barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
 import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
 import { blueHour, goldenHour, skyDarkness, skySlope, sunShadow } from './sky';
@@ -147,7 +147,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     for (const o of game.coop) lights.push({ x: o.x - ox, y: o.y - oy, r: 36 });
     lights.push(...game.folk.lights(ox, oy));
     const f = game.ranch.farmhouse;
-    if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0), warm: true });
+    if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
     decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1), warm: true }));
     for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
     for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2, warm: true }); }
@@ -169,7 +169,12 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     // Above the dark: lamp glow, eyes, fireflies.
     g.save();
     g.translate(-ox, -oy);
-    if (dark > 0.2) drawLampGlow(g, game.tier, game.t);
+    if (dark > 0.2) {
+      drawLampGlow(g, game.tier, game.t);
+      // The farmhouse windows glow out into the dark.
+      const fh = game.ranch.farmhouse;
+      if (fh && inView(fh.x0, fh.y0 - 20, fh.x1, fh.y1)) for (const [x, y, w, h] of farmhouseWindows(fh)) windowGlow(g, x, y, w, h, game.t);
+    }
     for (const p of game.predators) if (inView(p.x, p.y)) p.drawEyes(g, game.t);
     game.life.drawGlow(g);
     g.restore();

@@ -312,6 +312,29 @@ function chimney(g: CanvasRenderingContext2D, x: number, top: number, h: number)
 
 const FH_TOP = (b: Building) => b.y0 - (b.level >= 3 ? 12 : 7);
 
+// The farmhouse's lit windows at night, as rects (x, y, w, h), for the glow
+// drawn round them above the dark (render/world.ts). Matches drawFarmhouse.
+export function farmhouseWindows(b: Building): [number, number, number, number][] {
+  const x0 = b.x0, x1 = b.x1, y1 = b.y1, two = b.level >= 3;
+  const eave = y1 - (two ? 18 : 11), wy = y1 - 8;
+  const out: [number, number, number, number][] = [];
+  for (const wx of two ? [x0 + 5, x0 + 17, x1 - 22, x1 - 10] : [x0 + 5, x1 - 10]) out.push([wx, wy, 5, 3]);
+  if (two) for (const wx of [x0 + 6, x0 + 18, x1 - 21, x1 - 9]) out.push([wx, eave + 3, 4, 3]);
+  return out;
+}
+
+// A soft glow round a lit window, drawn above the night: a dithered ring of
+// buttercup that fades out from the frame.
+export function windowGlow(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, t: number) {
+  const fl = Math.sin(t * 5 + x) > 0.85 ? 1 : 0;
+  for (let yy = y - 3; yy <= y + h + 2; yy++)
+    for (let xx = x - 3; xx <= x + w + 2; xx++) {
+      const d = Math.max(x - 1 - xx, xx - (x + w), y - 1 - yy, yy - (y + h));
+      if (d < 1) continue;
+      if (d === 1 ? ((xx + yy) & 1) === 0 : d === 2 + fl ? ((xx + yy) & 3) === 0 : false) px(g, xx, yy, C.butter);
+    }
+}
+
 // Where the chimney smoke leaves the farmhouse (see render/life.ts).
 export function chimneyTop(b: Building): { x: number; y: number } {
   return { x: b.x1 - 10, y: FH_TOP(b) - 6 };
