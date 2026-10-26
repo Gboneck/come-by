@@ -22,6 +22,7 @@ export function updateProduce(game: Game, dt: number) {
       if (a.produceT >= sp.goodEvery) {
         a.produceT -= sp.goodEvery;
         p.goods++;
+        p.goodsBy[sp.id] = (p.goodsBy[sp.id] ?? 0) + 1;
         if (game.isOnScreen(a.x, a.y)) game.fx.float(a.x, a.y - 8, `+1 ${sp.good.toUpperCase().replace(/S$/, '')}`, C.wool, 0.9);
       }
     }
@@ -33,8 +34,8 @@ export function priceMult(game: Game): number {
 }
 
 export function penGoodsValue(game: Game, p: Pen): number {
-  if (!p.species || !p.goods) return 0;
-  return Math.round(p.goods * SPECIES[p.species].goodValue * priceMult(game));
+  if (!p.goods) return 0;
+  return Math.round(p.goodsList().reduce((s, sp) => s + SPECIES[sp].goodValue, 0) * priceMult(game));
 }
 
 // Sold at the end of each day.
@@ -42,10 +43,11 @@ export function sellAllGoods(game: Game): { value: number; counts: Partial<Recor
   let value = 0;
   const counts: Partial<Record<SpeciesId, number>> = {};
   for (const p of game.ranch.pens) {
-    if (!p.goods || !p.species) continue;
+    if (!p.goods) continue;
     value += penGoodsValue(game, p);
-    counts[p.species] = (counts[p.species] ?? 0) + p.goods;
+    for (const sp of p.goodsList()) counts[sp] = (counts[sp] ?? 0) + 1;
     p.goods = 0;
+    p.goodsBy = {};
   }
   if (isMarketDay(game)) value = Math.round(value * 1.25); // market day: goods sell dearer
   return { value, counts };

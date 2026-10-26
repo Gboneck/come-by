@@ -18,9 +18,11 @@ import { calmRating } from '../game';
 //   third of each season: the drover pays half again, goods sell dearer);
 //   the hall brings festivals (the last day of each season: parade five of
 //   a kind through the arch on the green).
-// - Overgrown paddocks off the ranch's south side: ranch ground under scrub.
-//   A flock grazing there eats it down tile by tile; once grazed clear it is
-//   land to build on, with wildflowers in it.
+// - Fields past the clearing, off the ranch's south side: land to buy (nip
+//   at the sign), overgrown. A bought field takes paddocks and fences at
+//   once; stock grazing there, penned or loose, eats the scrub down tile by
+//   tile, and once it is clear anything can be built on it (wildflowers
+//   come up in it).
 // - The old bridge at the ford: once the smith has forged an ox yoke, a cow
 //   driven through the woodpile in the ford meadow picks up a log, and a log
 //   brought to the bridge mends it a little. Six logs and cattle cross the
@@ -49,7 +51,7 @@ const penned = (g: Game, sp?: SpeciesId) => g.ranch.pens.reduce((n, p) => n + p.
 export const STEPS: StepDef[] = [
   { id: 'cottage1', name: 'A COTTAGE', deed: 'FILL AN ORDER FOR A BUYER', after: null, done: (g) => g.totals.orders >= 1, line: 'A FAMILY MOVES INTO A COTTAGE AT THE CROSSROADS' },
   { id: 'square', name: 'THE MARKET SQUARE', deed: 'FILL 4 ORDERS', after: 'cottage1', done: (g) => g.totals.orders >= 4, line: 'MARKET DAY IS THE THIRD OF EACH SEASON: THE DROVER PAYS MORE' },
-  { id: 'cottage2', name: 'A SECOND COTTAGE', deed: 'GRAZE AN OVERGROWN PADDOCK CLEAR', after: 'cottage1', done: (g) => g.valley.paddocks.some((p) => p.cleared), line: 'ANOTHER FAMILY MOVES IN' },
+  { id: 'cottage2', name: 'A SECOND COTTAGE', deed: 'GRAZE A FIELD CLEAR', after: 'cottage1', done: (g) => g.valley.paddocks.some((p) => p.cleared), line: 'ANOTHER FAMILY MOVES IN' },
   { id: 'smithy', name: 'THE SMITHY', deed: 'PEN 4 CATTLE', after: 'square', done: (g) => penned(g, 'cow') >= 4, line: 'THE SMITH CAN FORGE AN OX YOKE: THE OLD BRIDGE AT THE FORD CAN BE MENDED' },
   { id: 'hall', name: 'THE VILLAGE HALL', deed: 'WIN A RIBBON AT A TRIAL OR THE FAIR', after: 'square', done: (g) => g.totals.ribbons.some((n) => n > 0) || g.totals.fairRibbons.some((n) => n > 0), line: 'A FESTIVAL ON THE GREEN THE LAST DAY OF EACH SEASON' },
   { id: 'cottage3', name: 'A THIRD COTTAGE', deed: 'HAVE 40 ANIMALS PENNED', after: 'cottage2', done: (g) => penned(g) >= 40, line: 'THE VILLAGE IS FULL OF LIFE' },
@@ -61,6 +63,7 @@ export interface PaddockState {
   index: Map<number, number>; // tile -> its place in `tiles`
   scrub: Float32Array; // per tile, 1 = overgrown .. 0 = grazed
   cleared: boolean;
+  owned: boolean; // bought
   shown: number; // last quarter announced
   mouth: { x: number; y: number }; // where it opens onto the ranch (its sign)
 }
@@ -95,14 +98,22 @@ export class Valley {
           const near = 1 / (1 + Math.hypot(tx - ranch.cx, ty - ranch.cy));
           if (near > md) { md = near; mx = tx; my = ty; }
         }
-      this.paddocks.push({ site, tiles, index: new Map(tiles.map((t, j) => [t, j])), scrub: new Float32Array(tiles.length).fill(1), cleared: false, shown: 0, mouth: { x: mx * TS + 4, y: my * TS + 4 } });
+      this.paddocks.push({ site, tiles, index: new Map(tiles.map((t, j) => [t, j])), scrub: new Float32Array(tiles.length).fill(1), cleared: false, owned: false, shown: 0, mouth: { x: mx * TS + 4, y: my * TS + 4 } });
     }
   }
 
-  // Building land: null if not a paddock; true once grazed clear.
+  // Building land: null if not a field; true once bought.
   landAt(tx: number, ty: number): boolean | null {
     const k = this.mask[ty * MW + tx];
-    return k ? this.paddocks[k - 1].cleared : null;
+    return k ? this.paddocks[k - 1].owned : null;
+  }
+
+  // On a field still under scrub only paddocks and fences go up.
+  landProblem(kind: string, tx: number, ty: number, w: number, h: number): string | null {
+    if (kind === 'pen' || kind === 'fence' || kind === 'gate') return null;
+    for (let y = ty; y < ty + h; y++)
+      for (let x = tx; x < tx + w; x++) if (this.scrubAt(x, y) > 0.1) return 'GRAZE THIS FIELD CLEAR FIRST';
+    return null;
   }
 
   // Scrub left on a tile, 0..1 (0 off the paddocks or once cleared).
@@ -196,7 +207,7 @@ function grazePaddocks(g: Game, dt: number) {
   const v = g.valley;
   if (v.paddocks.every((p) => p.cleared)) return;
   for (const a of g.animals) {
-    if (a.pen || a.gone || a.carried || a.trial) continue;
+    if (a.gone || a.carried || a.trial) continue; // penned stock grazes its paddock too
     const rate = GRAZE[a.sp.id] * (a.young ? 0.5 : 1);
     if (!rate || a.stress > 0.45 || Math.hypot(a.vx, a.vy) > a.sp.walk * 0.7) continue;
     const p = v.paddockAt(a.x, a.y);
@@ -227,7 +238,7 @@ function grazePaddocks(g: Game, dt: number) {
 export function clearPaddock(g: Game, p: PaddockState) {
   p.cleared = true;
   p.scrub.fill(0);
-  g.showBanner(`${p.site.name} IS CLEAR`, 'GRAZED DOWN TO GOOD GRASS: NEW LAND TO BUILD ON', 3.4);
+  g.showBanner(`${p.site.name} IS CLEAR`, p.owned ? 'GRAZED DOWN TO GOOD GRASS: BUILD ANYTHING ON IT NOW' : 'GOOD GRASS NOW: BUY IT AT ITS SIGN TO BUILD ON IT', 3.4);
   g.audio?.play('tierup');
   g.feel.confetti(g.screen.W);
 }
@@ -303,6 +314,22 @@ function parade(g: Game) {
 
 // ---- What E does, and what the hint line says ----
 
+// E at a field's sign: buy it.
+export function buyField(g: Game): boolean {
+  const p = g.valley.paddocks.find((x) => !x.owned && Math.hypot(g.dog.x - x.mouth.x, g.dog.y - x.mouth.y) < 24);
+  if (!p) return false;
+  if (g.coins < p.site.price) {
+    g.showBanner(`${p.site.name}: ${p.site.price}$`, `YOU HAVE ${g.coins}$`, 1.8);
+    g.audio?.play('deny');
+    return true;
+  }
+  g.coins -= p.site.price;
+  p.owned = true;
+  g.showBanner(`${p.site.name} IS YOURS`, p.cleared ? 'BUILD ON IT AS YOU LIKE' : 'FENCE IT: STOCK ON IT GRAZES IT CLEAR, THEN BUILD ANYTHING', 3.2);
+  g.audio?.play('coin');
+  return true;
+}
+
 export function valleyHint(g: Game): string | null {
   const d = g.dog, v = g.valley;
   const near = (p: { x: number; y: number }, r: number) => Math.hypot(d.x - p.x, d.y - p.y) < r;
@@ -311,8 +338,11 @@ export function valleyHint(g: Game): string | null {
     return `THE OLD BRIDGE: ${v.logs}/${BRIDGE_LOGS} LOGS. DRIVE CATTLE THROUGH THE WOODPILE, THEN TO THE BRIDGE.`;
   }
   if (!v.bridge && near(bridgeLanding(g), 36)) return `THE OLD BRIDGE: ${v.logs}/${BRIDGE_LOGS} LOGS.${g.ranch.village.has('smithy') ? ' COWS BRING THEM FROM THE WOODPILE WEST OF HERE.' : ' A SMITH COULD FORGE THE YOKE TO HAUL TIMBER.'}`;
-  for (const p of v.paddocks)
-    if (!p.cleared && (near(p.mouth, 30) || v.paddockAt(d.x, d.y) === p)) return `OVERGROWN: ${Math.round((1 - v.left(p)) * 100)}% GRAZED. KEEP A FLOCK GRAZING HERE TILL IT IS CLEAR.`;
+  const E = g.input.touchMode ? 'NIP' : 'E';
+  for (const p of v.paddocks) {
+    if (!p.owned && near(p.mouth, 24)) return `${E}: BUY ${p.site.name} ${p.site.price}$ (YOU HAVE ${g.coins}$)`;
+    if (!p.cleared && (near(p.mouth, 30) || v.paddockAt(d.x, d.y) === p)) return `${p.owned ? '' : 'FOR SALE. '}OVERGROWN: ${Math.round((1 - v.left(p)) * 100)}% GRAZED. STOCK GRAZING HERE, PENNED OR LOOSE, CLEARS IT.`;
+  }
   if (isFestival(g) && !v.paradeDone && Math.abs(d.x - ARCH.x) < 50 && d.y > ARCH.y0 - 30 && d.y < ARCH.y1 + 30) return 'THE FESTIVAL: DRIVE FIVE OF A KIND THROUGH THE ARCH.';
   if (near(SPOTS.green, 64)) {
     const s = nextStep(g);
@@ -326,7 +356,7 @@ export function valleyHint(g: Game): string | null {
 export interface ValleySave {
   village: StepId[];
   builtDay: Partial<Record<StepId, number>>;
-  scrub: { id: string; v: number[]; cleared: boolean }[];
+  scrub: { id: string; v: number[]; cleared: boolean; owned?: boolean }[];
   logs: number;
   bridge: boolean;
   parades: number;
@@ -338,7 +368,7 @@ export function valleySave(g: Game): ValleySave {
   return {
     village: [...g.ranch.village.built],
     builtDay: { ...g.ranch.village.builtDay },
-    scrub: v.paddocks.map((p) => ({ id: p.site.id, v: p.cleared ? [] : [...p.scrub].map((x) => Math.round(x * 100) / 100), cleared: p.cleared })),
+    scrub: v.paddocks.map((p) => ({ id: p.site.id, v: p.cleared ? [] : [...p.scrub].map((x) => Math.round(x * 100) / 100), cleared: p.cleared, owned: p.owned })),
     logs: v.logs,
     bridge: v.bridge,
     parades: v.parades,
@@ -353,6 +383,7 @@ export function valleyLoad(g: Game, d: ValleySave | undefined) {
   for (const p of v.paddocks) {
     const s = d?.scrub.find((x) => x.id === p.site.id);
     p.cleared = !!s?.cleared;
+    p.owned = !!s?.owned;
     if (p.cleared) p.scrub.fill(0);
     else if (s && s.v.length === p.scrub.length) p.scrub.set(s.v);
     else p.scrub.fill(1);

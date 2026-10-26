@@ -106,11 +106,16 @@ const res = await page.evaluate(async () => {
   step(0.1);
   check('five sheep through the arch make a parade', g.valley.parades === 1 && g.valley.paradeDone && g.coins > coinsP, { parades: g.valley.parades, paid: g.coins - coinsP });
 
-  // ---- Overgrown paddocks ----
+  // ---- Fields past the clearing ----
   const v = g.valley;
   const sw = v.paddocks[0];
   const t0 = sw.tiles[Math.floor(sw.tiles.length / 2)], tx = t0 % 192, ty = Math.floor(t0 / 192);
-  check('paddocks are scrub: not land to build on yet', sw.tiles.length > 60 && v.landAt(tx, ty) === false && !g.build.buildable(g, tx, ty) && v.landAt(96, 104) === null, { tiles: sw.tiles.length });
+  check('fields are for sale: not land to build on yet', sw.tiles.length > 60 && v.landAt(tx, ty) === false && !g.build.buildable(g, tx, ty) && v.landAt(96, 104) === null, { tiles: sw.tiles.length });
+  g.dog.x = sw.mouth.x; g.dog.y = sw.mouth.y;
+  const coinsF = g.coins;
+  V.buyField(g);
+  check('nip at its sign: the field is bought, yours to fence', sw.owned && g.coins === coinsF - sw.site.price && g.build.buildable(g, tx, ty), { price: sw.site.price });
+  check('under scrub it takes paddocks and fences, nothing else yet', g.ranch.placementProblem('pen', tx, ty, 1, 1, 0) !== 'GRAZE THIS FIELD CLEAR FIRST' && g.ranch.placementProblem('kennel', tx, ty, 3, 3, 0) === 'GRAZE THIS FIELD CLEAR FIRST');
   // Ducks and a frightened flock do not graze it.
   morning(9);
   clearStock();
@@ -143,9 +148,24 @@ const res = await page.evaluate(async () => {
     sw.scrub.fill(0.05);
     step(0.2);
   }
-  check('grazed down: the paddock is clear, land to build on', sw.cleared && v.landAt(tx, ty) === true && g.build.buildable(g, tx, ty), { secs, inside });
+  check('grazed down: the field is clear, anything can be built on it', sw.cleared && v.landAt(tx, ty) === true && g.ranch.placementProblem('kennel', tx, ty, 3, 3, 0) !== 'GRAZE THIS FIELD CLEAR FIRST', { secs, inside });
   morning(10);
-  check('a cleared paddock brings the second cottage', vil.has('cottage2'));
+  check('a cleared field brings the second cottage', vil.has('cottage2'));
+  // Stock penned in a paddock on a field grazes it too.
+  const se = v.paddocks[1];
+  g.coins += 1000;
+  g.dog.x = se.mouth.x; g.dog.y = se.mouth.y;
+  V.buyField(g);
+  const P = await import('/src/ranch/paddock.ts');
+  const st = se.tiles.map((i) => ({ x: i % 192, y: Math.floor(i / 192) }));
+  const x0 = Math.min(...st.map((t) => t.x)) + 2, y0 = Math.min(...st.map((t) => t.y)) + 1;
+  let fieldPen = null;
+  for (let dy = 0; dy < 4 && !fieldPen; dy++)
+    for (let dx = 0; dx < 8 && !fieldPen; dx++) fieldPen = P.placePaddock(g, { tx: x0 + dx, ty: y0 + dy, w: 8, h: 7 }, P.defaultGate(8, 7, 2));
+  const left0 = v.left(se);
+  if (fieldPen) for (let i = 0; i < 6; i++) { const a = new A.Animal('goat', fieldPen.cx + (i % 3) * 8 - 8, fieldPen.cy + Math.floor(i / 3) * 8 - 4); a.home = true; a.pen = fieldPen; fieldPen.animals.push(a); g.animals.push(a); }
+  step(20, { x: 0, y: 0, sprint: false, lie: true });
+  check('goats penned in a paddock on a field graze it down', fieldPen && v.left(se) < left0 - 0.02, { placed: !!fieldPen, before: +left0.toFixed(2), after: +v.left(se).toFixed(2) });
 
   // ---- The old bridge ----
   clearStock();
@@ -223,6 +243,7 @@ const res = await page.evaluate(async () => {
   cows.forEach((a) => { a.x = dairy.yard.cx; a.y = dairy.yard.cy; });
   step(0.5);
   check('once a day: a milked cow is not taken in again', cows.every((a) => !a.pen));
+  cows.forEach((a) => { a.x = dairy.x1 + 40; a.y = dairy.y1 + 20; });
   g.day.t = O.hourToT(13);
   step(1);
   check('the yard shuts after noon', !dairy.yard.open || dairy.yard.swing < 0.5);
@@ -276,7 +297,6 @@ const res = await page.evaluate(async () => {
   check('brushing a pole is a fault', faults === 1, faults);
 
   // ---- Save and load ----
-  const se = v.paddocks[1];
   se.scrub.fill(0.5);
   v.logs = V.BRIDGE_LOGS;
   SV.saveGame(g);

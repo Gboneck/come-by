@@ -10,6 +10,7 @@ import { MW, TS } from '../world/map';
 import { skyDarkness } from '../render/sky';
 import { BRIDGE_LOGS, bridgeLanding, woodpile } from '../systems/valley';
 import { villageDrawables, villageLights } from './village';
+import { fixtureDrawables } from './farm2';
 
 // The valley's projects as they stand: the overgrown paddocks (scrub that
 // thins as a flock grazes it, then wildflowers), the woodpile and the old
@@ -100,7 +101,7 @@ export function valleyDrawables(game: Game, g: CanvasRenderingContext2D): Drawab
   const { ox, oy, W, H } = game.view();
   const inView = (x0: number, y0: number, x1: number, y1: number) => x1 > ox - 40 && x0 < ox + W + 40 && y1 > oy - 40 && y0 < oy + H + 40;
   const night = skyDarkness(game.day) > 0.3;
-  const out: Drawable[] = [...villageDrawables(game, g, inView, night)];
+  const out: Drawable[] = [...villageDrawables(game, g, inView, night), ...fixtureDrawables(game, g, (x, y) => inView(x - 8, y - 8, x + 8, y + 8))];
   const v = game.valley, t = game.t;
   // Paddocks: scrub on the ground (or flowers once cleared), and a sign.
   for (const p of v.paddocks) {
@@ -116,7 +117,8 @@ export function valleyDrawables(game: Game, g: CanvasRenderingContext2D): Drawab
         });
       },
     });
-    if (!p.cleared) out.push({ y: p.mouth.y, draw: () => sign(g, p.mouth.x, p.mouth.y, `OVERGROWN ${Math.round((1 - v.left(p)) * 100)}%`, false) });
+    if (!p.owned) out.push({ y: p.mouth.y, draw: () => sign(g, p.mouth.x, p.mouth.y, `FOR SALE ${p.site.price}$`, true) });
+    else if (!p.cleared) out.push({ y: p.mouth.y, draw: () => sign(g, p.mouth.x, p.mouth.y, `OVERGROWN ${Math.round((1 - v.left(p)) * 100)}%`, false) });
   }
   // The woodpile and the bridge.
   const wp = woodpile();

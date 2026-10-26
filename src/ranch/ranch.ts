@@ -106,9 +106,11 @@ export class Ranch {
 
   // Why a new building cannot go here (null: it can): the drove road, and a
   // pen gate that would open onto a wall or trees.
-  placementProblem(kind: BuildingKind, tx: number, ty: number, w: number, h: number, rot: Rot): string | null {
-    return placementProblem(this.map, this.road, this.buildings, kind, tx, ty, w, h, rot);
+  placementProblem(kind: BuildingKind, tx: number, ty: number, w: number, h: number, rot: Rot, pen?: Pen): string | null {
+    return placementProblem(this.map, this.road, this.buildings, kind, tx, ty, w, h, rot, pen) ?? this.landRule?.(kind, tx, ty, w, h) ?? null;
   }
+  // The land plots' rule on top (systems/valley.ts): scrub takes only fences.
+  landRule: ((kind: BuildingKind, tx: number, ty: number, w: number, h: number) => string | null) | null = null;
 
   // Hold a pen's gate open so its stock can be driven out (or stop).
   setLetOut(p: Pen, on: boolean) {
@@ -135,7 +137,8 @@ export class Ranch {
     for (const a of animals) {
       if (a.pen || a.gone || a.carried || a.trial) continue;
       for (const p of this.pens) {
-        if (!p.letOut && p.contains(a.x, a.y)) {
+        // Only kinds that get along share a paddock (buildings.ts getsAlong).
+        if (!p.letOut && p.contains(a.x, a.y) && p.canHold(a.sp.id)) {
           a.pen = p;
           a.penT = 0;
           a.stray = false;
@@ -196,6 +199,15 @@ export class Ranch {
         p.open = false;
       }
       if (!was && p.open) ev.push({ kind: 'open', pen: p });
+      // Anyone who slipped in but does not belong is put back out as it shuts.
+      if (was && !p.open) {
+        const out = p.gatePoint(10);
+        for (const a of animals)
+          if (!a.pen && !a.gone && !a.carried && p.covers(a.x, a.y)) {
+            a.x = out.x + (Math.random() - 0.5) * 6;
+            a.y = out.y + (Math.random() - 0.5) * 6;
+          }
+      }
       const before = p.swing;
       p.swing = Math.max(0, Math.min(1, p.swing + (p.open ? 1 : -1) * dt * 2.2));
       if ((before > 0.85) !== (p.swing > 0.85)) p.applyGate(this.map);

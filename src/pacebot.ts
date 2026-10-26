@@ -17,9 +17,9 @@ import { calendar } from './systems/season';
 import { RARE_BREEDS } from './entities/species';
 import { buyBreed, hayHeld, hayNeed, isFairDay, shelteredSpot, HAY_SPOIL } from './systems/seasonal';
 import { AGILITY, AgilityYard, Barn, Dairy, ShearingShed } from './ranch/structures';
-import { bridgeLanding, woodpile, type PaddockState } from './systems/valley';
+import { bridgeLanding, buyField, woodpile } from './systems/valley';
+import { extendPaddock, extendPrice, extendProblem } from './ranch/paddock';
 import { agilityPostNear, dairyOpen, startAgility } from './systems/farmwork';
-import { MW, TS } from './world/map';
 
 // A "decent player" for pacing runs (scripts/pacetest.mjs). Each day it
 // runs the trial if it is a trial day, fills orders it can, drives the
@@ -54,6 +54,7 @@ export interface DayLog {
   choice: number; // things affordable on the end-of-day card
   income: { stock: number; goods: number; orders: number; trials: number }; // where the day's coin came from
   penned: number; // head of stock in pens at the day's end
+  paddocks?: number; // enclosures (paddocks) on the ranch at the day's end
   did: string[];
   stuck: string[]; // open goals that could not move today, and why
 }
@@ -244,8 +245,52 @@ export class Pacer {
   // ---- Pens and building ----
 
   private room(p: Pen, sp: SpeciesId) {
-    if (p.letOut || (p.species && p.species !== sp)) return 0;
+    if (p.letOut || !p.canHold(sp)) return 0;
     return Math.floor((p.capacity - p.used) / SPECIES[sp].space);
+  }
+
+  paddocksExtended = 0;
+  // Room for `n` more of a kind by extending a paddock that holds (or can
+  // hold) them: the cheapest side that fits, paying only for new fence.
+  private extendFor(sp: SpeciesId, n: number): boolean {
+    const g = this.g;
+    const pens = g.ranch.pens.filter((p) => !p.letOut && p.canHold(sp)).sort((a, b) => (b.species === sp ? 1 : 0) - (a.species === sp ? 1 : 0) || b.animals.length - a.animals.length);
+    const perTile = 16 / 56; // capacity a tile (8x7 holds 16)
+    for (const p of pens) {
+      const need = n * SPECIES[sp].space - Math.max(0, p.capacity - p.used);
+      if (need <= 0) continue;
+      let best: { side: Rot; k: number; cost: number } | null = null;
+      for (const side of [0, 1, 2, 3] as Rot[]) {
+        const across = side % 2 === 0 ? p.w : p.h;
+        const k0 = Math.max(2, Math.ceil(need / (across * perTile)));
+        for (let k = k0; k <= k0 + 6; k++) {
+          if (extendProblem(g, p, side, k)) continue;
+          const cost = extendPrice(p, side, k);
+          if (!best || cost < best.cost) best = { side, k, cost };
+          break;
+        }
+      }
+      if (!best) continue;
+      const before = g.coins;
+      if (!extendPaddock(g, p, best.side, best.k)) continue;
+      this.spent += before - g.coins;
+      this.paddocksExtended++;
+      this.did.push(`EXTENDED A PADDOCK ${best.k} ${['SOUTH', 'WEST', 'NORTH', 'EAST'][best.side]} ${before - g.coins}$ (${p.w}X${p.h})`);
+      return true;
+    }
+    return false;
+  }
+
+  // Land short: buy a field at the ranch's edge (stock on it grazes it clear).
+  private buyLand(): boolean {
+    const g = this.g;
+    const f = g.valley.paddocks.find((p) => !p.owned && g.coins >= p.site.price + 60);
+    if (!f || !this.walkTo({ x: f.mouth.x, y: f.mouth.y + 6 }, 60, 6)) return false;
+    const before = g.coins;
+    if (!buyField(g) || g.coins >= before) return false;
+    this.spent += before - g.coins;
+    this.did.push(`BOUGHT ${f.site.name} ${before - g.coins}$`);
+    return true;
   }
 
   private penFor(sp: SpeciesId, n: number): Pen | null {
@@ -445,7 +490,7 @@ export class Pacer {
 
   private groupsOut(): Animal[][] {
     const g = this.g;
-    const groups = findGroups(g.animals).map((gr) => gr.members.filter((a) => loose(a) && !this.skip.has(a) && !this.grazers.includes(a))).filter((m) => m.length);
+    const groups = findGroups(g.animals).map((gr) => gr.members.filter((a) => loose(a) && !this.skip.has(a))).filter((m) => m.length);
     // Merge groups of one kind that graze close together.
     const out: Animal[][] = [];
     for (const m of groups) {
@@ -477,16 +522,9 @@ export class Pacer {
   private makeRoom(sp: SpeciesId, n: number) {
     const g = this.g;
     if (this.roomFor(sp) >= n) return;
-    const own = g.ranch.pens.filter((p) => p.species === sp && p.level < 2 && !p.letOut);
-    if (own.length && g.tier >= 3 && g.coins >= (defOf('pen').upgrade?.cost ?? 40)) {
-      const before = g.coins;
-      g.build['upgrade'](g, own[0]);
-      if (g.coins < before) {
-        this.spent += before - g.coins;
-        this.did.push(`UPGRADED A ${SPECIES[sp].name.toUpperCase()} PEN ${before - g.coins}$`);
-        if (this.roomFor(sp) >= n) return;
-      }
-    }
+    // Grow a paddock that can take them before building another.
+    if (this.extendFor(sp, n - this.roomFor(sp)) && this.roomFor(sp) >= n) return;
+    if (this.landShort && this.buyLand() && this.extendFor(sp, n - this.roomFor(sp)) && this.roomFor(sp) >= n) return;
     // Land is short: a species a goal names gets a new pen first; others
     // only once every named one has room.
     const named = this.goalSpecies(true);
@@ -518,6 +556,7 @@ export class Pacer {
   }
 
   bringHome(members: Animal[]) {
+    if (!members.length) return;
     const sp = members[0].sp.id, n = members.length;
     this.makeRoom(sp, n);
     const pen = this.penFor(sp, n);
@@ -609,59 +648,8 @@ export class Pacer {
 
   // ---- The valley ----
 
-  landShort = false; // a new pen found no room on the ranch
-  grazers: Animal[] = []; // our flock out grazing a paddock
-  valley = { grazeDays: 0, logs: 0, shorn: 0, milked: 0, agility: 0 };
-
-  // The rankest part of a paddock: where to put a grazing flock.
-  private rankest(p: PaddockState): P {
-    let x = 0, y = 0, w = 0;
-    p.tiles.forEach((i, j) => {
-      const s = p.scrub[j] ** 3;
-      x += ((i % MW) * TS + 4) * s;
-      y += (Math.floor(i / MW) * TS + 4) * s;
-      w += s;
-    });
-    return w ? { x: x / w, y: y / w } : p.mouth;
-  }
-
-  // Land short: let our hardiest grazers out into an overgrown paddock and
-  // leave them to it, moving them onto the rankest scrub each morning;
-  // bring them home once it is clear.
-  private doGraze() {
-    const g = this.g, v = g.valley;
-    this.grazers = this.grazers.filter((a) => !a.gone);
-    const out = this.grazers.filter(loose);
-    const p = v.paddocks.find((x) => !x.cleared);
-    if (!p || (!out.length && this.grazers.length)) {
-      if (out.length) {
-        this.did.push(`GRAZED ${v.paddocks.filter((x) => x.cleared).length} PADDOCK${v.paddocks.filter((x) => x.cleared).length > 1 ? 'S' : ''} CLEAR, FLOCK HOME`);
-        const herd = out;
-        this.grazers = [];
-        this.bringHome(herd);
-        this.landShort = false;
-      } else this.grazers = [];
-      return;
-    }
-    if (out.length) {
-      this.valley.grazeDays++;
-      const to = this.rankest(p);
-      if (dist(centroid(out), to) > 36) this.drive(out, to, null, STYLE[out[0].sp.id], 60);
-      return;
-    }
-    if (!this.landShort || g.tier < 2) return;
-    const order: SpeciesId[] = ['goat', 'sheep', 'cow', 'pony'];
-    const pen = g.ranch.pens
-      .filter((q) => q.species && order.includes(q.species) && q.animals.filter((a) => !a.young).length >= 4 && !q.letOut)
-      .sort((a, b) => order.indexOf(a.species!) - order.indexOf(b.species!))[0];
-    if (!pen) return;
-    const herd = this.letOut(pen, pen.animals.length);
-    if (!herd.length) return;
-    this.grazers = herd;
-    this.valley.grazeDays++;
-    const r = this.drive(herd, this.rankest(p), null, STYLE[herd[0].sp.id], 120);
-    this.did.push(`OUT TO GRAZE ${p.site.name}: ${herd.length} ${SPECIES[herd[0].sp.id].plural.toUpperCase()} ${Math.round(r.secs)}S`);
-  }
+  landShort = false; // a new paddock found no room on the ranch
+  valley = { logs: 0, shorn: 0, milked: 0, agility: 0 };
 
   // Timber for the old bridge: a wild herd of cattle through the woodpile,
   // then to the bridge.
@@ -840,7 +828,6 @@ export class Pacer {
     if (this.playing) this.doDairy();
     for (const o of [...g.orders.open].sort((a, b) => a.due - b.due)) if (this.playing) this.doOrder(o);
     if (isFairDay(g) && this.playing) this.doFair();
-    if (this.playing) this.doGraze();
     if (this.playing) this.doTimber();
     if (this.playing) this.doShed();
     if (this.playing) this.doAgility();
@@ -861,7 +848,7 @@ export class Pacer {
       this.shop();
       g.startDay();
     }
-    return { day, tier, sky: g.weather.sky, real: Math.round(this.real), rested: Math.round(this.rested), earned: g.totals.earned - earned0, spent: this.spent, coins: g.coins, choice, income, penned: g.ranch.pens.reduce((s, p) => s + p.animals.length, 0), did: this.did, stuck: this.stuck };
+    return { day, tier, sky: g.weather.sky, real: Math.round(this.real), rested: Math.round(this.rested), earned: g.totals.earned - earned0, spent: this.spent, coins: g.coins, choice, income, penned: g.ranch.pens.reduce((s, p) => s + p.animals.length, 0), paddocks: g.ranch.pens.length, did: this.did, stuck: this.stuck };
   }
 }
 

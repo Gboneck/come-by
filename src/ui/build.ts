@@ -5,6 +5,7 @@ import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
+import { fixtureProblem, isFixture, placeFixture } from '../ranch/paddock';
 import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
@@ -143,12 +144,13 @@ export class BuildMode {
     const count = game.ranch.buildings.filter((b) => b.kind === def.kind).length;
     if (def.tier > game.tier) return { ...gh, reason: `UNLOCKS AT TIER ${def.tier}` };
     if (def.max && count >= def.max) return { ...gh, reason: 'YOU HAVE ONE ALREADY' };
-    if (def.id === 'trough') {
-      const b = this.buildingAt(game, this.cx, this.cy);
-      if (!(b instanceof Pen)) return { ...gh, reason: 'PLACE IT IN A PEN' };
-      if (b.hasTrough) return { ...gh, pen: b, reason: 'THIS PEN HAS ONE' };
-      if (game.coins < def.cost) return { ...gh, pen: b, reason: `NEED ${def.cost}$` };
-      return { ...gh, pen: b, ok: true };
+    if (isFixture(def.id)) {
+      // A trough, field shelter or hay rack: inside a paddock (ranch/paddock.ts).
+      const { pen, why } = fixtureProblem(game, def.id, tx, ty);
+      if (!pen) return { ...gh, reason: why ?? '' };
+      if (why) return { ...gh, pen, reason: why };
+      if (game.coins < def.cost) return { ...gh, pen, reason: `NEED ${def.cost}$` };
+      return { ...gh, pen, ok: true };
     }
     for (let y = ty; y < ty + h; y++)
       for (let x = tx; x < tx + w; x++) if (!this.buildable(game, x, y)) return { ...gh, reason: 'NOT ON RANCH LAND' };
@@ -171,8 +173,8 @@ export class BuildMode {
       return;
     }
     game.coins -= gh.def.cost;
-    if (gh.pen) {
-      gh.pen.hasTrough = true;
+    if (gh.pen && isFixture(gh.def.id)) {
+      placeFixture(game, gh.def.id, gh.tx, gh.ty);
     } else {
       game.ranch.add(makeBuilding(gh.def, gh.tx, gh.ty, this.rot));
       clearDecorUnder(game, gh.tx, gh.ty, gh.w, gh.h);
@@ -406,7 +408,7 @@ export class BuildMode {
     const gh = this.ghost(game);
     const under = this.buildingAt(game, this.cx, this.cy);
     const X0 = gh.tx * TS, Y0 = gh.ty * TS, Wd = gh.w * TS, Hd = gh.h * TS;
-    if (gh.def.id === 'trough') {
+    if (isFixture(gh.def.id)) {
       if (gh.pen) outline(g, gh.pen.x0, gh.pen.y0, gh.pen.x1 - gh.pen.x0, gh.pen.y1 - gh.pen.y0, gh.ok ? C.butter : C.plum, game.t);
     } else if (under && !gh.ok) {
       outline(g, under.x0, under.y0, under.x1 - under.x0, under.y1 - under.y0, C.wool, game.t);

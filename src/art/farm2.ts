@@ -199,3 +199,36 @@ export function agilityDrawables(g: CanvasRenderingContext2D, y: AgilityYard, t:
   });
   return out;
 }
+
+// ---- Fixtures inside a paddock: a field shelter (a lean-to on posts over
+// straw) and a hay rack (a slatted V of hay). The trough is drawn with the
+// paddock (art/buildings.ts).
+export function fixtureDrawables(game: Game, g: CanvasRenderingContext2D, inView: (x: number, y: number) => boolean): Drawable[] {
+  const out: Drawable[] = [];
+  for (const p of game.ranch.pens)
+    for (const f of p.fixtures) {
+      const x = f.tx * 8, y = f.ty * 8;
+      if (f.kind === 'trough' || !inView(x + 8, y + 8)) continue;
+      if (f.kind === 'shelter') {
+        out.push({ y: y + 15, draw: () => {
+          for (let i = 0; i < 12; i++) px(g, x + 2 + ((i * 5) % 12), y + 10 + (i % 4), C.butter);
+          rect(g, x + 1, y + 6, 1, 10, C.plum);
+          rect(g, x + 14, y + 6, 1, 10, C.plum);
+          rect(g, x + 1, y + 6, 14, 1, C.plum);
+          for (let i = 0; i < 4; i++) rect(g, x - 1 + i, y + 5 - i, 18 - i * 2, 1, i % 2 ? C.plum : C.teal);
+          snowCap(g, x + 2, y + 1, 12);
+        } });
+      } else {
+        out.push({ y: y + 7, draw: () => {
+          rect(g, x + 1, y + 1, 14, 5, C.butter);
+          for (let xx = x + 2; xx < x + 15; xx += 3) rect(g, xx, y + 1, 1, 5, C.plum);
+          rect(g, x + 1, y + 6, 14, 1, C.plum);
+          rect(g, x + 2, y + 7, 1, 1, C.plum);
+          rect(g, x + 13, y + 7, 1, 1, C.plum);
+          px(g, x + 4, y, C.butter);
+          px(g, x + 9, y, C.butter);
+        } });
+      }
+    }
+  return out;
+}

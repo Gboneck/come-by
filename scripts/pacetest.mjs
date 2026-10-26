@@ -136,6 +136,7 @@ for (let tier = 1; tier <= 5; tier++) {
     perDay: Math.round(avg((p) => p.reduce((s, d) => s + d.earned, 0) / p.length)),
     coinsEnd: Math.round(avg((p) => p[p.length - 1].coins)),
     penned: Math.round(avg((p) => p[p.length - 1].penned ?? 0)),
+    paddocks: avg((p) => p[p.length - 1].paddocks ?? p[p.length - 1].pens ?? 0).toFixed(1),
     idleDays: stuckDays.toFixed(1),
     notes: [...notes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k} x${n}`).join('; '),
   });
@@ -143,9 +144,9 @@ for (let tier = 1; tier <= 5; tier++) {
 console.log('| tier | days | play min | resting min | earned $ | spent $ | choices at day end | days nothing moved | stuck on (count over all seeds) |');
 console.log('|---|---|---|---|---|---|---|---|---|');
 for (const r of rows) console.log(`| ${r.tier} | ${r.days} | ${r.minutes} | ${r.rested} | ${r.earned} | ${r.spent} | ${r.choice} | ${r.idleDays} | ${r.notes} |`);
-console.log('\n| tier | earned per day $ | where it came from | stock penned at tier end | purse at tier end $ |');
-console.log('|---|---|---|---|---|');
-for (const r of rows) console.log(`| ${r.tier} | ${r.perDay} | ${r.income} | ${r.penned} | ${r.coinsEnd} |`);
+console.log('\n| tier | earned per day $ | where it came from | stock penned at tier end | enclosures at tier end | purse at tier end $ |');
+console.log('|---|---|---|---|---|---|');
+for (const r of rows) console.log(`| ${r.tier} | ${r.perDay} | ${r.income} | ${r.penned} | ${r.paddocks} | ${r.coinsEnd} |`);
 if (year) {
   // Per season of the calendar, averaged over the seeds.
   console.log('\n| season | earned $ | spent $ | hay stacks bought | hungry pen-nights | hay left at end | lambs born | shearer | fair | rare bought | wild stock about (morning avg) | village built | paddocks clear | bridge logs |');

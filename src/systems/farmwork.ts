@@ -2,7 +2,7 @@ import { C } from '../palette';
 import { calmRating, type Game } from '../game';
 import type { Animal } from '../entities/animal';
 import { AGILITY, AgilityYard, Dairy, ShearingShed } from '../ranch/structures';
-import { admit, swingGate } from '../ranch/fixtures';
+import { admit, evict, swingGate } from '../ranch/fixtures';
 import { MAX_UP, type UpKey } from './economy';
 import { hourToT } from './orders';
 
@@ -99,7 +99,10 @@ function milking(g: Game, dt: number) {
     const gp = y.gatePoint(0);
     const inGate = g.animals.some((a) => !a.gone && !a.pen && Math.hypot(a.x - gp.x, a.y - gp.y) < a.sp.r + 9);
     // Open all morning: penned cows cannot pass a pen's gateway anyway.
+    // Anyone loose inside when it shuts is put back out.
+    const was = y.open;
     y.open = open || inGate;
+    if (was && !y.open) evict(y, g.animals);
     if (open) for (const a of admit(y, g.animals, wants)) milkT.set(a, 0);
     swingGate(y, dt, g.map);
     let busy = false;

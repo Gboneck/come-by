@@ -6,7 +6,7 @@ import { checkLegacy } from './progression';
 import { SKY_LINE, SKY_TIP } from './weather';
 import { Predator } from '../entities/predator';
 import { breedNear, buyBreed, isFairDay, seasonalMorning, seasonalOrders, seasonalUpdate, type MorningBanner } from './seasonal';
-import { valleyHint, valleyMorning, valleyUpdate } from './valley';
+import { buyField, valleyHint, valleyMorning, valleyUpdate } from './valley';
 import { farmworkHint, farmworkNearHint, farmworkUpdate, startAgility } from './farmwork';
 
 // The jobs around the herding: buyers' orders and the Show Ground trials.
@@ -67,6 +67,7 @@ export function jobsAction(game: Game): boolean {
   if (atPost(game) && !game.trials.run && currentClass(game)) return startRun(game);
   if (buyBreed(game)) return true;
   if (startAgility(game)) return true;
+  if (buyField(game)) return true;
   return gateAction(game);
 }
 

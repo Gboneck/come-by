@@ -54,6 +54,7 @@ export interface FairEntry {
 // Seasonal state the save keeps (the calendar itself comes from the day).
 export class Seasonal {
   loft = LOFT_MAX; // bales in the farmhouse loft
+  loftBonus = 0; // extra bales each autumn (set by the valley's projects)
   hungryNights = 0; // this winter
   fair: FairEntry[] = []; // this year's fair, once judged
   news: string | null = null; // last night's feeding, for the morning
@@ -77,9 +78,13 @@ export function hayHeld(g: Game) {
   return g.seasonal.loft + stacks(g).reduce((s, h) => s + h.bales, 0);
 }
 
+// Bales a pen eats in a winter night: one per HAY_PER places of stock, a
+// third less from a hay rack (less trodden into the mud).
+export const penHay = (p: Pen) => (p.animals.length ? Math.ceil((p.used / HAY_PER) * (p.has('hayrack') ? 2 / 3 : 1)) : 0);
+
 // Bales the pens eat in a winter night, as they stand.
 export function hayNeed(g: Game) {
-  return g.ranch.pens.reduce((s, p) => s + (p.animals.length ? Math.ceil(p.used / HAY_PER) : 0), 0);
+  return g.ranch.pens.reduce((s, p) => s + penHay(p), 0);
 }
 
 // ---- The day ----
@@ -119,7 +124,7 @@ export function seasonalMorning(g: Game, fresh: boolean): MorningBanner | null {
   if (S.season === 'spring' && S.dayOf <= 2 && g.tier >= 2) lambing(g);
   if (S.season === 'autumn' && S.dayOf === 1) {
     growUp(g);
-    g.seasonal.loft = LOFT_MAX; // the farm's own hay, cut in the summer
+    g.seasonal.loft = LOFT_MAX + g.seasonal.loftBonus; // the farm's own hay, cut in the summer
   }
   if (isFairDay(g)) {
     g.seasonal.fair = [];
@@ -190,7 +195,7 @@ function feed(g: Game) {
   let ate = 0, hungry = 0;
   for (const p of g.ranch.pens) {
     if (!p.animals.length) continue;
-    let need = Math.ceil(p.used / HAY_PER);
+    let need = penHay(p);
     const fromLoft = Math.min(need, g.seasonal.loft);
     g.seasonal.loft -= fromLoft;
     need -= fromLoft;

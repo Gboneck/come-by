@@ -195,6 +195,7 @@ export class Game {
     this.baked = bake(this.map);
     this.ranch = new Ranch(this.map);
     this.valley = new Valley(this.map);
+    this.ranch.landRule = (kind, tx, ty, w, h) => this.valley.landProblem(kind, tx, ty, w, h);
     this.ranch.setupStarter();
     const door = this.doorPoint();
     this.dog = new Dog(door.x, door.y);
@@ -688,9 +689,12 @@ export class Game {
   // ---- Night ----
 
   sheltered(p: Pen): boolean {
-    if (this.ranch.buildings.some((b) => b instanceof Barn && Math.hypot(b.cx - p.cx, b.cy - p.cy) <= b.shelterRadius)) return true;
+    // A field shelter inside, or a barn's ring reaching its middle or its gate.
+    if (p.has('shelter')) return true;
+    const gp = p.gatePoint(0);
+    if (this.ranch.buildings.some((b) => b instanceof Barn && Math.min(Math.hypot(b.cx - p.cx, b.cy - p.cy), Math.hypot(b.cx - gp.x, b.cy - gp.y)) <= b.shelterRadius)) return true;
     // A helper lying by a pen's gate guards it.
-    return this.day.phase === 'night' && this.helpers.some((h) => h.guardPen === p && Math.hypot(h.x - p.cx, h.y - p.cy) < 60);
+    return this.day.phase === 'night' && this.helpers.some((h) => h.guardPen === p && Math.min(Math.hypot(h.x - p.cx, h.y - p.cy), Math.hypot(h.x - gp.x, h.y - gp.y)) < 60);
   }
 
   startNight() {

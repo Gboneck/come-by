@@ -14,7 +14,8 @@ export function valleyLedger(game: Game, w: number): { s: string; c: string }[] 
   if (next) for (const l of wrap(`NEXT, ${next.name}: ${next.deed}`, w)) out.push({ s: l, c: C.sage });
   for (const p of v.paddocks) {
     const pct = Math.round((1 - v.left(p)) * 100);
-    out.push({ s: `${p.site.name.replace('THE ', '')}: ${p.cleared ? 'CLEAR' : `${pct}% GRAZED`}`, c: p.cleared ? C.butter : C.sage });
+    const state = !p.owned ? `FOR SALE ${p.site.price}$${pct ? `, ${pct}% GRAZED` : ''}` : p.cleared ? 'YOURS, CLEAR' : `YOURS, ${pct}% GRAZED`;
+    out.push({ s: `${p.site.name.replace('THE ', '')}: ${state}`, c: p.cleared && p.owned ? C.butter : C.sage });
   }
   const b = v.bridge ? 'MENDED' : vil.has('smithy') ? `${v.logs}/${BRIDGE_LOGS} LOGS` : 'WANTS A SMITH';
   out.push({ s: `THE OLD BRIDGE: ${b}`, c: v.bridge ? C.butter : C.sage });
