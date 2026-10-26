@@ -1,7 +1,8 @@
 import { C } from '../palette';
+import { prose } from './case';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
-import { text, textWidth, wrap } from '../gfx/font';
+import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import type { View } from '../render/world';
 import { HostNet } from '../net/host';
@@ -116,7 +117,7 @@ function button(game: Game, g: CanvasRenderingContext2D, id: string, label: stri
   return game.ui.click(id, x - 2, y - 2, w + 4, h + 4);
 }
 
-const lines = (s: string, w: number) => wrap(s, w);
+const lines = (s: string, w: number) => prose(s, w);
 
 function drawPanel(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
   const touch = game.input.touchMode;

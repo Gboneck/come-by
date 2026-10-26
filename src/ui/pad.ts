@@ -164,6 +164,7 @@ const RULES: [RegExp, string][] = [
   [/\bX: (REMOVE|PICK IT UP)/g, '(X) $1'],
   // Buttons and cards.
   [/\bSPACE: NEXT DAY\b/g, '(A) NEXT DAY'],
+  [/\bSPACE: GO ON\b/g, '(A) GO ON'],
   [/\bB: BUILD\b/g, '(LB) BUILD'],
   [/^Q\/E: PAGE {2}TAB: CLOSE$/, '(LB)(RB) PAGE  (B) CLOSE'],
   [/\bTAB: CLOSE\b/g, '(B) CLOSE'],
@@ -188,12 +189,27 @@ const RULES: [RegExp, string][] = [
   [/^E$/, '(B)'],
 ];
 
+// The rules match whatever the case (prose is drawn in sentence case, see
+// ui/case.ts) and answer in the case they found: capitals for capitals, and
+// otherwise lower case but for the buttons in brackets and a capital to
+// start with where the phrase had one.
+const RULES_I: [RegExp, string][] = RULES.map(([re, to]) => [new RegExp(re.source, re.flags.includes('i') ? re.flags : `${re.flags}i`), to]);
+const isCaps = (m: string) => !/[a-z]/.test(m);
+function inCase(found: string, to: string): string {
+  if (isCaps(found)) return to;
+  const low = to.replace(/\([^)]*\)|[^(]+/g, (part) => (part.startsWith('(') ? part : part.toLowerCase()));
+  return /^[A-Z]/.test(found) && !low.startsWith('(') ? low[0].toUpperCase() + low.slice(1) : low;
+}
 const seen = new Map<string, string>();
 function prompts(s: string): string {
   let out = seen.get(s);
   if (out === undefined) {
     out = s;
-    for (const [re, to] of RULES) out = out.replace(re, to);
+    for (const [re, to] of RULES_I)
+      out = out.replace(re, (...a: unknown[]) => {
+        const caps = a.slice(1, -2) as string[];
+        return inCase(a[0] as string, to.replace(/\$(\d)/g, (_, i: string) => caps[Number(i) - 1] ?? ''));
+      });
     if (seen.size > 500) seen.clear();
     seen.set(s, out);
   }

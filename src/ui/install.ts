@@ -1,6 +1,7 @@
 import { C } from '../palette';
+import { prose, sentenceLines } from './case';
 import { panel } from './frame';
-import { text, textWidth, wrap } from '../gfx/font';
+import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import { pwa, promptInstall } from '../pwa/register';
 import { safeArea } from './safe';
@@ -41,7 +42,7 @@ export function drawInstallHint(game: Game, g: CanvasRenderingContext2D, W: numb
   const ui = game.ui;
   const S = safeArea(game.screen);
   const pw = Math.min(W - 16 - S.left - S.right, 190);
-  const lines = pwa.offer ? ['PLAY IT LIKE AN APP: FULL SCREEN,', 'AND OFFLINE TOO'] : wrap('ADD IT TO YOUR HOME SCREEN: TAP SHARE, THEN ADD TO HOME SCREEN', pw - 26);
+  const lines = pwa.offer ? sentenceLines(['PLAY IT LIKE AN APP: FULL SCREEN,', 'AND OFFLINE TOO']) : prose('ADD IT TO YOUR HOME SCREEN: TAP SHARE, THEN ADD TO HOME SCREEN', pw - 26);
   const ph = 8 + lines.length * 7 + (pwa.offer ? 17 : 0);
   let y = Math.round((top + bottom) / 2 - ph / 2);
   if (bottom - top < ph + 6) y = S.top + 4;

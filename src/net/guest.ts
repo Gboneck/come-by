@@ -10,6 +10,8 @@ import { friendDogSprites } from '../art/dogstyle';
 import type { Coat } from '../art/animals';
 import { loadWorld, ownDiscovery, saveInfo, type SaveData } from '../systems/save';
 import { Travels } from './travels';
+import { toWire } from './buildwire';
+import type { BuildResult } from '../ui/build';
 import { SKIES } from '../systems/weather';
 import { DAY_PACE, SEASON_LIST, calendar } from '../systems/season';
 import { sharedIn } from './shared';
@@ -221,7 +223,8 @@ export class GuestNet implements PingNet {
       this.slot = m.slot as number;
       this.retry = 0;
       this.failT = 0;
-      this.buildAsk = null; // an answer lost with the old line will not come
+      this.buildAsk = null; // answers lost with the old line will not come
+      if (this.game) this.game.build.waiting = null;
       this.base = null; // a whole snapshot comes after the hello
       this.status = this.game ? (m.host ? 'playing' : 'away') : 'joining';
       this.link?.send(jsonFrame(0, { t: 'hello', name: this.look.name, look: { dog: this.look.dog } }));
@@ -257,12 +260,8 @@ export class GuestNet implements PingNet {
       if (m.ok) this.openBuild(this.game, ask.fromSummary);
       else this.game.showBanner(`${m.who || this.hostName} IS BUILDING`, 'ONE AT A TIME: HAVE A LOOK ROUND MEANWHILE', 2);
     } else if (m.t === 'said') {
-      // What the host's build mode said about our change.
-      const g = this.game;
-      if (!g) return;
-      if (m.text) g.build.say(m.text as string, !!m.good);
-      g.audio?.play(m.good ? 'build' : 'deny');
-      if (m.good && m.c === 'paddock') g.build.paddock.cancel();
+      // What the host's build mode made of our change.
+      if (this.game) this.game.build.answer(this.game, m.res as BuildResult);
     } else if (m.t === 'meta') {
       this.meta = m as unknown as Meta;
       this.hostName = this.meta.host || this.hostName;
@@ -435,7 +434,7 @@ export class GuestNet implements PingNet {
   private openBuild(game: Game, fromSummary: boolean) {
     game.buildFromSummary = fromSummary;
     game.mode = 'build';
-    game.build.remote = (c) => this.link?.send(jsonFrame(0, { t: 'cmd', c }));
+    game.build.remote = (a) => this.link?.send(jsonFrame(0, { t: 'cmd', a: toWire(game, a) }));
     game.build.enter(game);
     input(game).clearQueue();
   }

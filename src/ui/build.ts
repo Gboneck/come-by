@@ -1,10 +1,11 @@
 import { C } from '../palette';
+import { prose, sentence } from './case';
 import { ditherRect, rect, ring } from '../gfx/draw';
 import { panel } from './frame';
-import { heading, text, textWidth, wrap } from '../gfx/font';
-import { drawSpr } from '../gfx/sprite';
+import { heading, text, textWidth } from '../gfx/font';
+import { drawSpr, sprH, sprW } from '../gfx/sprite';
 import type { Game } from '../game';
-import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
+import { CATALOG, defOfKind, footprint, type BuildDef, type ItemId } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
 import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
@@ -20,7 +21,7 @@ import { cycle, optionRow } from './rows';
 import { focusField, isTyping, stopTyping, textField } from './textfield';
 import { ROOFS, TRIMS, type Roof, type Trim } from '../art/ranchstyle';
 import { drawGateMark, drawRoad } from '../art/road';
-import { PaddockEditor, paddockRules, type GateAt, type PaddockLike, type PaddockRules, type PRect } from './paddockbuild';
+import { PaddockEditor, paddockRules, type GateAt, type PRect, type PaddockLike, type PaddockRules } from './paddockbuild';
 import './paddockrules'; // the ranch's paddock rules, when this build has them
 
 // The ranch tab's paint rows (the name field sits above them).
@@ -32,18 +33,6 @@ const RANCH_ROWS: { label: string; value: (g: Game) => string; step: (g: Game, d
 ];
 
 export type Tab = 'build' | 'decor' | 'ranch' | 'dog' | 'market';
-
-// Co-op: what a guest's build mode asks the host to do. The host plays it
-// through the same methods (BuildMode.apply), so every rule and price holds.
-export type BuildCmd =
-  | { t: 'place'; item: number; cx: number; cy: number; rot: Rot }
-  | { t: 'paddock'; r: PRect; gate: GateAt; base: [number, number] | null }
-  | { t: 'upgrade' | 'remove' | 'undecor'; cx: number; cy: number }
-  | { t: 'decor'; piece: number; cx: number; cy: number }
-  | { t: 'dogup'; key: UpKey }
-  | { t: 'hire' }
-  | { t: 'sell'; tx: number; ty: number }
-  | { t: 'look'; ranch: string; roof: Roof; trim: Trim };
 const TABS: [Tab, string][] = [['build', 'BUILD'], ['decor', 'DECOR'], ['ranch', 'RANCH'], ['dog', 'DOG'], ['market', 'MARKET']];
 
 // How far out from the ranch centre you may build, by tier.
@@ -97,9 +86,6 @@ export class BuildMode {
   row = 0;
   msg: { text: string; t: number; good: boolean } | null = null;
   paddock = new PaddockEditor();
-  // Co-op guest: changes go to the host as commands instead (null in single
-  // player and on the host).
-  remote: ((c: BuildCmd) => void) | null = null;
   private rep: Record<string, number> = {};
   private paintKey = '';
 
@@ -149,26 +135,54 @@ export class BuildMode {
 
   private commitPaddock(game: Game, R: PaddockRules) {
     const d = this.paddock.draft;
-    if (this.remote && d) {
-      const q = this.paddock.quote(game, R, (x, y) => this.buildable(game, x, y));
-      if (q.why) {
-        this.say(q.why);
-        game.audio?.play('deny');
-        return;
-      }
-      return this.remote({ t: 'paddock', r: { ...d.r }, gate: { ...d.gate }, base: d.base ? [d.base.tx, d.base.ty] : null });
-    }
-    const res = this.paddock.commit(game, R, (x, y) => this.buildable(game, x, y));
-    this.say(res.say, res.good);
-    if (!res.good) {
+    if (!d) return;
+    const q = this.paddock.quote(game, R, (x, y) => this.buildable(game, x, y));
+    if (q.why) {
+      this.say(q.why);
       game.audio?.play('deny');
       return;
     }
-    const b = res.built!; // the rules count it built
-    clearDecorUnder(game, b.tx, b.ty, b.w, b.h);
-    game.audio?.play('build');
-    for (let i = 0; i < 12; i++)
-      game.fx.dust(b.tx * TS + Math.random() * b.w * TS, (b.ty + b.h) * TS - 1, (Math.random() - 0.5) * 20, 0);
+    this.act(game, d.base ? { k: 'extend', id: d.base.id, r: { ...d.r }, gate: { ...d.gate } } : { k: 'paddock', r: { ...d.r }, gate: { ...d.gate } });
+  }
+
+  // ---- Every change goes through here ----
+
+  // A co-op guest sets `remote`: changes are asked of the host, who runs
+  // applyBuild and sends the answer back to `answer`.
+  remote: ((a: BuildAction) => void) | null = null;
+  waiting: BuildAction | null = null;
+
+  // The ranch's name and paint changed here: shown at once, and on a
+  // friend's ranch sent to the host (quietly: no waiting on an answer).
+  private lookChanged(game: Game) {
+    applyLook(game.look);
+    if (this.remote) this.remote({ k: 'look', ranch: game.look.ranch, roof: game.look.roof, trim: game.look.trim });
+  }
+
+  act(game: Game, a: BuildAction) {
+    if (this.remote) {
+      if (this.waiting) return;
+      this.waiting = a;
+      this.remote(a);
+      this.say('ASKING...');
+      return;
+    }
+    this.done(game, a, applyBuild(game, a));
+  }
+
+  answer(game: Game, res: BuildResult) {
+    const a = this.waiting;
+    this.waiting = null;
+    if (a) this.done(game, a, res);
+  }
+
+  private done(game: Game, a: BuildAction, res: BuildResult) {
+    if (res.say) this.say(res.say, res.good);
+    if (res.sound) game.audio?.play(res.sound);
+    if (!res.good) return;
+    if (a.k === 'paddock' || a.k === 'extend') this.paddock.cancel();
+    const at = res.at;
+    if (at) for (let i = 0; i < Math.min(12, 4 + at.w); i++) game.fx.dust((at.tx + Math.random() * at.w) * TS, (at.ty + at.h) * TS - 1, (Math.random() - 0.5) * 20, 0);
   }
 
   // Keys while a paddock is being marked out; true when they were used.
@@ -238,9 +252,13 @@ export class BuildMode {
   }
 
   ghost(game: Game): Ghost {
-    const def = this.def;
-    const { w, h } = footprint(def, this.rot);
-    const tx = this.cx - Math.floor(w / 2), ty = this.cy - Math.floor(h / 2);
+    return this.ghostAt(game, this.def, this.cx, this.cy, this.rot);
+  }
+
+  // Where `def` would go with the cursor on (cx, cy), and whether it can.
+  ghostAt(game: Game, def: BuildDef, cx: number, cy: number, rot: Rot): Ghost {
+    const { w, h } = footprint(def, rot);
+    const tx = cx - Math.floor(w / 2), ty = cy - Math.floor(h / 2);
     const gh: Ghost = { def, tx, ty, w, h, ok: false, reason: '' };
     const count = game.ranch.buildings.filter((b) => b.kind === def.kind).length;
     if (def.tier > game.tier) return { ...gh, reason: `UNLOCKS AT TIER ${def.tier}` };
@@ -249,7 +267,7 @@ export class BuildMode {
     // cursor puts them.
     const PR = paddockRules();
     if (PR?.fixtures?.includes(def.id)) {
-      const pd = this.paddockAt(game, this.cx, this.cy);
+      const pd = this.paddockAt(game, cx, cy);
       if (!pd) return { ...gh, reason: 'PLACE IT IN A PADDOCK' };
       const why = PR.fixtureProblem?.(game, pd, def.id, tx, ty) ?? null;
       if (why) return { ...gh, paddock: pd, reason: why };
@@ -259,71 +277,34 @@ export class BuildMode {
     for (let y = ty; y < ty + h; y++)
       for (let x = tx; x < tx + w; x++) if (!this.buildable(game, x, y)) return { ...gh, reason: 'NOT ON RANCH LAND' };
     for (const b of game.ranch.buildings) if (b.kind !== 'regiongate' && b.overlapsTiles(tx, ty, w, h)) return { ...gh, reason: 'SOMETHING IS IN THE WAY' };
-    const why = game.ranch.placementProblem(def.kind, tx, ty, w, h, this.rot); // the drove road, a pen gate onto a wall
+    const why = game.ranch.placementProblem(def.kind, tx, ty, w, h, rot); // the drove road, a pen gate onto a wall
     if (why) return { ...gh, reason: why };
     const X0 = tx * TS - 3, Y0 = ty * TS - 3, X1 = (tx + w) * TS + 3, Y1 = (ty + h) * TS + 3;
     const inside = (x: number, y: number) => x > X0 && x < X1 && y > Y0 && y < Y1;
     if (inside(game.dog.x, game.dog.y)) return { ...gh, reason: 'YOUR DOG IS IN THE WAY' };
-    const friend = game.coop.find((d) => inside(d.x, d.y)); // co-op: a friend's dog
-    if (friend) return { ...gh, reason: `${friend.tag || 'A DOG'} IS IN THE WAY` };
+    for (const d of game.coop) if (inside(d.x, d.y)) return { ...gh, reason: `${d.tag || 'A FRIEND'} IS IN THE WAY` };
     if (game.animals.some((a) => !a.gone && !a.pen && inside(a.x, a.y))) return { ...gh, reason: 'ANIMALS IN THE WAY' };
     if (game.coins < def.cost) return { ...gh, reason: `NEED ${def.cost}$` };
     return { ...gh, ok: true };
   }
 
   private place(game: Game) {
+    // Said at once (a guest need not ask the host to hear it will not go).
     const gh = this.ghost(game);
     if (!gh.ok) {
       this.say(gh.reason);
       game.audio?.play('deny');
       return;
     }
-    if (this.remote) return this.remote({ t: 'place', item: this.item, cx: this.cx, cy: this.cy, rot: this.rot });
-    game.coins -= gh.def.cost;
-    if (gh.paddock) {
-      paddockRules()!.placeFixture!(game, gh.paddock, gh.def.id, gh.tx, gh.ty);
-    } else {
-      game.ranch.add(makeBuilding(gh.def, gh.tx, gh.ty, this.rot));
-      clearDecorUnder(game, gh.tx, gh.ty, gh.w, gh.h);
-    }
-    game.stats.built++;
-    game.onBuilt(gh.def.id);
-    this.say(`BUILT A ${gh.def.name}`, true);
-    game.audio?.play('build');
-    for (let i = 0; i < 8; i++)
-      game.fx.dust(gh.tx * TS + Math.random() * gh.w * TS, (gh.ty + gh.h) * TS - 1, (Math.random() - 0.5) * 20, 0);
+    this.act(game, { k: 'place', item: this.def.id, cx: this.cx, cy: this.cy, rot: this.rot });
   }
 
-
   private upgrade(game: Game, b: Building) {
-    const d = defOfKind(b.kind);
-    if (!d?.upgrade || b.level >= 2) return this.say('NOTHING TO UPGRADE');
-    if (game.tier < d.upgrade.tier) return this.say(`UPGRADE AT TIER ${d.upgrade.tier}`);
-    if (game.coins < d.upgrade.cost) return this.say(`NEED ${d.upgrade.cost}$`);
-    if (this.remote) return this.remote({ t: 'upgrade', cx: b.tx, cy: b.ty });
-    game.coins -= d.upgrade.cost;
-    b.level++;
-    game.ranch.restamp();
-    game.onBuilt(`${d.id}2`);
-    this.say(`${d.name} UPGRADED`, true);
-    game.audio?.play('build');
+    this.act(game, { k: 'upgrade', id: b.id });
   }
 
   private remove(game: Game, b: Building) {
-    if (this.remote) return this.remote({ t: 'remove', cx: b.tx, cy: b.ty });
-    const R = paddockRules();
-    if (R && R.is(b)) {
-      const err = R.remove(game, b);
-      if (err) this.say(err);
-      else this.say('PADDOCK TAKEN DOWN');
-      return;
-    }
-    const d = defOfKind(b.kind);
-    if (!d || b.kind === 'farmhouse') return this.say('THAT STAYS');
-    if (b instanceof Pen && b.animals.length) return this.say('SELL OR MOVE THEM FIRST');
-    game.ranch.remove(b);
-    game.coins += Math.floor(d.cost / 2);
-    this.say(`REMOVED (+${Math.floor(d.cost / 2)}$)`);
+    this.act(game, { k: 'remove', id: b.id });
   }
 
   // ---- Input ----
@@ -362,11 +343,11 @@ export class BuildMode {
         if (inp.pressed('up')) this.row = (this.row + rows - 1) % rows;
         if (inp.pressed('down')) this.row = (this.row + 1) % rows;
         const r = RANCH_ROWS[this.row - 1];
-        if (inp.pressed('left') && r) { r.step(game, -1); this.painted(game); }
-        if (inp.pressed('right') && r) { r.step(game, 1); this.painted(game); }
+        if (inp.pressed('left') && r) { r.step(game, -1); this.lookChanged(game); }
+        if (inp.pressed('right') && r) { r.step(game, 1); this.lookChanged(game); }
         if (inp.pressed('confirm')) {
           if (this.row === 0) focusField('ranchname');
-          else if (r) { r.step(game, 1); this.painted(game); }
+          else if (r) { r.step(game, 1); this.lookChanged(game); }
         }
       }
     } else if (this.tab === 'build') {
@@ -452,124 +433,23 @@ export class BuildMode {
   }
 
   private placeDecor(game: Game) {
-    const p = this.pieceDef;
-    const { tx, ty } = this.pieceSpot();
-    const why = decorBlocked(game, p, tx, ty, (x, y) => this.buildable(game, x, y));
-    if (why) {
-      this.say(why);
-      game.audio?.play('deny');
-      return;
-    }
-    if (this.remote) return this.remote({ t: 'decor', piece: this.piece, cx: this.cx, cy: this.cy });
-    game.coins -= p.cost;
-    game.decor.push({ id: p.id, tx, ty });
-    this.say(`PLACED A ${p.name}`, true);
-    game.audio?.play('build');
-    game.fx.dust((tx + p.w / 2) * TS, (ty + p.h) * TS - 1, 0, 0);
+    this.act(game, { k: 'decor', piece: this.pieceDef.id, cx: this.cx, cy: this.cy });
   }
 
   private removeDecor(game: Game) {
-    const d = decorAt(game, this.cx, this.cy);
-    if (!d) return;
-    if (this.remote) return this.remote({ t: 'undecor', cx: this.cx, cy: this.cy });
-    const p = pieceOf(d.id);
-    game.decor = game.decor.filter((x) => x !== d);
-    game.coins += p.cost; // decor comes back in full
-    this.say(`PICKED UP THE ${p.name} (+${p.cost}$)`);
-  }
-
-  // The ranch's name or paint changed (a guest's goes to the host too).
-  private painted(game: Game) {
-    applyLook(game.look);
-    if (this.remote) this.remote({ t: 'look', ranch: game.look.ranch, roof: game.look.roof, trim: game.look.trim });
-  }
-
-  // Co-op host: a guest's change, played through the same methods (this is
-  // a spare BuildMode, set to the guest's cursor and choices). What it says
-  // goes back to the guest's screen.
-  apply(game: Game, c: BuildCmd): { text: string; good: boolean } {
-    this.msg = null;
-    this.remote = null;
-    const at = (cx: number, cy: number) => { this.cx = cx; this.cy = cy; };
-    switch (c.t) {
-      case 'place': this.item = c.item; this.rot = c.rot; at(c.cx, c.cy); this.place(game); break;
-      case 'paddock': {
-        const R = paddockRules();
-        if (!R) break;
-        const base = c.base ? this.paddockAt(game, c.base[0], c.base[1]) : null;
-        if (c.base && !base) { this.say('THAT PADDOCK HAS GONE'); break; }
-        this.paddock.draft = { r: { ...c.r }, gate: { ...c.gate }, base };
-        this.commitPaddock(game, R);
-        this.paddock.cancel();
-        break;
-      }
-      case 'upgrade':
-      case 'remove': {
-        const b = this.buildingAt(game, c.cx, c.cy);
-        if (!b) this.say('NOTHING THERE NOW');
-        else if (c.t === 'upgrade') this.upgrade(game, b);
-        else this.remove(game, b);
-        break;
-      }
-      case 'decor': this.piece = c.piece; at(c.cx, c.cy); this.placeDecor(game); break;
-      case 'undecor': at(c.cx, c.cy); this.removeDecor(game); break;
-      case 'dogup': this.buyUpgrade(game, c.key); break;
-      case 'hire': this.hire(game); break;
-      case 'sell': {
-        const p = game.ranch.pens.find((x) => x.tx === c.tx && x.ty === c.ty);
-        if (p) this.sellOne(game, p);
-        break;
-      }
-      case 'look':
-        game.look.ranch = c.ranch;
-        if (c.roof in ROOFS) game.look.roof = c.roof;
-        if (c.trim in TRIMS) game.look.trim = c.trim;
-        applyLook(game.look);
-        this.say('THE RANCH IS FRESHLY PAINTED', true);
-        break;
-    }
-    const said = this.msg as BuildMode['msg']; // set by the calls above
-    return { text: said?.text ?? '', good: !!said?.good };
+    if (decorAt(game, this.cx, this.cy)) this.act(game, { k: 'undecor', cx: this.cx, cy: this.cy });
   }
 
   buyUpgrade(game: Game, key: UpKey) {
-    if (!game.ranch.buildings.some((b) => b.kind === 'kennel')) return this.say('BUILD A KENNEL FIRST');
-    const lvl = game.upgrades[key];
-    const def = UPGRADES.find((u) => u.key === key)!;
-    if (lvl >= MAX_UP) return this.say('ALREADY THE BEST');
-    const cost = def.costs[lvl - 1];
-    if (game.coins < cost) return this.say(`NEED ${cost}$`);
-    if (this.remote) return this.remote({ t: 'dogup', key });
-    game.coins -= cost;
-    game.upgrades[key]++;
-    game.applyUpgrades();
-    game.onBuilt(`up-${key}`);
-    this.say(`${def.name} UP!`, true);
-    game.audio?.play('build');
+    this.act(game, { k: 'train', key });
   }
 
   hire(game: Game) {
-    if (this.remote) return this.remote({ t: 'hire' });
-    const err = game.hireHelper();
-    if (err) this.say(err);
-    else {
-      this.say(`${game.helpers[game.helpers.length - 1].name} JOINS THE RANCH!`, true);
-      game.audio?.play('tierup');
-    }
+    this.act(game, { k: 'hire' });
   }
 
   sellOne(game: Game, p: Pen) {
-    if (!game.ranch.buildings.some((b) => b.kind === 'market')) return this.say('BUILD A MARKET FIRST');
-    const a = [...p.animals].sort((x, y) => y.stress - x.stress)[0];
-    if (!a) return;
-    if (this.remote) return this.remote({ t: 'sell', tx: p.tx, ty: p.ty });
-    const price = livestockPrice(game, a.sp.id, a);
-    a.gone = true;
-    p.animals = p.animals.filter((x) => x !== a);
-    game.earn(price);
-    game.stats.sold += price;
-    this.say(`SOLD A ${a.sp.name.toUpperCase()} +${price}$`, true);
-    game.audio?.play('coin');
+    this.act(game, { k: 'sell', pen: p.id });
   }
 
   // ---- Drawing ----
@@ -683,7 +563,7 @@ export class BuildMode {
     else this.drawMarket(game, g, W, H);
 
     if (this.msg) {
-      const m = this.msg;
+      const m = { ...this.msg, text: sentence(this.msg.text) };
       const tw = textWidth(m.text);
       panel(g, Math.round(W / 2 - tw / 2 - 5), uiTop + 2, tw + 10, 11, C.plum, m.good ? C.butter : C.sage);
       text(g, m.text, W / 2, uiTop + 5, m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
@@ -721,27 +601,30 @@ export class BuildMode {
     const n = CATALOG.length;
     const S = safeArea(game.screen);
     const L = 2 + S.left, R_ = W - 2 - S.right;
-    const cw = Math.min(28, Math.floor((R_ - L) / n));
-    const bx = Math.round((L + R_) / 2 - (cw * n) / 2), by = H - 26 - S.bottom;
+    // Two rows when one would make the cells too narrow to tap.
+    const rows = Math.floor((R_ - L) / n) < 20 ? 2 : 1;
+    const per = Math.ceil(n / rows);
+    const cw = Math.min(28, Math.floor((R_ - L) / per));
+    const bx = Math.round((L + R_) / 2 - (cw * per) / 2), by = H - 26 * rows - S.bottom;
     const goalItem = goalBuilding(game);
-    panel(g, bx - 2, by - 2, cw * n + 4, 28);
+    panel(g, bx - 2, by - 2, cw * per + 4, 26 * rows + 2);
     CATALOG.forEach((d, i) => {
-      const x = bx + i * cw;
+      const x = bx + (i % per) * cw, y = by + Math.floor(i / per) * 26;
       const sel = i === this.item;
       // The building the current goal asks for blinks in the bar.
-      if (i === goalItem && !sel && Math.floor(game.t * 3) % 2 === 0) panel(g, x, by, cw - 1, 24, C.plum, C.butter);
+      if (i === goalItem && !sel && Math.floor(game.t * 3) % 2 === 0) panel(g, x, y, cw - 1, 24, C.plum, C.butter);
       const locked = d.tier > game.tier;
-      if (sel) panel(g, x, by, cw - 1, 24, C.teal, C.butter);
-      rect(g, x + 2, by + 2, cw - 5, 12, C.meadow);
+      if (sel) panel(g, x, y, cw - 1, 24, C.teal, C.butter);
+      rect(g, x + 2, y + 2, cw - 5, 12, C.meadow);
       const ic = d.icon();
-      drawSpr(g, ic, x + Math.floor((cw - 1 - ic.w) / 2), by + 2 + Math.floor((12 - ic.h) / 2));
+      drawSpr(g, ic, x + Math.floor((cw - 1 - ic.w) / 2), y + 2 + Math.floor((12 - ic.h) / 2));
       if (locked) {
-        ditherRect(g, x + 1, by + 1, cw - 3, 22, 10, C.plum);
-        text(g, `T${d.tier}`, x + cw / 2, by + 16, C.wool, { align: 'center' });
+        ditherRect(g, x + 1, y + 1, cw - 3, 22, 10, C.plum);
+        text(g, `T${d.tier}`, x + cw / 2, y + 16, C.wool, { align: 'center' });
       } else {
-        text(g, `${d.cost}`, x + cw / 2, by + 16, game.coins >= d.cost ? C.butter : C.sage, { align: 'center' });
+        text(g, `${d.cost}`, x + cw / 2, y + 16, game.coins >= d.cost ? C.butter : C.sage, { align: 'center' });
       }
-      if (ui.click(`item-${i}`, x, by, cw - 1, 24)) {
+      if (ui.click(`item-${i}`, x, y, cw - 1, 24)) {
         if (i !== this.item) this.paddock.cancel();
         this.item = i;
       }
@@ -782,15 +665,15 @@ export class BuildMode {
       lines.push('GROWS WITH YOUR RANCH');
     } else {
       title = `${this.def.name}  ${this.def.cost}$`;
-      lines.push(...wrap(this.def.desc, W - 20));
+      lines.push(...prose(this.def.desc, W - 20));
       const gh = this.ghost(game);
-      if (!gh.ok && gh.reason) lines.push(gh.reason);
+      if (!gh.ok && gh.reason) lines.push(sentence(gh.reason));
     }
     const ih = 13 + lines.length * 6 + (pd ? 6 : 0);
     const iy = by - 6 - ih;
     panel(g, L, iy, R_ - L, ih);
     infoTitle(g, title, L + 4, iy + 3);
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
     if (pd) {
       // How full it is: a bar of spaces.
       const bw0 = Math.min(R_ - L - 8, 120), bx0 = L + 4, by0 = iy + 13 + lines.length * 6;
@@ -887,22 +770,28 @@ export class BuildMode {
     const n = PIECES.length;
     const S = safeArea(game.screen);
     const L = 2 + S.left, R = W - 2 - S.right;
-    const cw = Math.min(26, Math.floor((R - L) / n));
-    const bx = Math.round((L + R) / 2 - (cw * n) / 2), by = H - 32 - S.bottom;
-    panel(g, bx - 2, by - 2, cw * n + 4, 34);
+    // Two rows when one would make the cells too narrow to tap.
+    const rows = Math.floor((R - L) / n) < 20 ? 2 : 1;
+    const per = Math.ceil(n / rows);
+    const cw = Math.min(26, Math.floor((R - L) / per));
+    const bx = Math.round((L + R) / 2 - (cw * per) / 2), by = H - 32 * rows - S.bottom;
+    panel(g, bx - 2, by - 2, cw * per + 4, 32 * rows + 2);
     PIECES.forEach((p, i) => {
-      const x = bx + i * cw;
+      const x = bx + (i % per) * cw, y = by + Math.floor(i / per) * 32;
       const sel = i === this.piece;
       const open = p.open(game);
-      if (sel) panel(g, x, by, cw - 1, 30, C.teal, C.butter);
-      rect(g, x + 2, by + 2, cw - 5, 19, C.meadow);
+      if (sel) panel(g, x, y, cw - 1, 30, C.teal, C.butter);
+      rect(g, x + 2, y + 2, cw - 5, 19, C.meadow);
       const ic = pieceIcon(p.id);
-      const sx = Math.max(0, Math.floor((ic.w - (cw - 5)) / 2)), sw = Math.min(ic.w, cw - 5);
-      const sh = Math.min(ic.h, 19);
-      g.drawImage(ic.img, sx, ic.h - sh, sw, sh, x + 2 + Math.floor((cw - 5 - sw) / 2), by + 2 + 19 - sh, sw, sh);
-      if (!open) ditherRect(g, x + 1, by + 1, cw - 3, 28, 10, C.plum);
-      text(g, open ? `${p.cost}` : 'X', x + cw / 2, by + 23, !open ? C.wool : game.coins >= p.cost ? C.butter : C.sage, { align: 'center' });
-      if (ui.click(`piece-${i}`, x, by, cw - 1, 30)) this.piece = i;
+      // The icon's middle, cut to the cell (its canvas may be finer than
+      // a world pixel: sizes from sprW/sprH, the source in its own pixels).
+      const d = ic.d ?? 1, iw = sprW(ic), ih = sprH(ic);
+      const sw = Math.min(iw, cw - 5), sh = Math.min(ih, 19);
+      const sx = Math.max(0, Math.floor((iw - (cw - 5)) / 2));
+      g.drawImage(ic.img, sx * d, (ih - sh) * d, sw * d, sh * d, x + 2 + Math.floor((cw - 5 - sw) / 2), y + 2 + 19 - sh, sw, sh);
+      if (!open) ditherRect(g, x + 1, y + 1, cw - 3, 28, 10, C.plum);
+      text(g, open ? `${p.cost}` : 'X', x + cw / 2, y + 23, !open ? C.wool : game.coins >= p.cost ? C.butter : C.sage, { align: 'center' });
+      if (ui.click(`piece-${i}`, x, y, cw - 1, 30)) this.piece = i;
     });
 
     // Info card: the piece under the cursor, else the selected one.
@@ -916,7 +805,7 @@ export class BuildMode {
     } else {
       const p = this.pieceDef;
       title = `${p.name}  ${p.cost}$`;
-      lines.push(...wrap(p.desc, R - L - 8));
+      lines.push(...prose(p.desc, R - L - 8));
       const { tx, ty } = this.pieceSpot();
       const why = decorBlocked(game, p, tx, ty, (x, y) => this.buildable(game, x, y));
       if (why) lines.push(why);
@@ -926,7 +815,7 @@ export class BuildMode {
     const iy = by - 6 - ih;
     panel(g, L, iy, R - L, ih);
     infoTitle(g, title, L + 4, iy + 3);
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
     if (game.input.touchMode) {
       const bw = 40, bh = 15, rx = R - bw;
       let y = iy - bh - 3;
@@ -963,7 +852,7 @@ export class BuildMode {
       if (ui.hovering(bx, y, bw, rh)) this.row = 0;
       textField(game.screen, g, 'ranchname', bx, y, bw - dice - 3, rh, game.look.ranch || 'NAME YOUR RANCH', RANCH_MAX, (s) => { game.look.ranch = s; }, game.t, this.row === 0, () => {
         game.look.ranch = game.look.ranch.trim();
-        this.painted(game);
+        this.lookChanged(game);
       });
       const dx = bx + bw - dice;
       panel(g, dx, y, dice, rh, ui.isActive('ranch-dice') ? C.teal : C.plum, C.butter);
@@ -971,14 +860,14 @@ export class BuildMode {
       if (ui.click('ranch-dice', dx - 1, y - 2, dice + 2, rh + 4)) {
         stopTyping();
         game.look.ranch = pickName(RANCH_NAMES, game.look.ranch);
-        this.painted(game);
         this.row = 0;
+        this.lookChanged(game);
       }
       y += rh + gap;
     }
     RANCH_ROWS.forEach((r, i) => {
       const sel = this.row === i + 1;
-      if (optionRow(game, g, `ranch-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { this.row = i + 1; r.step(game, d); this.painted(game); })) this.row = i + 1;
+      if (optionRow(game, g, `ranch-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { this.row = i + 1; r.step(game, d); this.lookChanged(game); })) this.row = i + 1;
       y += rh + gap;
     });
     ui.captureAll('ranch-bg');
@@ -1008,6 +897,170 @@ export class BuildMode {
         if (ui.click(`sell-${p.id}`, bx, y - 1, bw, 11)) { this.row = i; this.sellOne(game, p); }
       }
     });
+  }
+}
+
+// ---- Build actions ----
+
+// Every change build mode makes, as plain data (so a co-op guest can ask
+// the host for it). Cursor spots are tiles; ids are buildings' ids.
+export type BuildAction =
+  | { k: 'place'; item: ItemId; cx: number; cy: number; rot: Rot }
+  | { k: 'paddock'; r: PRect; gate: GateAt }
+  | { k: 'extend'; id: number; r: PRect; gate: GateAt }
+  | { k: 'remove'; id: number }
+  | { k: 'upgrade'; id: number }
+  | { k: 'decor'; piece: Piece['id']; cx: number; cy: number }
+  | { k: 'undecor'; cx: number; cy: number }
+  | { k: 'train'; key: UpKey }
+  | { k: 'hire' }
+  | { k: 'sell'; pen: number }
+  | { k: 'look'; ranch: string; roof: Roof; trim: Trim };
+
+export interface BuildResult {
+  good: boolean;
+  say: string;
+  sound?: 'build' | 'coin' | 'tierup' | 'deny';
+  at?: { tx: number; ty: number; w: number; h: number }; // where to throw up dust
+}
+
+const sameRect = (a: PRect, b: PRect) => a.tx === b.tx && a.ty === b.ty && a.w === b.w && a.h === b.h;
+
+// Carry out one build action on this game (the host's, in co-op).
+export function applyBuild(game: Game, a: BuildAction): BuildResult {
+  const bm = game.build;
+  const no = (say: string): BuildResult => ({ good: false, say, sound: 'deny' });
+  const land = (x: number, y: number) => bm.buildable(game, x, y);
+  const byId = (id: number) => game.ranch.buildings.find((b) => b.id === id) ?? null;
+  switch (a.k) {
+    case 'place': {
+      const def = CATALOG.find((d) => d.id === a.item);
+      if (!def) return no('NOT IN THE CATALOG');
+      const gh = bm.ghostAt(game, def, a.cx, a.cy, a.rot);
+      if (!gh.ok) return no(gh.reason);
+      game.coins -= def.cost;
+      if (gh.paddock) paddockRules()!.placeFixture!(game, gh.paddock, def.id, gh.tx, gh.ty);
+      else {
+        game.ranch.add(makeBuilding(def, gh.tx, gh.ty, a.rot));
+        clearDecorUnder(game, gh.tx, gh.ty, gh.w, gh.h);
+      }
+      game.stats.built++;
+      game.onBuilt(def.id);
+      return { good: true, say: `BUILT A ${def.name}`, sound: 'build', at: { tx: gh.tx, ty: gh.ty, w: gh.w, h: gh.h } };
+    }
+    case 'paddock': {
+      const R = paddockRules();
+      if (!R) return no('NO PADDOCKS HERE');
+      const cost = R.price(a.r);
+      const why = R.problem(game, a.r, a.gate, land) ?? (cost > game.coins ? `NEED ${cost}$` : null);
+      if (why) return no(why);
+      const b = R.build(game, a.r, a.gate); // the rules count it built
+      if (!b) return no('IT WILL NOT GO THERE');
+      clearDecorUnder(game, b.tx, b.ty, b.w, b.h);
+      return { good: true, say: `BUILT A ${a.r.w}x${a.r.h} PADDOCK`, sound: 'build', at: a.r };
+    }
+    case 'extend': {
+      const R = paddockRules();
+      const p = byId(a.id);
+      if (!R || !p || !R.is(p)) return no('THAT PADDOCK IS GONE');
+      const grown = !sameRect(a.r, p);
+      const cost = grown ? R.extendPrice(p, a.r) : 0;
+      if (grown) {
+        const why = R.extendProblem(game, p, a.r, land) ?? (cost > game.coins ? `NEED ${cost}$` : null);
+        if (why) return no(why);
+        if (!R.extend(game, p, a.r)) return no('IT WILL NOT GO THERE');
+        clearDecorUnder(game, p.tx, p.ty, p.w, p.h);
+      }
+      const moved = a.gate.side !== p.gate.side || a.gate.at !== p.gate.at;
+      if (moved) {
+        const err = R.moveGate(game, p, a.gate);
+        if (err) return no(err);
+      }
+      if (!grown && !moved) return no('DRAG A SIDE OUT TO EXTEND');
+      return { good: true, say: grown ? `PADDOCK EXTENDED (-${cost}$)` : 'GATE MOVED', sound: 'build', at: a.r };
+    }
+    case 'upgrade': {
+      const b = byId(a.id);
+      const d = b && defOfKind(b.kind);
+      if (!b || !d?.upgrade || b.level >= 2) return no('NOTHING TO UPGRADE');
+      if (game.tier < d.upgrade.tier) return no(`UPGRADE AT TIER ${d.upgrade.tier}`);
+      if (game.coins < d.upgrade.cost) return no(`NEED ${d.upgrade.cost}$`);
+      game.coins -= d.upgrade.cost;
+      b.level++;
+      game.ranch.restamp();
+      game.onBuilt(`${d.id}2`);
+      return { good: true, say: `${d.name} UPGRADED`, sound: 'build' };
+    }
+    case 'remove': {
+      const b = byId(a.id);
+      if (!b) return no('IT IS GONE ALREADY');
+      const R = paddockRules();
+      if (R && R.is(b)) {
+        const err = R.remove(game, b);
+        return err ? no(err) : { good: true, say: 'PADDOCK TAKEN DOWN' };
+      }
+      const d = defOfKind(b.kind);
+      if (!d || b.kind === 'farmhouse') return no('THAT STAYS');
+      if (b instanceof Pen && b.animals.length) return no('SELL OR MOVE THEM FIRST');
+      game.ranch.remove(b);
+      game.coins += Math.floor(d.cost / 2);
+      return { good: true, say: `REMOVED (+${Math.floor(d.cost / 2)}$)` };
+    }
+    case 'decor': {
+      const p = PIECES.find((x) => x.id === a.piece);
+      if (!p) return no('NOT A PIECE');
+      const tx = a.cx - Math.floor(p.w / 2), ty = a.cy - Math.floor(p.h / 2);
+      const why = decorBlocked(game, p, tx, ty, land);
+      if (why) return no(why);
+      game.coins -= p.cost;
+      game.decor.push({ id: p.id, tx, ty });
+      return { good: true, say: `PLACED A ${p.name}`, sound: 'build', at: { tx, ty, w: p.w, h: p.h } };
+    }
+    case 'undecor': {
+      const d = decorAt(game, a.cx, a.cy);
+      if (!d) return no('NOTHING THERE');
+      const p = pieceOf(d.id);
+      game.decor = game.decor.filter((x) => x !== d);
+      game.coins += p.cost; // decor comes back in full
+      return { good: true, say: `PICKED UP THE ${p.name} (+${p.cost}$)` };
+    }
+    case 'train': {
+      if (!game.ranch.buildings.some((b) => b.kind === 'kennel')) return no('BUILD A KENNEL FIRST');
+      const lvl = game.upgrades[a.key];
+      const def = UPGRADES.find((u) => u.key === a.key)!;
+      if (lvl >= MAX_UP) return no('ALREADY THE BEST');
+      const cost = def.costs[lvl - 1];
+      if (game.coins < cost) return no(`NEED ${cost}$`);
+      game.coins -= cost;
+      game.upgrades[a.key]++;
+      game.applyUpgrades();
+      game.onBuilt(`up-${a.key}`);
+      return { good: true, say: `${def.name} UP!`, sound: 'build' };
+    }
+    case 'hire': {
+      const err = game.hireHelper();
+      return err ? no(err) : { good: true, say: `${game.helpers[game.helpers.length - 1].name} JOINS THE RANCH!`, sound: 'tierup' };
+    }
+    case 'look': {
+      game.look.ranch = String(a.ranch ?? '').toUpperCase().slice(0, RANCH_MAX).trim();
+      if (a.roof in ROOFS) game.look.roof = a.roof;
+      if (a.trim in TRIMS) game.look.trim = a.trim;
+      applyLook(game.look);
+      return { good: true, say: '' };
+    }
+    case 'sell': {
+      if (!game.ranch.buildings.some((b) => b.kind === 'market')) return no('BUILD A MARKET FIRST');
+      const p = byId(a.pen);
+      if (!(p instanceof Pen)) return no('THAT PADDOCK IS GONE');
+      const an = [...p.animals].sort((x, y) => y.stress - x.stress)[0];
+      if (!an) return no('NOTHING TO SELL');
+      const price = livestockPrice(game, an.sp.id, an);
+      an.gone = true;
+      p.animals = p.animals.filter((x) => x !== an);
+      game.earn(price);
+      game.stats.sold += price;
+      return { good: true, say: `SOLD A ${an.sp.name.toUpperCase()} +${price}$`, sound: 'coin' };
+    }
   }
 }
 

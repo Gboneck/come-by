@@ -8,7 +8,8 @@ import { saveData, type SaveData } from '../systems/save';
 import { dogStatsFor } from '../systems/economy';
 import { jobsAction } from '../systems/jobs';
 import { closeResult } from '../systems/trials';
-import { BuildMode, type BuildCmd } from '../ui/build';
+import { applyBuild } from '../ui/build';
+import { fromWire, type WireAction } from './buildwire';
 import { readLook, type Look } from '../ui/look';
 import type { Particle } from '../systems/particles';
 import { damp } from '../util';
@@ -216,8 +217,8 @@ export class HostNet implements PingNet {
     const s = this.seats.get(slot);
     if (!s) return;
     if (kind === K_JSON) {
-      const m = JSON.parse(r.str()) as { t: string; name?: string; look?: Partial<Look>; on?: boolean; c?: BuildCmd };
-      if (m.t === 'cmd' && m.c) this.command(s, m.c);
+      const m = JSON.parse(r.str()) as { t: string; name?: string; look?: Partial<Look>; on?: boolean; a?: WireAction };
+      if (m.t === 'cmd' && m.a) this.command(s, m.a);
       else if (m.t === 'build') this.guestBuild(s, !!m.on);
       else if (m.t === 'ready') {
         s.ready = !!m.on;
@@ -373,7 +374,6 @@ export class HostNet implements PingNet {
 
   builder: number | null = null; // who has build mode open (one at a time)
   private hostReady = false;
-  private proxy = new BuildMode(); // plays guests' build commands
 
   // May this player open build mode? (Tells them who is in it, if not.)
   canBuild(slot: number): boolean {
@@ -401,12 +401,25 @@ export class HostNet implements PingNet {
     this.link?.send(jsonFrame(s.slot, { t: 'build', ok, who: ok ? '' : this.nameOf(this.builder ?? 0) }));
   }
 
-  // A guest's change in build mode, made here with build mode's own rules.
-  private command(s: Seat, c: BuildCmd) {
+  // A guest's change in build mode, made here by build mode's own
+  // applyBuild; the result goes back to their screen (the ranch's paint is
+  // sent quietly and wants no answer).
+  private command(s: Seat, wire: WireAction) {
     const game = this.game;
-    if (this.builder !== s.slot) return this.link?.send(jsonFrame(s.slot, { t: 'said', text: 'BUILD MODE CLOSED', good: false, c: c.t }));
-    const res = this.proxy.apply(game, c);
-    this.link?.send(jsonFrame(s.slot, { t: 'said', ...res, c: c.t }));
+    if (this.builder !== s.slot) {
+      if (wire.k !== 'look') this.link?.send(jsonFrame(s.slot, { t: 'said', res: { good: false, say: 'BUILD MODE CLOSED', sound: 'deny' } }));
+      return;
+    }
+    const res = applyBuild(game, fromWire(game, wire));
+    if (wire.k !== 'look') this.link?.send(jsonFrame(s.slot, { t: 'said', res }));
+    if (res.good && res.sound && res.at) {
+      // Heard (and seen) here too; the guest hears it from their own answer.
+      const x = (res.at.tx + res.at.w / 2) * 8, y = (res.at.ty + res.at.h) * 8;
+      this.origin = s.slot;
+      game.audio?.play(res.sound, { x, y });
+      this.origin = 0;
+      for (let i = 0; i < 8; i++) game.fx.dust(res.at.tx * 8 + Math.random() * res.at.w * 8, y - 1, (Math.random() - 0.5) * 20, 0);
+    }
     // Everyone's copy of the ranch, now rather than in a second.
     this.worldT = 0;
     this.metaT = 0;

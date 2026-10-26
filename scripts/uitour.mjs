@@ -71,6 +71,39 @@ const STATES = {
       return 120;
     },
   },
+  goods: {
+    // Goods in the paddock, a +1 over the dog, the tally by the purse.
+    fn: () => {
+      const g = window.game;
+      g.tut = 9; g.tip = null; g.banner = null;
+      const p = g.ranch.pens[0];
+      p.goods = 11; p.goodsBy = { duck: 6, sheep: 3, goat: 2 };
+      const d = g.dog; d.x = p.cx; d.y = p.y1 + 18; g.cam.x = d.x; g.cam.y = d.y - 20;
+      g.fx.good(d.x - 16, d.y - 12, 'duck');
+      return 15;
+    },
+  },
+  sale: {
+    // The cart collecting the day's goods, coins on their way to the purse.
+    fn: () => {
+      const g = window.game;
+      const p = g.ranch.pens[0];
+      p.goods = 9; p.goodsBy = { duck: 6, sheep: 3 };
+      g.endDay();
+      return 125;
+    },
+  },
+  whatsthis: {
+    // A "what's this" card on the paddock.
+    fn: () => {
+      const g = window.game;
+      g.tut = 7; g.tip = null; g.banner = null;
+      const p = g.ranch.pens[0];
+      const d = g.dog; d.x = p.cx - 30; d.y = p.y1 + 20; g.cam.x = d.x; g.cam.y = d.y;
+      return 50;
+    },
+  },
+  welcome: { fn: () => { const g = window.game; g.tut = 0; g.tip = null; g.tipsSeen.delete('welcome'); return 40; } },
   build: {
     fn: () => {
       const g = window.game;
@@ -87,12 +120,14 @@ const STATES = {
       const g = window.game;
       const pb = await import('/src/ui/paddockbuild.ts');
       if (!pb.paddockRules()) (await import('/src/ui/paddockdev.ts')).useDevPaddocks();
+      const R = pb.paddockRules();
       const cat = await import('/src/ranch/catalog.ts');
       g.coins = 120;
       g.tier = 4;
       g.enterBuild();
-      g.build.item = cat.CATALOG.findIndex((d) => d.id === pb.paddockRules().tool);
-      g.build.paddock.start(pb.paddockRules(), 0, 0, { tx: 80, ty: 109, w: 10, h: 6 });
+      if (!R) return 30; // no paddock rules in this build: build mode as it is
+      g.build.item = cat.CATALOG.findIndex((d) => d.id === R.tool);
+      g.build.paddock.start(R, 0, 0, { tx: 80, ty: 109, w: 10, h: 6 });
       return 60;
     },
   },

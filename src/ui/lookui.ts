@@ -1,5 +1,6 @@
 import { C } from '../palette';
 import { rect } from '../gfx/draw';
+import { drawSprAt, sprH, sprW } from '../gfx/sprite';
 import { panel } from './frame';
 import { heading, text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
@@ -77,11 +78,12 @@ export function drawLook(game: Game, g: CanvasRenderingContext2D, W: number, H: 
   const P = playerDogSprites().poses;
   const f = Math.floor(game.t * 7);
   const views = [P.side.run[f % P.side.run.length], P.down.stand, P.up.run[Math.floor(f / 2) % P.up.run.length]];
-  const total = views.reduce((s, v) => s + v.w * big, 0) + 2 * 10;
+  // Sizes in world pixels: a dense sprite's grid is finer (sprW/sprH).
+  const total = views.reduce((s, v) => s + sprW(v) * big, 0) + 2 * 10;
   let vx = Math.round(W / 2 - total / 2);
   for (const v of views) {
-    g.drawImage(v.img, vx, py0 + prevH - 2 - v.h * big, v.w * big, v.h * big);
-    vx += v.w * big + 10;
+    drawSprAt(g, v, vx, py0 + prevH - 2 - sprH(v) * big, big);
+    vx += sprW(v) * big + 10;
   }
   const name = game.look.name || defaultLook().name;
   text(g, name, W / 2, py0 + prevH + 3, C.butter, { align: 'center' });

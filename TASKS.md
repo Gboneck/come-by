@@ -1029,7 +1029,36 @@ Before → after, in plain words:
       guest badges and shared favour; savetest, ordertest, daytest pass;
       `tune.mjs --seed=7` is identical to main for all five species
 
-## M34 Co-op, round five: both players do everything
+## M34 UI round five: goods you can see, what to do, readable text
+- [x] Goods you can see: the good's icon and "+1" over the animal that made
+      it (friends see it too); goods wait in the paddock as things, a pile
+      of each kind along the back fence (a nest box of eggs, wool bales,
+      cheese wheels on a board, milk churns; `src/art/goods.ts`); today's
+      goods and what they fetch by the purse ("6 3 2 = 24$ AT DUSK")
+- [x] The day's sale as a moment: before the journal, the buyer's pony cart
+      rolls in, each paddock's goods arc into it, coins fly to the purse as
+      it counts up, the cart rolls on (`src/ui/sale.ts`; a tap skips it)
+- [x] One objective, always (`src/ui/objective.ts`): the goal card says the
+      one thing to do now (the night, a trial, the flock you are driving, the
+      first day, a buyer's order, the tier's goal), an arrow by the dog
+      slides towards it with its name, a marker bobs over it in view, BUILD
+      pulses when building is the answer
+- [x] What's this (`src/ui/whatsthis.ts`): the first time something new is
+      near (a paddock, each kind of building, a buyer's yard, the trial
+      crook, a locked gate, the first goods) a card points at it with what
+      it is for; once each, remembered in the save's tips; others can add
+      things to `THINGS`
+- [x] The first day: a welcome card as a new ranch opens (who you are, what
+      to do, how to move), and the first day's hints are gilt with their
+      step ("FIRST DAY 2/7")
+- [x] Build mode for co-op guests: every change is a `BuildAction` done by
+      `applyBuild`; a guest sets `build.remote` to ask the host and hears
+      back through `build.answer`
+- [ ] Readable text on Platform's 2x font: every screen retuned, sentence
+      case, body text comfortable on an upright phone, HUD icons and frames
+      redrawn at 2x where it helps
+
+## M35 Co-op, round five: both players do everything
 - [x] Build mode for guests: the host's build screen (paddocks dragged,
       extended and gated, fixtures, buildings, decor, the ranch's paint,
       kennel training, helpers, selling), each change sent to the host and
@@ -2126,6 +2155,19 @@ Before → after, in plain words:
   the tier card's slot and waits behind banners; the ribbon board stands
   just past the farmhouse's front right corner (World and light). The
   merge steps are in the session notes (favour-achievements.md).
+- Goods are drawn from each paddock's `goodsBy` (counts per kind): piles,
+  not single items, so a paddock with 40 eggs still reads (a count goes on
+  a pile past a handful). The +1 is a particle ('good', the kind in its
+  text) so the co-op host's tap forwards it to guests unchanged.
+- The sale plays inside the summary (the mode stays 'summary'): friends
+  wait on their card as before, and `summaryHold` gives a press during the
+  sale to skipping it, then the journal's usual beat before it takes keys.
+- The objective is worked out each frame from the game, never stored, so
+  it can never go stale or disagree with the world; the tier goals stay in
+  the Ledger and on the card when nothing more pressing is on.
+- What's-this cards wait for the day's banner and the first steps of day
+  one (until the first flock is penned), so a new player sees one thing at
+  a time.
 - Co-op, everyone does everything: the guest's build mode is the real one,
   run on their copy of the ranch; changes go to the host as commands
   (`BuildCmd`: what was chosen and where), and a spare BuildMode on the

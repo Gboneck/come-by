@@ -19,6 +19,7 @@ import { drawSpeech } from './ui/speech';
 import { drawWorld } from './render/world';
 import { drawHud } from './ui/hud';
 import { drawSummary, type Summary } from './ui/summary';
+import { summaryHold } from './ui/sale';
 import { BuildMode } from './ui/build';
 import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
@@ -45,7 +46,7 @@ import { Weather } from './systems/weather';
 import { Seasons } from './systems/season';
 import { Seasonal, seasonalEvening } from './systems/seasonal';
 import { fairDrawables } from './art/fair';
-import { Valley } from './systems/valley';
+import { Valley, isMarketDay } from './systems/valley';
 import { Farmwork, farmworkEvening } from './systems/farmwork';
 import { valleyDrawables } from './art/valley';
 import { Discovery } from './systems/discovery';
@@ -442,6 +443,8 @@ export class Game {
     this.predators = [];
     seasonalEvening(this); // winter hay, the fair packs up
     farmworkEvening(this); // the dairy yard empties
+    // What each paddock made, for the cart to collect on screen (ui/sale.ts).
+    const from = this.ranch.pens.filter((p) => p.goods > 0).map((p) => ({ x: p.cx, y: p.cy, kinds: p.goodsList() as string[] }));
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
@@ -457,6 +460,7 @@ export class Game {
       coins: this.coins,
       penned: this.ranch.pens.reduce((s, p) => s + p.animals.length, 0),
       buildable: this.buildable(),
+      sale: { value: sale.value, market: isMarketDay(this), from },
     };
     this.mode = 'summary';
     this.summaryT = 0;
@@ -562,12 +566,10 @@ export class Game {
     }
     if (this.mode === 'summary') {
       this.fx.update(dt);
-      // A beat before the card takes input, so a bark held through dusk
-      // does not skip the day's choice.
-      if ((this.summaryT += dt) < 0.6) {
-        this.input.clearQueue();
-        return;
-      }
+      // The cart for the day's goods (a press skips it), then a beat before
+      // the card takes input, so a bark held through dusk does not skip the
+      // day's choice.
+      if (summaryHold(this, dt, 0.6)) return;
       if (this.input.pressed('build')) {
         if (this.net?.role !== 'host' || this.net.canBuild(0)) this.fadeTo(() => this.enterBuild(true));
       } else if (this.input.pressed('confirm') || this.input.pressed('bark')) {
