@@ -188,7 +188,7 @@ const res = await page.evaluate(async () => {
   check('fair day', Z.isFairDay(g));
   const sale = g.ranch.yards.find((y) => y.site.id === 'sale');
   const breeds = sale.pen.animals.filter((a) => a.forSale);
-  check('rare breeds for sale at the sale yard, by tier', breeds.length === 3 && breeds.every((a) => a.rare), breeds.map((a) => `${a.sp.id}${a.coat}:${a.forSale}`).join(' '));
+  check('rare breeds for sale at the sale yard, by tier, the small ones in pairs', breeds.length === 6 && new Set(breeds.map((a) => a.sp.id)).size === 3 && breeds.every((a) => a.rare), breeds.map((a) => `${a.sp.id}${a.coat}:${a.forSale}`).join(' '));
   // Buy the one the dog stands by, outside the fence.
   const pick = breeds[breeds.length - 1];
   g.dog.x = sale.pen.x0 - 6; g.dog.y = pick.y;
@@ -201,7 +201,7 @@ const res = await page.evaluate(async () => {
   const other = sale.pen.animals.find((a) => a.forSale);
   other.x = sale.pen.ix0 + 3; other.y = g.dog.y;
   const poor = Z.buyBreed(g);
-  check('not enough coins: nothing sold', poor && g.coins === 3 && sale.pen.animals.filter((a) => a.forSale).length === 2);
+  check('not enough coins: nothing sold', poor && g.coins === 3 && sale.pen.animals.filter((a) => a.forSale).length === 5);
   g.coins = 2000;
   // The ring: a calm sheep and a stressed goat.
   step(1);

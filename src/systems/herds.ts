@@ -66,6 +66,10 @@ function stockLot(g: Game) {
     g.animals.push(a);
   }
   g.herds.lot = id;
+  if (!g.tipsSeen.has('lot') && !g.tip) {
+    g.tipsSeen.add('lot');
+    g.tip = { text: `THE SALE YARD HAS STOCK FOR SALE EACH DAY. STAND BY ONE AND BUY IT WITH ${g.input.touchMode ? 'NIP' : 'E'} AT THE FENCE, THEN WALK IT HOME.`, t: 9 };
+  }
 }
 
 // A big flock in one open region (never the ranch's newest, whose flocks

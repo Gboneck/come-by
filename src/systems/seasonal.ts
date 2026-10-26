@@ -376,8 +376,10 @@ function setOutBreeders(g: Game) {
   for (const a of p.animals) if (a.forSale && !a.rare) a.gone = true;
   p.animals = p.animals.filter((a) => !a.gone);
   if (p.animals.some((a) => a.forSale)) return;
-  RARE_BREEDS.filter((b) => b.tier <= g.tier).forEach((b, i) => {
-    const a = new Animal(b.species, p.ix0 + 6 + (i % 3) * 10, p.iy0 + 6 + Math.floor(i / 3) * 10, b.coat as Coat);
+  // A pair of each of the smaller breeds (a pair breeds true: rare young),
+  // one of the cattle.
+  RARE_BREEDS.filter((b) => b.tier <= g.tier).flatMap((b) => (SPECIES[b.species].space <= 2 ? [b, b] : [b])).forEach((b, i) => {
+    const a = new Animal(b.species, p.ix0 + 5 + (i % 4) * 8, p.iy0 + 5 + Math.floor(i / 4) * 9, b.coat as Coat);
     a.forSale = b.price;
     a.wanderer = false;
     a.pen = p;
