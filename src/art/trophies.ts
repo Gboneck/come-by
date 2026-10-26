@@ -1,5 +1,7 @@
 import { C } from '../palette';
 import { px, rect } from '../gfx/draw';
+import { PX, fine } from '../gfx/screen';
+import { grid, gridAt } from './fine';
 import { cached } from '../gfx/picture';
 import type { Drawable } from './buildings';
 import type { Game } from '../game';
@@ -46,50 +48,40 @@ const PINS = 20; // pins on one board, two rows
 // the sun as `lightLook` in seasonlook.ts; read it from there on a merge.)
 const LIGHT = lightLook;
 
+// A cup on the shelf, (x, y) its foot; fine.
+const CUP = ['.yyyyy.', 'yywyyyy', 'yywyyyy', '.yyyyy.', '..yyy..', '...y...', '..yyy..'];
+const BIG_CUP = ['y.yyyyyyy.y', 'yyywyyyyyyy', 'y.ywyyyyyy.', '..ywyyyyy..', '...yyyyy...', '....yyy....', '.....y.....', '....yyy....', '...yyyyy...'];
 function cup(g: CanvasRenderingContext2D, x: number, y: number, big: boolean) {
-  // (x, y): the foot, on the shelf.
-  if (big) {
-    rect(g, x - 1, y - 1, 3, 1, C.butter);
-    px(g, x, y - 2, C.butter);
-    rect(g, x - 2, y - 6, 5, 4, C.butter);
-    px(g, x - 3, y - 5, C.butter);
-    px(g, x + 3, y - 5, C.butter);
-    px(g, x - 1, y - 5, C.wool);
-  } else {
-    rect(g, x - 1, y - 1, 3, 1, C.butter);
-    rect(g, x - 1, y - 4, 3, 3, C.butter);
-    px(g, x - 1, y - 4, C.wool);
-  }
+  fine(g, (fg) => gridAt(fg, big ? BIG_CUP : CUP, x * PX, y * PX - 1));
 }
 
+const SHEARS = ['y.....y', '.y...y.', '..y.y..', '...w...', '..w.w..', '.ww.ww.', '.ww.ww.'];
 function shears(g: CanvasRenderingContext2D, x: number, y: number) {
-  px(g, x, y, C.butter);
-  px(g, x + 1, y + 1, C.butter);
-  px(g, x + 2, y + 2, C.wool);
-  px(g, x + 3, y + 3, C.wool);
-  px(g, x + 3, y, C.butter);
-  px(g, x + 2, y + 1, C.butter);
-  px(g, x + 1, y + 2, C.wool);
-  px(g, x, y + 3, C.wool);
+  fine(g, (fg) => grid(fg, SHEARS, x * PX, y * PX));
 }
 
-// One board on two posts; (x, y) is the ground at its middle.
+// One board on two posts; (x, y) is the ground at its middle. Fine grid.
 function board(g: CanvasRenderingContext2D, x: number, y: number, ros: string[][], cups: number, bigCup: boolean, pins: BadgeGroup[], sh: boolean) {
   const l = x - Math.floor(FACE_W / 2), top = y - 5 - FACE_H;
-  // Its shadow, thrown as the houses' are.
-  const sx = Math.round(LIGHT.dx * 0.8), sy = Math.round(LIGHT.dy * 0.5);
-  rect(g, l + sx, y + sy - 1, FACE_W, 2, C.sage);
-  for (const p of [l + 3, l + FACE_W - 4]) for (let k = 0; k <= Math.abs(sy); k++) px(g, p + Math.round((sx * k) / Math.max(1, Math.abs(sy))), y + k, C.sage);
-  rect(g, l + 3, y - 5, 1, 6, C.plum);
-  rect(g, l + FACE_W - 4, y - 5, 1, 6, C.plum);
-  // The face: a plum frame, a teal cloth, a moss rail under the rosettes.
-  rect(g, l, top, FACE_W, FACE_H, C.plum);
-  rect(g, l + 1, top + 1, FACE_W - 2, FACE_H - 2, C.teal);
-  for (let i = l + 2; i < l + FACE_W - 2; i += 3) px(g, i, top + 1, C.sage);
+  fine(g, (fg) => {
+    const L = l * PX, T = top * PX, Y = y * PX + 1, FW = FACE_W * PX, FH = FACE_H * PX;
+    // Its shadow, thrown as the houses' are.
+    const sx = Math.round(LIGHT.dx * 0.8) * PX, sy = Math.round(LIGHT.dy * 0.5) * PX;
+    rect(fg, L + sx, Y + sy - 2, FW, 3, C.sage);
+    for (const p0 of [L + 6, L + FW - 8]) {
+      for (let k = 0; k <= Math.abs(sy); k++) px(fg, p0 + Math.round((sx * k) / Math.max(1, Math.abs(sy))), Y + k, C.sage);
+      rect(fg, p0, Y - 10, 2, 11, C.plum);
+      px(fg, p0 + 1, Y - 9, C.sage);
+    }
+    // The face: a plum frame, a teal cloth with its weave, a moss shelf.
+    rect(fg, L, T, FW, FH, C.plum);
+    rect(fg, L + 2, T + 2, FW - 4, FH - 4, C.teal);
+    for (let i = L + 3; i < L + FW - 3; i += 4) for (let j = T + 4; j < T + FH - 4; j += 4) px(fg, i + ((j >> 2) & 1) * 2, j, C.sage);
+    rect(fg, L + 2, T + 28, FW - 4, 2, C.moss);
+    rect(fg, L + 2, T + 30, FW - 4, 1, C.plum);
+  });
   snowCap(g, l, top - 1, FACE_W);
   ros.slice(0, PER).forEach(([petal, mid], i) => rosette(g, l + 4 + i * 5, top + 3, petal, mid));
-  // The shelf.
-  rect(g, l + 1, top + 14, FACE_W - 2, 1, C.moss);
   let cx = l + 4;
   if (bigCup) {
     cup(g, cx + 1, top + 14, true);
@@ -97,10 +89,14 @@ function board(g: CanvasRenderingContext2D, x: number, y: number, ros: string[][
   }
   for (let i = 0; i < Math.min(cups, 3); i++, cx += 4) cup(g, cx, top + 14, false);
   if (sh) shears(g, l + FACE_W - 7, top + 9);
-  // The badge pins.
-  pins.slice(0, PINS).forEach((gr, i) => {
-    const row = Math.floor(i / 10);
-    px(g, l + 2 + row + (i % 10) * 2, top + 15 + row, groupRim(gr));
+  // The badge pins: a little round head each, in its kind's colour.
+  fine(g, (fg) => {
+    pins.slice(0, PINS).forEach((gr, i) => {
+      const row = Math.floor(i / 10);
+      const X = (l + 2 + row + (i % 10) * 2) * PX, Y = (top + 15 + row) * PX;
+      rect(fg, X, Y, 2, 2, groupRim(gr));
+      px(fg, X, Y, C.wool);
+    });
   });
 }
 

@@ -1,5 +1,6 @@
 import { C } from '../palette';
 import { line, px, rect, ring } from '../gfx/draw';
+import { PX, fine } from '../gfx/screen';
 import { text, textWidth } from '../gfx/font';
 import { cached } from '../gfx/picture';
 import { gust } from '../render/wind';
@@ -24,72 +25,98 @@ import { STALLS as STALL_SPOTS } from '../ranch/village';
 const PENNANTS = [C.butter, C.wool, C.teal];
 const WORD: Record<Special, string> = { rush: 'RUSH!', show: 'SHOW STOCK', drove: 'BIG DROVE' };
 
+// All drawn on the fine grid (two fine pixels to a world pixel).
 function bunting(g: CanvasRenderingContext2D, p: Pen, t: number) {
-  const x0 = p.x0 + 2, x1 = p.x1 - 2, y = p.y0 - 8;
-  rect(g, x0 - 1, y - 1, 1, 9, C.plum);
-  rect(g, x1, y - 1, 1, 9, C.plum);
-  for (let x = x0; x < x1; x++) {
-    const u = (x - x0) / (x1 - x0);
-    const sag = Math.round(4 * u * (1 - u) * 3);
-    px(g, x, y + sag, C.plum);
-    if ((x - x0) % 4 === 1 && x < x1 - 2) {
-      const col = PENNANTS[((x - x0) >> 2) % PENNANTS.length];
-      const flap = gust(x, y, t) > 0.5 ? 1 : 0;
-      rect(g, x, y + sag + 1, 3, 1, col);
-      rect(g, x + flap, y + sag + 2, 2, 1, col);
-      px(g, x + 1 + flap, y + sag + 3, col);
+  fine(g, (fg) => {
+    const X0 = (p.x0 + 2) * PX, X1 = (p.x1 - 2) * PX, Y = (p.y0 - 8) * PX;
+    rect(fg, X0 - 2, Y - 2, 2, 18, C.plum);
+    rect(fg, X1, Y - 2, 2, 18, C.plum);
+    for (let x = X0; x < X1; x++) {
+      const u = (x - X0) / (X1 - X0);
+      const sag = Math.round(4 * u * (1 - u) * 6);
+      px(fg, x, Y + sag, C.plum);
+      if ((x - X0) % 8 === 2 && x < X1 - 5) {
+        const col = PENNANTS[((x - X0) >> 3) % PENNANTS.length];
+        const flap = gust(x >> 1, Y >> 1, t) > 0.5 ? 1 : 0;
+        rect(fg, x, Y + sag + 1, 5, 1, col);
+        rect(fg, x + flap, Y + sag + 2, 4, 1, col);
+        rect(fg, x + 1 + flap, Y + sag + 3, 2, 2, col);
+        px(fg, x + 1 + flap, Y + sag + 5, col);
+      }
     }
-  }
+  });
 }
 
 // The cart's 2x2 tile corner is (x, y) in px.
 function awning(g: CanvasRenderingContext2D, x: number, y: number) {
-  const l = x - 3, r = x + 18;
-  rect(g, l, y - 4, 1, 19, C.plum);
-  rect(g, r, y - 4, 1, 19, C.plum);
-  rect(g, l - 1, y - 8, r - l + 3, 1, C.plum);
-  for (let i = l; i <= r + 1; i++) {
-    const col = ((i - l) >> 1) % 2 ? C.wool : C.teal;
-    rect(g, i, y - 7, 1, 3, col);
-    // A scalloped edge.
-    if ((i - l) % 2 === 0) px(g, i, y - 4, col);
-  }
-  rect(g, l - 1, y - 7, 1, 3, C.plum);
-  rect(g, r + 2, y - 7, 1, 3, C.plum);
+  fine(g, (fg) => {
+    const L = (x - 3) * PX, R = (x + 18) * PX, Y = y * PX;
+    for (const px0 of [L, R]) { rect(fg, px0, Y - 8, 2, 38, C.plum); px(fg, px0 + 1, Y - 6, C.sage); }
+    rect(fg, L - 2, Y - 16, R - L + 6, 2, C.plum);
+    for (let i = L; i <= R + 3; i++) {
+      const col = ((i - L) >> 2) % 2 ? C.wool : C.teal;
+      rect(fg, i, Y - 14, 1, 6, col);
+      const sc = (i - L) % 4;
+      if (sc === 1 || sc === 2) px(fg, i, Y - 8, col);
+    }
+    rect(fg, L - 2, Y - 14, 2, 6, C.plum);
+    rect(fg, R + 4, Y - 14, 2, 6, C.plum);
+    rect(fg, L, Y - 13, R - L + 4, 1, C.sage);
+  });
 }
 
 function nameBoard(g: CanvasRenderingContext2D, cx: number, y: number, name: string) {
   const w = textWidth(name) + 6;
   const l = Math.round(cx - w / 2);
-  rect(g, l, y - 9, w, 8, C.plum);
-  rect(g, l + 1, y - 8, w - 2, 6, C.wool);
-  rect(g, l + 1, y - 3, w - 2, 1, C.sage);
+  fine(g, (fg) => {
+    const L = l * PX, Y = y * PX, Wd = w * PX;
+    rect(fg, L, Y - 18, Wd, 16, C.plum);
+    rect(fg, L + 2, Y - 16, Wd - 4, 12, C.wool);
+    rect(fg, L + 2, Y - 6, Wd - 4, 1, C.sage);
+    for (const cx2 of [L + 2, L + Wd - 3]) px(fg, cx2, Y - 16, C.butter);
+    rect(fg, L + 4, Y - 2, 2, 2, C.plum);
+    rect(fg, L + Wd - 6, Y - 2, 2, 2, C.plum);
+  });
   text(g, name, cx, y - 7, C.plum, { align: 'center' });
-  px(g, l + 2, y - 1, C.plum);
-  px(g, l + w - 3, y - 1, C.plum);
 }
 
 function tub(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  rect(g, x - 3, y - 3, 7, 4, C.plum);
-  rect(g, x - 2, y - 3, 5, 3, C.teal);
-  rect(g, x - 2, y - 3, 5, 1, C.sage);
-  const nod = gust(x, y, t) > 0.6 ? 1 : 0;
-  for (const [dx, col] of [[-2, C.butter], [0, C.wool], [2, C.butter]] as const) {
-    px(g, x + dx + nod, y - 6, col);
-    px(g, x + dx, y - 5, C.moss);
-    px(g, x + dx, y - 4, C.moss);
-  }
+  fine(g, (fg) => {
+    const X = x * PX, Y = y * PX;
+    // A half-barrel of soil, hooped, flowers nodding in it.
+    rect(fg, X - 6, Y - 6, 13, 8, C.plum);
+    rect(fg, X - 6, Y - 6, 13, 1, C.moss);
+    rect(fg, X - 6, Y - 2, 13, 1, C.sage);
+    rect(fg, X - 5, Y - 5, 11, 2, C.sage);
+    rect(fg, X + 5, Y - 5, 1, 7, C.teal);
+    rect(fg, X - 6, Y + 2, 13, 1, C.sage);
+    const nod = gust(x, y, t) > 0.6 ? 1 : 0;
+    for (const [dx, col] of [[-4, C.butter], [0, C.wool], [4, C.butter], [-2, C.wool], [2, C.butter]] as const) {
+      const tall = Math.abs(dx) === 2 ? 4 : 6;
+      rect(fg, X + dx, Y - 5 - tall, 1, tall, C.moss);
+      px(fg, X + dx - 1, Y - 7, C.moss);
+      rect(fg, X + dx - 1 + nod, Y - 6 - tall, 3, 1, col);
+      rect(fg, X + dx + nod, Y - 7 - tall, 1, 3, col);
+      px(fg, X + dx + nod, Y - 6 - tall, col === C.wool ? C.butter : C.moss);
+    }
+  });
 }
 
+// A round of petals with a heart of another colour, two tails below; fine.
 export function rosette(g: CanvasRenderingContext2D, x: number, y: number, petal: string, mid: string) {
-  // A round of petals with a heart of another colour, two tails below.
-  rect(g, x - 1, y - 2, 3, 5, petal);
-  rect(g, x - 2, y - 1, 5, 3, petal);
-  px(g, x, y, mid);
-  px(g, x - 1, y + 3, mid);
-  px(g, x - 1, y + 4, mid);
-  px(g, x + 1, y + 3, mid);
-  px(g, x + 1, y + 4, mid);
+  fine(g, (fg) => {
+    const X = x * PX, Y = y * PX;
+    rect(fg, X - 2, Y - 4, 5, 9, petal);
+    rect(fg, X - 4, Y - 2, 9, 5, petal);
+    rect(fg, X - 3, Y - 3, 7, 7, petal);
+    for (const [dx, dy] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) px(fg, X + dx, Y + dy, C.plum);
+    rect(fg, X - 1, Y - 1, 3, 3, mid);
+    px(fg, X, Y - 1, C.wool);
+    rect(fg, X - 2, Y + 5, 2, 5, mid);
+    rect(fg, X + 1, Y + 5, 2, 5, mid);
+    px(fg, X - 2, Y + 10, mid);
+    px(fg, X + 2, Y + 10, mid);
+  });
 }
 
 function yardDressing(game: Game, g: CanvasRenderingContext2D, y: Yard, t: number): Drawable[] {
@@ -179,48 +206,50 @@ export const GIFT_PIECES: Piece[] = [
 ];
 
 export function drawGift(g: CanvasRenderingContext2D, id: GiftId, x: number, y: number, t: number) {
-  switch (id) {
-    case 'millstone': {
-      // An old millstone stood on its edge, a chock either side.
-      rect(g, x - 5, y + 1, 11, 1, C.sage);
-      ring(g, x, y - 5, 5, C.plum);
-      for (let r = 1; r <= 4; r++) ring(g, x, y - 5, r, r === 4 ? C.wool : C.sage);
-      line(g, x - 3, y - 7, x + 2, y - 2, C.plum);
-      line(g, x - 2, y - 8, x + 3, y - 3, C.wool);
-      rect(g, x - 1, y - 6, 2, 2, C.plum);
-      px(g, x - 2, y - 9, C.wool);
-      rect(g, x - 6, y - 1, 2, 2, C.plum);
-      rect(g, x + 5, y - 1, 2, 2, C.plum);
-      break;
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    switch (id) {
+      case 'millstone': {
+        // An old millstone stood on its edge, its dressing grooves, a chock
+        // either side.
+        rect(fg, X - 10, B + 1, 21, 1, C.sage);
+        for (let r = 10; r >= 2; r--) ring(fg, X, B - 10, r, r === 10 ? C.plum : r === 9 ? C.wool : r % 3 === 0 ? C.sage : C.wool);
+        for (const [a0, a1] of [[-6, -14], [-4, -16], [-2, -18]]) line(fg, X + a0 + 4, B - 10 + a0 / 2, X + a1 + 20, B - 10 + a1 / 4, C.sage);
+        rect(fg, X - 2, B - 12, 4, 4, C.plum);
+        px(fg, X - 4, B - 17, C.wool);
+        rect(fg, X - 12, B - 3, 4, 4, C.plum);
+        rect(fg, X + 9, B - 3, 4, 4, C.plum);
+        break;
+      }
+      case 'bell': {
+        // A bell under a little gallows of two posts and a beam.
+        rect(fg, X - 10, B + 1, 21, 1, C.sage);
+        for (const px0 of [X - 8, X + 7]) { rect(fg, px0, B - 24, 2, 25, C.plum); px(fg, px0 + 1, B - 22, C.sage); }
+        rect(fg, X - 10, B - 26, 22, 2, C.plum);
+        rect(fg, X - 10, B - 26, 22, 1, C.moss);
+        rect(fg, X, B - 24, 1, 2, C.plum);
+        const sw = Math.floor(t * 1.2) % 6 === 0 ? 2 : 0;
+        rect(fg, X - 2 + sw, B - 22, 5, 2, C.butter);
+        rect(fg, X - 4 + sw, B - 20, 9, 6, C.butter);
+        rect(fg, X - 5 + sw, B - 14, 11, 2, C.butter);
+        rect(fg, X - 3 + sw, B - 20, 1, 5, C.wool);
+        rect(fg, X + 2 + sw, B - 19, 2, 5, C.moss);
+        rect(fg, X + sw, B - 12, 2, 2, C.plum);
+        break;
+      }
+      case 'fleece': {
+        // A bale of fleeces tied with twine.
+        rect(fg, X - 10, B + 1, 21, 1, C.sage);
+        rect(fg, X - 10, B - 12, 21, 13, C.plum);
+        rect(fg, X - 8, B - 12, 17, 12, C.wool);
+        for (let i = -8; i <= 8; i += 3) { px(fg, X + i, B - 12, C.sage); px(fg, X + i + 1, B - 8, C.sage); }
+        rect(fg, X - 8, B - 2, 17, 2, C.sage);
+        rect(fg, X - 1, B - 12, 2, 12, C.plum);
+        rect(fg, X - 8, B - 6, 17, 1, C.plum);
+        rect(fg, X - 2, B - 15, 2, 3, C.butter);
+        rect(fg, X, B - 16, 2, 2, C.butter);
+        break;
+      }
     }
-    case 'bell': {
-      // A bell under a little gallows of two posts and a beam.
-      rect(g, x - 5, y + 1, 11, 1, C.sage);
-      rect(g, x - 4, y - 12, 1, 13, C.plum);
-      rect(g, x + 4, y - 12, 1, 13, C.plum);
-      rect(g, x - 5, y - 13, 11, 1, C.plum);
-      rect(g, x - 5, y - 13, 11, 1, C.moss);
-      px(g, x, y - 12, C.plum);
-      const sw = Math.floor(t * 1.2) % 6 === 0 ? 1 : 0;
-      rect(g, x - 1 + sw, y - 11, 3, 1, C.butter);
-      rect(g, x - 2 + sw, y - 10, 5, 3, C.butter);
-      rect(g, x - 3 + sw, y - 7, 7, 1, C.butter);
-      px(g, x - 1 + sw, y - 10, C.wool);
-      px(g, x + sw, y - 6, C.plum);
-      break;
-    }
-    case 'fleece': {
-      // A bale of fleeces tied with twine.
-      rect(g, x - 5, y + 1, 11, 1, C.sage);
-      rect(g, x - 5, y - 6, 11, 7, C.plum);
-      rect(g, x - 4, y - 6, 9, 6, C.wool);
-      for (let i = -4; i <= 4; i += 2) px(g, x + i, y - 6, C.sage);
-      rect(g, x - 4, y - 1, 9, 1, C.sage);
-      rect(g, x - 1, y - 6, 1, 6, C.plum);
-      rect(g, x - 4, y - 3, 9, 1, C.plum);
-      px(g, x - 1, y - 7, C.butter);
-      px(g, x, y - 8, C.butter);
-      break;
-    }
-  }
+  });
 }
