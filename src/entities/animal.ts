@@ -75,6 +75,7 @@ export class Animal {
   mother: Animal | null = null;
   lamb: Animal | null = null; // a mother's young (the first, if more than one)
   lambedYear = 0; // the year she last bore young
+  eveStress = 0; // stress at the end of the last day (whether she breeds)
   // The valley (src/systems/valley.ts, farmwork.ts): a log hitched behind a
   // cow for the old bridge, and the day she was last milked.
   load: 'log' | null = null;

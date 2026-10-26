@@ -47,7 +47,10 @@ function stockLot(g: Game) {
   const yard = g.ranch.yards.find((y) => y.site.id === 'sale');
   if (g.tier < 2 || !yard || isFairDay(g) || (yard.site.region && !REGIONS.some((r) => r.id === yard.site.region && g.isUnlocked(r)))) return;
   const p = yardOf(g, 'sale').pen;
-  if (p.animals.some((a) => a.forSale)) return;
+  if (p.animals.some((a) => a.forSale)) {
+    g.herds.lot = p.animals.find((a) => a.forSale && !a.rare)?.sp.id ?? null;
+    return;
+  }
   g.herds.lot = null;
   const kinds = kindsOpen(g);
   if (!kinds.length) return;
@@ -66,10 +69,10 @@ function stockLot(g: Game) {
 }
 
 // A big flock in one open region (never the ranch's newest, whose flocks
-// are its pen goal, and never two mornings running).
+// are its pen goal; never in winter, on fair day or two mornings running).
 function bigDrove(g: Game): MorningBanner | null {
   const h = g.herds;
-  if (g.tier < 3 || g.season.season === 'winter' || (h.drove && g.day.day - h.drove.day < 2) || Math.random() > DROVE_CHANCE) return null;
+  if (g.tier < 3 || g.season.season === 'winter' || isFairDay(g) || (h.drove && g.day.day - h.drove.day < 2) || Math.random() > DROVE_CHANCE) return null;
   const regs = REGIONS.filter((r) => r.species && g.isUnlocked(r) && r.tier < g.tier);
   if (!regs.length) return null;
   const reg = regs[Math.floor(Math.random() * regs.length)];

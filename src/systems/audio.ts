@@ -44,7 +44,7 @@ const whoPitch = (who?: number) => (who ? WHO_PITCH[who % WHO_PITCH.length] : 1)
 
 // What the gameplay side is expected to provide for lambing and the fair
 // (read loosely, so the audio stays quiet if they are not there yet).
-type LambLike = Animal & { lamb?: boolean; mother?: Animal | null };
+type LambLike = Animal & { mother?: Animal | null };
 interface FairLike { on?: boolean; x?: number; y?: number; sold?: number }
 
 export class Sound {
@@ -745,20 +745,20 @@ export class Sound {
         break;
       }
       case 'baa':
-        this.tone(o, 'sawtooth', r(250, 300), r(230, 260), t, 0.42, 0.12, { vib: 7, vibDepth: 14, filter: 'bandpass', ff: 1000, q: 2, attack: 0.04 });
+        this.tone(o, 'sawtooth', r(250, 300) * (opts.pitch ?? 1), r(230, 260) * (opts.pitch ?? 1), t, 0.42, 0.12, { vib: 7, vibDepth: 14, filter: 'bandpass', ff: 1000, q: 2, attack: 0.04 });
         break;
       case 'bleat':
-        this.tone(o, 'sawtooth', r(380, 440), r(360, 400), t, 0.3, 0.1, { vib: 11, vibDepth: 25, filter: 'bandpass', ff: 1300, q: 2, attack: 0.02 });
+        this.tone(o, 'sawtooth', r(380, 440) * (opts.pitch ?? 1), r(360, 400) * (opts.pitch ?? 1), t, 0.3, 0.1, { vib: 11, vibDepth: 25, filter: 'bandpass', ff: 1300, q: 2, attack: 0.02 });
         break;
       case 'quack':
-        this.tone(o, 'square', r(480, 540), 380, t, 0.09, 0.08, { filter: 'bandpass', ff: 1100, q: 3 });
-        this.tone(o, 'square', r(470, 520), 370, t + 0.12, 0.08, 0.07, { filter: 'bandpass', ff: 1100, q: 3 });
+        this.tone(o, 'square', r(480, 540) * (opts.pitch ?? 1), 380 * (opts.pitch ?? 1), t, 0.09, 0.08, { filter: 'bandpass', ff: 1100, q: 3 });
+        this.tone(o, 'square', r(470, 520) * (opts.pitch ?? 1), 370 * (opts.pitch ?? 1), t + 0.12, 0.08, 0.07, { filter: 'bandpass', ff: 1100, q: 3 });
         break;
       case 'moo':
-        this.tone(o, 'sawtooth', r(120, 135), 92, t, 0.75, 0.14, { filter: 'lowpass', ff: 520, q: 3, attack: 0.08 });
+        this.tone(o, 'sawtooth', r(120, 135) * (opts.pitch ?? 1), 92 * (opts.pitch ?? 1), t, 0.75, 0.14, { filter: 'lowpass', ff: 520, q: 3, attack: 0.08 });
         break;
       case 'whinny':
-        this.tone(o, 'sawtooth', 700, 1050, t, 0.55, 0.07, { f2: 480, vib: 13, vibDepth: 60, filter: 'bandpass', ff: 1400, q: 2 });
+        this.tone(o, 'sawtooth', 700 * (opts.pitch ?? 1), 1050 * (opts.pitch ?? 1), t, 0.55, 0.07, { f2: 480 * (opts.pitch ?? 1), vib: 13, vibDepth: 60, filter: 'bandpass', ff: 1400, q: 2 });
         break;
     }
   }
@@ -831,14 +831,18 @@ export class Sound {
     else if ([...before].some((s) => !now.has(s))) this.play('friend-leave', { force: true });
   }
 
-  // Lambs (on the gameplay side: an animal with `lamb` and its `mother`).
-  // Cut off from its mother a lamb calls, and she answers from wherever she
-  // is: both carry further than other calls, so you can hear where the
-  // lost one is. The longer apart, the more often and the higher it calls.
+  // The young (on the gameplay side: an animal that is `young`, with its
+  // `mother`): lambs, and ducklings, kids, calves and foals in their own
+  // kind's voice, higher. Cut off from its mother a young one calls, and
+  // she answers from wherever she is: both carry further than other calls,
+  // so you can hear where the lost one is. The longer apart, the more often
+  // and the higher it calls.
   private lambCalls(g: Game, dt: number) {
     let calling = 0;
     for (const an of g.animals as LambLike[]) {
-      if (!an.lamb || an.gone || an.carried) continue;
+      if (!an.young || an.gone || an.carried) continue;
+      const lamb = an.sp.id === 'sheep';
+      const cry = lamb ? 'lamb' : CALLS[an.sp.id], answer = lamb ? 'ewe' : CALLS[an.sp.id], high = lamb ? 1 : 1.45;
       const m = an.mother && !an.mother.gone ? an.mother : null;
       const sep = !m || Math.hypot(m.x - an.x, m.y - an.y) > 60 || m.pen !== an.pen;
       const apart = sep ? (this.lambApart.get(an) ?? 0) + dt : 0;
@@ -850,18 +854,18 @@ export class Sound {
           calling++;
           const urgency = Math.min(1, apart / 30);
           t = (3.8 - 2 * urgency) * (0.8 + 0.4 * Math.random());
-          this.play('lamb', { x: an.x, y: an.y, far: true, pitch: 1 + 0.1 * urgency, force: true });
-          if (m) this.play('ewe', { x: m.x, y: m.y, delay: 0.5 + Math.random() * 0.3, far: true, force: true });
+          this.play(cry, { x: an.x, y: an.y, far: true, pitch: high + 0.1 * urgency, force: true });
+          if (m) this.play(answer, { x: m.x, y: m.y, delay: 0.5 + Math.random() * 0.3, far: true, force: true });
         }
       } else if (was && !sep) {
         // Together again: a soft word from each.
-        this.play('lamb', { x: an.x, y: an.y, vol: 0.5, force: true });
-        if (m) this.play('ewe', { x: m.x, y: m.y, vol: 0.4, delay: 0.3, force: true });
+        this.play(cry, { x: an.x, y: an.y, vol: 0.5, pitch: high, force: true });
+        if (m) this.play(answer, { x: m.x, y: m.y, vol: 0.4, delay: 0.3, force: true });
         t = 4 + Math.random() * 6;
       } else if (t <= 0) {
-        // Content lambs bleat now and then.
+        // Content young ones call now and then.
         t = 6 + Math.random() * 10;
-        if (Math.random() < 0.5) this.play('lamb', { x: an.x, y: an.y, vol: 0.45 });
+        if (Math.random() < 0.5) this.play(cry, { x: an.x, y: an.y, vol: 0.45, pitch: high });
       }
       this.lambT.set(an, t);
     }

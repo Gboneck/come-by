@@ -491,6 +491,33 @@ export class Pacer {
     if (!want.pen) this.bringHome([want]);
   }
 
+  // ---- The sale yard's lot ----
+
+  // With coin to spare and room at home, buy the day's lot (head by head,
+  // keeping some coin back) and walk it home.
+  lotBought = 0;
+  private doLot() {
+    const g = this.g;
+    const sale = yardOf(g, 'sale').pen;
+    const got: Animal[] = [];
+    let paid = 0;
+    for (let k = 0; k < 6 && this.playing; k++) {
+      const want = sale.animals.filter((a) => a.forSale && !a.rare && a.forSale + 150 <= g.coins && this.roomFor(a.sp.id) >= got.length * a.sp.space + a.sp.space)[0];
+      if (!want) break;
+      const side = [{ x: sale.x0 - 6, y: want.y }, { x: sale.x1 + 6, y: want.y }, { x: want.x, y: sale.y0 - 6 }, { x: want.x, y: sale.y1 + 6 }].sort((a, b) => dist(a, want) - dist(b, want))[0];
+      if (!this.walkTo(side, 60, 4) || !this.near(want)) break;
+      const before = g.coins;
+      if (!buyBreed(g) || g.coins >= before) break;
+      paid += before - g.coins;
+      got.push(want);
+    }
+    if (!got.length) return;
+    this.spent += paid;
+    this.lotBought += got.length;
+    this.did.push(`LOT: BOUGHT ${got.length} ${(got.length === 1 ? got[0].sp.name : got[0].sp.plural).toUpperCase()} ${paid}$`);
+    this.bringHome(got);
+  }
+
   // ---- What to work on ----
 
   private groupsOut(): Animal[][] {
@@ -833,6 +860,7 @@ export class Pacer {
     if (this.playing) this.doDairy();
     for (const o of [...g.orders.open].sort((a, b) => a.due - b.due)) if (this.playing) this.doOrder(o);
     if (isFairDay(g) && this.playing) this.doFair();
+    else if (this.playing && g.herds.lot) this.doLot();
     if (this.playing) this.doTimber();
     if (this.playing) this.doShed();
     if (this.playing) this.doAgility();

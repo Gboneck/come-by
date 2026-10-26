@@ -32,7 +32,7 @@ const meanFlock = (reg: RegionDef, tier: number) => {
 
 // `season` is given for a morning's spawn (not a region opening): in a
 // species' breeding season (spring; summer for ponies) some wild mothers
-// come with young at foot.
+// come with young at foot, from tier 2 (day one's ducks come alone).
 const WILD_YOUNG = 0.4;
 
 // `keep` marks wild animals that must stay put (a hidden place's flock).
@@ -56,7 +56,7 @@ export function spawnMorning(map: WorldMap, animals: Animal[], day: number, tier
         const coat = Math.floor(Math.random() * sp.coats) as Coat;
         const ani = new Animal(reg.species, p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, coat);
         born.push(ani);
-        if (season === BREED[reg.species].season && Math.random() < WILD_YOUNG) born.push(youngFor(ani));
+        if (tier >= 2 && season === BREED[reg.species].season && Math.random() < WILD_YOUNG) born.push(youngFor(ani));
       }
       made++;
     }

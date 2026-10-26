@@ -176,10 +176,12 @@ function ringBusy(g: Game) {
 export function seasonalEvening(g: Game) {
   const S = g.season;
   for (const p of g.ranch.pens) p.hungry = false;
+  // How each animal ended the day: what decides whether it breeds in the
+  // morning (the night takes most stress off).
+  for (const a of g.animals) a.eveStress = a.stress;
   if (S.winter && isWinterTier(g)) feed(g);
   // The fair packs up: entries go home to a pen of their kind (or one they
-  // can share), unsold
-  // breeds go back with their breeders.
+  // can share), unsold breeds go back with their breeders.
   const ring = g.ranch.ring.pen;
   for (const a of ring.animals) sendHome(g, a);
   ring.animals = [];
@@ -245,7 +247,7 @@ export const BREED: Record<SpeciesId, { season: Season; chance: number; litter: 
   cow: { season: 'spring', chance: 0.65, litter: [1, 1, 0] },
   pony: { season: 'summer', chance: 0.55, litter: [1, 1, 0] },
 };
-const CALM_TO_BREED = 0.4; // stress above this: no young this season
+const CALM_TO_BREED = 0.4; // stress above this (at day's end or in the morning): no young yet
 
 // Room the young will want once grown, on top of what the paddock holds.
 function roomLeft(p: Pen): number {
@@ -266,7 +268,7 @@ function breeding(g: Game) {
       const sp = mother.sp, B = BREED[sp.id];
       if (B.season !== season || mother.young || mother.gone || mother.forSale || mother.trial || mother.lambedYear === year) continue;
       if (!p.animals.some((o) => o !== mother && o.sp.id === sp.id && !o.young && !o.gone)) continue; // none of her kind to breed with
-      if (mother.stress > CALM_TO_BREED) continue;
+      if (Math.max(mother.stress, mother.eveStress) > CALM_TO_BREED) continue; // calm last night and this morning
       // Over half on the first morning, nearly all the rest on the second.
       const first = B.chance * 0.55;
       if (Math.random() > (g.season.dayOf === 1 ? first : (B.chance - first) / (1 - first))) continue;
