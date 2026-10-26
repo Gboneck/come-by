@@ -86,6 +86,10 @@ original and drawn in code. No external art files, ever.
   and pile-ups; shots in `shots/play/`), `scripts/audiotest.mjs` renders the music, stingers and
   soundscape offline and prints levels, peaks, tuning, theory checks and
   CPU (we cannot listen, so we measure; `AUDIO_PORT` moves its server),
+  `scripts/favourtest.mjs` buyers' favour (levels, pay, special orders,
+  gifts, the yards, saving, co-op; shots in `shots/favour/`),
+  `scripts/achievetest.mjs` achievements (badges, the card, old saves,
+  guests, the Ledger pages, the postcard, the board; `shots/achieve/`),
   `scripts/cooptest.mjs` starts the
   relay (`wrangler dev`) and two browsers, a host and a guest, and plays
   co-op end to end (`--shots` into `shots/coop/`, `--lag=150`). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
@@ -143,6 +147,7 @@ stays unique.
 | Rest            | lie down on the ranch, no stock near (day passes x12) | same | same               |
 | Build mode      | B (on the ranch)                 | BUILD button                  | LB (on the ranch)         |
 | Ranch Ledger    | Tab / G                          | LEDGER button                 | SELECT                    |
+| Ledger pages    | Q/E (arrows on BADGES, Enter opens, SHARE) | tap the tabs, tap a badge | LB/RB, d-pad, A, B  |
 | Helper command  | H                                | HELP button                   | Y                         |
 | Pause           | Esc / P                          | pause button                  | START                     |
 | Menus           | arrows, Enter, Esc               | tap                           | d-pad / stick, A, B       |
@@ -203,7 +208,9 @@ needs a line there.
   the dog's frames are put together from parts in `dog.ts` (`pickDogFrame`),
   townsfolk from `villager()` in `people.ts`;
   the player's choices: `dogstyle.ts` (markings, neck piece),
-  `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
+  `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor);
+  `badges.ts` (achievement badges), `trophies.ts` (the board by the door),
+  `favour.ts` (buyers' yards dressing up, their gift decor).
 - `src/world/` tile map, regions, terrain/canopy baking; `places.ts` the
   hidden places (pockets, ways, landmarks, strays and wild flocks).
 - `src/entities/` dog, animals + species, predators, helpers; `folk.ts` the
@@ -225,8 +232,12 @@ needs a line there.
   `game.ranch.village`), `farmwork.ts` (the shearing shed, the dairy, the
   agility yard: `game.farmwork`),
   `projects.ts` (valley projects: herding work in the hidden places that
-  changes them for good: `game.projects`; art in `src/art/projects.ts`).
+  changes them for good: `game.projects`; art in `src/art/projects.ts`),
+  `favour.ts` (each buyer's favour and what it brings: `game.favour`),
+  `achievements.ts` (the badges and the cards that bring them:
+  `game.achievements`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
+  `achievements.ts` the badge card and the Ledger's BUYERS and BADGES pages;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
   pieces, `textfield.ts` typed names; `frame.ts` the UI's frames (panel,
   paper, stamp, ribbon), `hudart.ts` the dial, coin, stamina bone and icons,

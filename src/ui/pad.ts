@@ -172,6 +172,7 @@ const RULES: [RegExp, string][] = [
   [/\bARROWS: CHANGE\b/g, '(D-PAD) CHANGE'],
   [/^ARROWS: FRAME {2}SPACE: SNAP {2}ESC: BACK$/, 'STICK FRAME  (A) SNAP  (B) BACK'],
   [/\bPRESS ENTER\b/g, 'PRESS (A)'],
+  [/^ENTER: SHARE$/, '(A) SHARE'],
   [/^H: /, '(Y) '],
   // Hints and tips.
   [/^TAB OPENS\b/, '(SELECT) OPENS'],

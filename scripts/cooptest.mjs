@@ -321,6 +321,12 @@ await host.evaluate(async () => {
 await guest.waitForFunction(() => window.game.season.season === 'winter' && window.game.season.snow > 0.9 && window.game.__cooptest?.hay === 3, null, { timeout: 5000 }).catch(() => {});
 const seas = await guest.evaluate(() => ({ season: window.game.season.season, snow: +window.game.season.snow.toFixed(2), shared: window.game.__cooptest }));
 check('the season (and shared ranch state) reaches the guest', seas.season === 'winter' && seas.snow > 0.9 && seas.shared?.hay === 3, JSON.stringify(seas));
+// Buyers' favour (the yards dress up) and the board's badge pins reach the guest.
+await host.evaluate(() => { window.game.favour.pts.drover = 33; });
+await guest.waitForFunction(() => window.game.favour.level('drover') === 4 && Array.isArray(window.game.achievements.hostPins), null, { timeout: 5000 }).catch(() => {});
+const fav = await guest.evaluate(() => ({ drover: window.game.favour.level('drover'), pins: window.game.achievements.hostPins?.length, visit: window.game.achievements.has('visit'), kept: JSON.parse(localStorage.getItem('comeby-travels-v1') || '{}').badges ?? [] }));
+check("the host's buyers' favour and badge pins reach the guest", fav.drover === 4 && fav.pins >= 1, JSON.stringify(fav));
+check('the guest earns GOOD NEIGHBOUR for their own save', fav.visit && fav.kept.includes('visit'), JSON.stringify(fav));
 // Lambs, winter hay and the fair (gameplay's shared fields) reach the guest.
 const r3 = await host.evaluate(async () => {
   const g = window.game;
@@ -446,6 +452,8 @@ await guest.waitForFunction(() => window.game.trials.result?.cls.id === 'brace',
 await wait(300);
 const judged = await guest.evaluate(() => ({ place: window.game.trials.result?.place, ribbons: JSON.parse(localStorage.getItem('comeby-travels-v1') || '{}').ribbons }));
 check('the brace placing is a ribbon for the guest too', judged.place >= 1 && judged.place <= 3 && judged.ribbons === 1, JSON.stringify(judged));
+const braceBadge = await guest.evaluate(() => JSON.parse(localStorage.getItem('comeby-travels-v1') || '{}').badges ?? []);
+check('...and the A BRACE OF DOGS badge, kept with their travels', braceBadge.includes('brace') && braceBadge.includes('visit'), JSON.stringify(braceBadge));
 if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-brace-result.png` });
 await host.evaluate(async () => {
   const tr = await import('/src/systems/trials.ts');
@@ -576,6 +584,8 @@ const home = await guest.evaluate(() => {
   return { orchard: g.discovery.found.has('orchard'), bell: g.discovery.keepsakes.has('bell'), coins: g.coins, saved: d.discovery?.found?.includes('orchard'), tip: g.tip?.text, travels: localStorage.getItem('comeby-travels-v1')?.slice(0, 200) };
 });
 check("their own ranch now has the Old Orchard, the bell and the reward", home.orchard && home.bell && home.coins === 128 && home.saved, JSON.stringify(home));
+const homeBadges = await guest.evaluate(() => ({ visit: window.game.achievements.has('visit'), brace: window.game.achievements.has('brace'), saved: Object.keys(JSON.parse(localStorage.getItem('comeby-save-v1')).achievements?.got ?? {}) }));
+check('...and the badges earned visiting', homeBadges.visit && homeBadges.brace && homeBadges.saved.includes('brace'), JSON.stringify(homeBadges));
 
 check('no console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
 await hostB.close();

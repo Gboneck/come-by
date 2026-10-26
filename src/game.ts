@@ -23,7 +23,7 @@ import { BuildMode } from './ui/build';
 import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
 import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
-import { drawLedger, ledgerKeys } from './ui/ledger';
+import { LEDGER_PAGES, drawLedger, ledgerKeys, ledgerView } from './ui/ledger';
 import { REGIONS } from './world/map';
 import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
@@ -62,6 +62,8 @@ import type { GuestNet } from './net/guest';
 import { coopKeys, drawCoop, openCoop } from './ui/coop';
 import { drawTransfer, openTransfer, transferKeys } from './ui/transfer';
 import { drawPhoto, photoKeys } from './ui/photo';
+import { Favour } from './systems/favour';
+import { Achievements } from './systems/achievements';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
@@ -166,6 +168,8 @@ export class Game {
   private tierCheckT = 0;
   orders = new Orders();
   trials = new Trials();
+  favour = new Favour(); // each buyer's favour (systems/favour.ts)
+  achievements = new Achievements(); // badges, and the cards that bring them
   feel = new Feel();
   weather = new Weather();
   season = new Seasons();
@@ -307,6 +311,15 @@ export class Game {
   }
 
   ledgerNew = false;
+
+  // Open the Ledger, at one of its pages (a badge's card tapped).
+  openLedger(page?: string) {
+    const i = LEDGER_PAGES.findIndex((p) => p.id === page);
+    if (i >= 0) ledgerView.page = i + 1;
+    this.mode = 'ledger';
+    this.ledgerNew = false;
+    this.input.clearQueue();
+  }
 
   isOnScreen(x: number, y: number, m = 8) {
     const { ox, oy, W, H } = this.view();
@@ -466,6 +479,7 @@ export class Game {
     this.feel.update(dt, this.coins, this.screen.H);
     if (this.feel.fading) return;
     if (this.net?.role === 'guest') {
+      this.achievements.guestUpdate(this, dt); // what is ours to earn here
       this.net.update(this, dt);
       return;
     }
@@ -639,6 +653,8 @@ export class Game {
     this.fx.update(dt);
     this.life.update(this, dt);
     this.folk.update(this, dt);
+    this.favour.update(this, dt);
+    this.achievements.update(this, dt);
     this.updateCamera(dt);
     this.updateTips(dt);
   }
@@ -807,6 +823,7 @@ export class Game {
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
+    this.achievements.dogEvent(this, ev);
     const d = this.dog;
     const [kx, ky] = { r: [1, 0], l: [-1, 0], u: [0, -1], d: [0, 1] }[d.face];
     if (ev === 'bark') {
@@ -870,6 +887,7 @@ export class Game {
       const { label } = calmRating(avg);
       this.audio?.thatllDo(label);
       if (label === 'CALM') this.totals.calmBatches++;
+      this.achievements.drive(this, ev.batch, label);
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
       this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}`, 2.8);

@@ -18,6 +18,7 @@ import { jobArrows, jobCard } from './jobs';
 import { seasonIcon, skyIcon } from './icons';
 import { CALM_MAX } from '../systems/trials';
 import { clamp } from '../util';
+import { badgeUp, drawBadgeCard } from './achievements';
 
 // Rasterised triangle arrow pointing along `ang`.
 export function arrow(g: CanvasRenderingContext2D, cx: number, cy: number, ang: number, size: number, color: string) {
@@ -294,6 +295,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     }
   }
   if (f.tierCard) drawTierCard(game, g, W, H);
+  else if (badgeUp(game)) drawBadgeCard(game, g, W, H); // a badge earned, a buyer's favour
   else if (game.banner) {
     const b = game.banner;
     const age = b.max - b.t;

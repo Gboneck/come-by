@@ -20,6 +20,8 @@ import { drawSway, drawWater } from './sway';
 import { lightLook, setSeasonLook } from '../art/seasonlook';
 import { drawDog } from './dogpose';
 import { yardFire } from '../art/course';
+import { favourDrawables } from '../art/favour';
+import { trophyDrawables } from '../art/trophies';
 import { drawSleepingDog, drawSnores } from '../art/dog';
 import { cached, picturesFrame } from '../gfx/picture';
 
@@ -106,6 +108,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   }
   const tierName = game.look.ranch || tierOf(game.tier).name; // the ranch sign
   ents.push(...game.extraDrawables(g));
+  ents.push(...favourDrawables(game, g), ...trophyDrawables(game, g)); // buyers' yards dressed up, the board by the door
   for (const d of DECOR) {
     if (d.tier > game.tier || !inView(d.x * TS, d.y * TS, (d.x + (d.w ?? 1)) * TS, (d.y + (d.h ?? 1)) * TS, 40)) continue;
     if (game.ranch.buildings.some((b) => b.kind !== 'regiongate' && b.overlapsTiles(d.x, d.y, d.w ?? 1, d.h ?? 1))) continue;

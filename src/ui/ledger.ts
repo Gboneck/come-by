@@ -16,6 +16,7 @@ import { dimView } from './feel';
 import { discoveryLines, drawPaperFog, drawPlaceMarks, drawProjectMarks, projectLines } from './discovery';
 import { travelLines } from '../net/travels';
 import { valleyLedger } from './valley';
+import { BADGES_PAGE, BUYERS_PAGE } from './achievements';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -156,7 +157,7 @@ export interface LedgerPage {
   keys?: (game: Game) => boolean;
   dot?: (game: Game) => boolean;
 }
-export const LEDGER_PAGES: LedgerPage[] = [];
+export const LEDGER_PAGES: LedgerPage[] = [BUYERS_PAGE, BADGES_PAGE];
 // The open page (0: the ranch). The book stays open where you left it.
 export const ledgerView = { page: 0 };
 

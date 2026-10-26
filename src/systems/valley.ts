@@ -57,7 +57,7 @@ const penned = (g: Game, sp?: SpeciesId) => g.ranch.pens.reduce((n, p) => n + p.
 
 export const STEPS: StepDef[] = [
   { id: 'cottage1', name: 'A COTTAGE', deed: 'FILL AN ORDER FOR A BUYER', after: null, done: (g) => g.totals.orders >= 1, line: 'A FAMILY MOVES INTO A COTTAGE AT THE CROSSROADS' },
-  { id: 'square', name: 'THE MARKET SQUARE', deed: 'FILL 4 ORDERS', after: 'cottage1', done: (g) => g.totals.orders >= 4, line: 'MARKET DAY IS THE THIRD OF EACH SEASON: THE DROVER PAYS MORE' },
+  { id: 'square', name: 'THE MARKET SQUARE', deed: "WIN THE DROVER'S TRUST (FAVOUR 2)", after: 'cottage1', done: (g) => g.favour.level('drover') >= 2, line: 'MARKET DAY IS THE THIRD OF EACH SEASON: THE DROVER PAYS MORE' },
   { id: 'cottage2', name: 'A SECOND COTTAGE', deed: 'GRAZE A FIELD CLEAR', after: 'cottage1', done: (g) => g.valley.fields.some((p) => p.cleared), line: 'ANOTHER FAMILY MOVES IN' },
   { id: 'smithy', name: 'THE SMITHY', deed: 'PEN 4 CATTLE', after: 'square', done: (g) => penned(g, 'cow') >= 4, line: 'THE SMITH CAN FORGE AN OX YOKE: THE OLD BRIDGE AT THE FORD CAN BE MENDED' },
   { id: 'hall', name: 'THE VILLAGE HALL', deed: 'WIN A RIBBON AT A TRIAL OR THE FAIR', after: 'square', done: (g) => g.totals.ribbons.some((n) => n > 0) || g.totals.fairRibbons.some((n) => n > 0), line: 'A FESTIVAL ON THE GREEN THE LAST DAY OF EACH SEASON' },
