@@ -221,6 +221,7 @@ export class GuestNet implements PingNet {
       this.slot = m.slot as number;
       this.retry = 0;
       this.failT = 0;
+      this.buildAsk = null; // an answer lost with the old line will not come
       this.base = null; // a whole snapshot comes after the hello
       this.status = this.game ? (m.host ? 'playing' : 'away') : 'joining';
       this.link?.send(jsonFrame(0, { t: 'hello', name: this.look.name, look: { dog: this.look.dog } }));
@@ -423,13 +424,10 @@ export class GuestNet implements PingNet {
   private buildAsk: { fromSummary: boolean } | null = null;
   private wasMode: Game['mode'] = 'play';
 
-  // Ask for build mode (one builder at a time; the host says yes or who has it).
-  private askBuild(game: Game, fromSummary: boolean) {
-    const b = this.meta?.builder;
-    if (b !== null && b !== undefined && b !== this.slot) {
-      game.showBanner(`${this.nameOf(b)} IS BUILDING`, 'ONE AT A TIME: HAVE A LOOK ROUND MEANWHILE', 2);
-      return;
-    }
+  // Ask for build mode (one builder at a time; the host says yes or who has
+  // it: what we last heard may be a moment old, so the host decides).
+  private askBuild(_game: Game, fromSummary: boolean) {
+    if (this.buildAsk) return;
     this.buildAsk = { fromSummary };
     this.link?.send(jsonFrame(0, { t: 'build', on: true }));
   }
