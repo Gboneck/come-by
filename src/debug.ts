@@ -52,13 +52,18 @@ function buildSheet() {
     { label: 'DOG SIDE', sprites: [d.sideStand, ...d.side, d.sideBark, d.sideLie] },
     { label: 'DOG GALLOP', sprites: d.gallop },
     { label: 'DOG IDLE', sprites: [...(d.poses.side.sniff ?? []), ...(d.poses.side.scratch ?? []), ...(d.poses.side.shake ?? [])] },
-    { label: 'DOG DOWN', sprites: [d.downStand, ...d.down, d.downBark, d.downLie] },
+    { label: 'DOG MOODS', sprites: [d.poses.side.skid, d.poses.side.look, ...d.poses.side.pant, ...d.poses.side.proud] },
+    { label: 'DOG 3/4 DOWN', sprites: [d.poses.dr.stand, ...d.poses.dr.run, d.poses.dr.bark, d.poses.dr.skid, ...d.poses.dr.proud] },
+    { label: 'DOG 3/4 GALLOP', sprites: [...d.poses.dr.sprint, ...d.poses.ur.sprint] },
+    { label: 'DOG 3/4 UP', sprites: [d.poses.ur.stand, ...d.poses.ur.run, d.poses.ur.bark, d.poses.ur.skid, ...d.poses.ur.proud] },
+    { label: 'DOG DOWN', sprites: [d.downStand, ...d.down, d.downBark, d.downLie, ...d.poses.down.pant, ...d.poses.down.proud] },
     { label: 'DOG UP', sprites: [d.upStand, ...d.up, d.upLie] },
     { label: 'HELPER', sprites: [h.sideStand, h.downStand, h.upStand] },
     ...SPECIES_ORDER.flatMap((id) =>
       Array.from({ length: SPECIES[id].coats }, (_, c) => {
         const s = animalSprites(id, c as Coat);
-        return { label: `${id.toUpperCase()} ${c}`, sprites: [...s.side, ...s.run, ...s.grazing, ...s.stand, s.alert, s.lie, ...s.down, s.downAlert, ...s.up] };
+        const x = animalSprites(id, c as Coat, true);
+        return { label: `${id.toUpperCase()} ${c}`, sprites: [...s.side, ...s.run, ...s.grazing, ...s.stand, ...s.chew, s.alert, s.startle, x.alert, s.lie, ...(s.swim?.side ?? []), ...(s.flow ?? []), ...s.down, s.downAlert, s.downStartle, ...s.up] };
       }),
     ),
   ];

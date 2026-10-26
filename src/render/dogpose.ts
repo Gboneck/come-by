@@ -1,6 +1,6 @@
 import { C } from '../palette';
-import { drawSpr } from '../gfx/sprite';
-import { pickDogFrame, viewOf, type DogSprites } from '../art/dog';
+import { drawSpr, type Sprite } from '../gfx/sprite';
+import { pickDogFrame, viewOf, type DogSprites, type DogState } from '../art/dog';
 import { playerDogSprites, soaked } from '../art/dogstyle';
 import { Dog } from '../entities/dog';
 import type { Helper } from '../entities/helper';
@@ -16,7 +16,8 @@ import { idlePose, isWet } from './dogidle';
 //   (a reversal at speed swings through the three-quarter views, with a
 //   skid as it digs in).
 // - Standing, it watches the stock: it turns its head (up to 90 degrees)
-//   towards the nearest animal it could be working, ears pricked.
+//   towards the nearest animal it could be working, ears pricked; trotting
+//   round them it turns a three-quarter view their way.
 // - Pants when its wind is gone, stands proud at "THAT'LL DO", comes out
 //   of the ford (or a long shower) soaked and dripping until it shakes off.
 
@@ -54,15 +55,26 @@ function aim(x: number, y: number, keep: number) {
 const FACE_VEC = { r: [1, 0], l: [-1, 0], d: [0, 1], u: [0, -1] } as const;
 
 // The nearest animal a dog standing here might be watching.
-function watching(game: Game, x: number, y: number): { x: number; y: number; d: number } | null {
-  let best: { x: number; y: number; d: number } | null = null;
+const seen = { x: 0, y: 0, d: 0 };
+function watching(game: Game, x: number, y: number): typeof seen | null {
+  seen.d = 110;
+  let found = false;
   for (const a of game.animals) {
     if (a.gone || a.pen || a.carried) continue;
     const d = Math.hypot(a.x - x, a.y - y);
-    if (d < 110 && (!best || d < best.d)) best = { x: a.x, y: a.y, d };
+    if (d < seen.d) {
+      seen.x = a.x;
+      seen.y = a.y;
+      seen.d = d;
+      found = true;
+    }
   }
-  return best;
+  return found ? seen : null;
 }
+
+// Scratch for the idles, so a frame allocates nothing.
+const idleIn = { inWater: false, busy: false, side: false, flip: false, stand: null as unknown as Sprite };
+const standIn: DogState = { view: 0, speed: 0, sprint: false, phase: 0, lying: false, lieT: 0, rise: 0, bark: 0, t: 0 };
 
 const THATLL_DO = "THAT'LL DO";
 
@@ -108,12 +120,14 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   p.base = p.fresh ? dir8(p.hx, p.hy) : aim(p.hx, p.hy, p.base);
   let want = p.base;
   let look = false;
-  if (!moving && !lying && bark <= 0) {
+  // Trotting round them (not flat out), it keeps an eye on them too.
+  const working = moving && !sprint && speed < 55;
+  if ((!moving || working) && !lying && bark <= 0) {
     const w = watching(game, d.x, d.y);
-    if (w) {
+    if (w && (!moving || w.d < 70)) {
       const k = turnBy(want, dir8(w.x - d.x, w.y - d.y));
       if (k !== 0 && Math.abs(k) <= 2) want = (want + Math.sign(k) + 8) % 8;
-      look = w.d < 80 && Math.abs(k) <= 2;
+      look = !moving && w.d < 80 && Math.abs(k) <= 2;
     }
   }
   if (p.fresh || lying) p.view = want;
@@ -149,10 +163,14 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   const base: DogSprites = isDog ? (d.skin ?? playerDogSprites()) : d.sprites;
   const soakedNow = inWater || isWet(d);
   const S = soakedNow ? soaked(base) : base;
-  const stand = { view: p.view, speed: 0, sprint: false, phase, lying: false, lieT: 0, rise: 0, bark: 0, t };
-  const sideOn = p.view === 0 || p.view === 4;
+  standIn.view = p.view;
+  idleIn.inWater = inWater;
+  idleIn.busy = lying || bark > 0 || speed > 4 || rise > 0 || proud;
+  idleIn.side = p.view === 0 || p.view === 4;
+  idleIn.flip = p.view === 4;
+  idleIn.stand = pickDogFrame(S, standIn).s;
   const raining = game.weather.rain > 0.3 && game.season.snow < 0.4;
-  const ip = idlePose(d, { inWater, busy: lying || bark > 0 || speed > 4 || rise > 0 || proud, side: sideOn, flip: p.view === 4, stand: pickDogFrame(S, stand).s }, S, t, raining, () => game.life.spray(d.x, d.y - 3));
+  const ip = idlePose(d, idleIn, S, t, raining, () => game.life.spray(d.x, d.y - 3));
   if (ip) {
     drawSpr(g, ip.s, d.x + ip.dx, d.y + 2, ip.flip);
     return;
