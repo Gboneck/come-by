@@ -113,7 +113,9 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, ni
         s = cyc(S.run, f);
         hop += RUN_SINK[id]?.[f] ?? 0;
       } else {
-        s = cyc(S.side, a.phase);
+        // Hauling (a.load: a sledge, panniers, a travois), it leans into it
+        // head down at every step.
+        s = (a as Animal & { load?: unknown }).load && !a.young ? S.side[step4(a.phase) % 2 ? 3 : 1] : cyc(S.side, a.phase);
         // A duck's waddle bobs; a lamb skips now and then.
         if (id === 'duck' && !a.young) hop -= step4(a.phase) % 2;
         if (a.young && !wary && hash2(a.id, Math.floor(t * 1.6), 4) < 0.3) {

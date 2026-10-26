@@ -187,6 +187,8 @@ needs a line there.
 - `src/main.ts` boot + loop; `src/game.ts` state machine and orchestration.
 - `src/gfx/` screen scaling, sprites, font, pixel primitives.
 - `src/art/` sprite grids and procedural art (trees, rocks, buildings);
+  the dog's frames are put together from parts in `dog.ts` (`pickDogFrame`),
+  townsfolk from `villager()` in `people.ts`;
   the player's choices: `dogstyle.ts` (markings, neck piece),
   `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
 - `src/world/` tile map, regions, terrain/canopy baking; `places.ts` the
@@ -204,7 +206,9 @@ needs a line there.
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
   pieces, `textfield.ts` typed names.
 - `src/render/` world drawing and the night dither; `animals.ts` animal
-  poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
+  poses (gaits, startles, wide eyes, ducks afloat), `dogpose.ts` every
+  dog's poses (eight-way turning, watching the stock, skids, panting, the
+  proud stance, soaked), `dogidle.ts` its idles, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
   wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
   the model for helper dogs.

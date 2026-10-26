@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { ellipse, px } from '../gfx/draw';
 import { drawSpr } from '../gfx/sprite';
-import { predatorSprites } from '../art/predators';
+import { predatorSprites, type PFrame } from '../art/predators';
 import { BLOCK_ANIMAL, CS, SOLID, type WorldMap } from '../world/map';
 import { collideCircle, wallRepulse } from '../world/collide';
 import { PathFollower } from '../world/path';
@@ -29,6 +29,7 @@ export interface PredCtx {
 }
 
 const tmp = { x: 0, y: 0 };
+const cyc = (a: PFrame[], f: number) => a[((Math.floor(f) % a.length) + a.length) % a.length];
 
 export class Predator {
   x = -1000;
@@ -285,39 +286,79 @@ export class Predator {
     void CS;
   }
 
+  // ---- Drawing. Reads the state above and never feeds back into it. ----
+  // Poses come only from what co-op guests are sent too (state, facing,
+  // speed, digT), so a friend sees the same coyote.
+
+  // How long a dig opens with a howl.
+  private get howlFor() { return this.kind === 'wolf' ? 1.7 : 1.1; }
+
+  private pose(): PFrame {
+    const S = predatorSprites(this.kind);
+    const v = Math.hypot(this.vx, this.vy);
+    const moving = v > 3;
+    const F = this.face === 'd' ? S.down : this.face === 'u' ? S.up : null;
+    const ph = this.phase;
+    switch (this.state) {
+      case 'dig': {
+        if (F) return F.stand;
+        // At the pen it sits back and howls first, then digs in.
+        const t = this.digT, H = this.howlFor;
+        if (t < H) {
+          if (t < 0.2 || t > H - 0.15) return S.howl[0];
+          if (t < 0.35 || t > H - 0.3) return S.howl[1];
+          // A wolf holds the long note; a coyote yips.
+          return this.kind === 'wolf' ? S.howl[2] : S.howl[1 + (Math.floor(t * 7) % 2)];
+        }
+        return cyc(S.dig, (t - H) * 9);
+      }
+      case 'carry':
+        return cyc(F ? F.carry : S.carry, moving ? ph * 2 : 0);
+      case 'flee':
+        return moving ? cyc(F ? F.flee : S.flee, ph * (F ? 0.6 : 0.9)) : F ? F.stand : S.stand;
+      default:
+        if (!moving) return F ? F.stand : S.stand;
+        // The rush: close to its quarry it lengthens into a flat gallop.
+        if (v > (this.huntSpeed + this.runSpeed) / 2) return cyc(F ? F.run : S.rush, ph * (F ? 0.6 : 0.9));
+        return cyc(F ? F.creep : S.creep, ph * 1.6);
+    }
+  }
+
   drawShadow(g: CanvasRenderingContext2D) {
     if (!this.active) return;
-    ellipse(g, this.x - 1, this.y + 1, this.kind === 'wolf' ? 7 : 6, 1, C.sage);
+    const wolf = this.kind === 'wolf';
+    const side = this.face === 'l' || this.face === 'r';
+    const sitting = this.state === 'dig' && this.digT < this.howlFor;
+    const rx = !side ? (wolf ? 4 : 3) : sitting ? (wolf ? 5 : 4) : wolf ? 8 : 6;
+    const dx = this.face === 'r' ? -1 : this.face === 'l' ? 1 : 0;
+    ellipse(g, this.x + dx * (sitting ? 2 : 1), this.y + 1, rx, 1, C.sage);
   }
 
   draw(g: CanvasRenderingContext2D) {
     if (!this.active) return;
-    const S = predatorSprites(this.kind);
-    const moving = Math.hypot(this.vx, this.vy) > 3;
-    const digging = this.state === 'dig';
-    const f = Math.floor(this.phase);
-    const y = this.y + 1 + (digging && Math.floor(this.digT * 8) % 2 === 0 ? 1 : 0);
-    if (this.face === 'l' || this.face === 'r') {
-      const fr = moving ? S.side[((f % S.side.length) + S.side.length) % S.side.length] : S.side[1];
-      drawSpr(g, fr, this.x, y, this.face === 'l');
-    } else {
-      const arr = this.face === 'd' ? S.down : S.up;
-      drawSpr(g, arr[moving ? ((f % 2) + 2) % 2 : 0], this.x, y);
-    }
+    drawSpr(g, this.pose().s, this.x, this.y + 1, this.face === 'l');
   }
 
-  // Eyes shine above the dark.
+  // Eyes catch the light above the dark: a pair of glints that ride with
+  // the head, blink now and then, and flash when it looks your way.
   drawEyes(g: CanvasRenderingContext2D, t: number) {
-    if (!this.active || this.face === 'u') return;
-    if (Math.floor(t * 1.7 + this.exitX) % 9 === 0) return; // blink
-    const S = predatorSprites(this.kind);
-    const [ex, ey] = S.eyeSide;
-    if (this.face === 'r') { px(g, this.x + ex, this.y + 1 + ey, C.butter); px(g, this.x + ex - 2, this.y + 1 + ey, C.butter); }
-    else if (this.face === 'l') { px(g, this.x - ex, this.y + 1 + ey, C.butter); px(g, this.x - ex + 2, this.y + 1 + ey, C.butter); }
-    else {
-      const w = this.kind === 'wolf' ? 2 : 2;
-      px(g, this.x - w, this.y + 1 - (this.kind === 'wolf' ? 6 : 5), C.butter);
-      px(g, this.x + w, this.y + 1 - (this.kind === 'wolf' ? 6 : 5), C.butter);
+    if (!this.active) return;
+    const e = this.pose().eyes;
+    if (!e.length) return;
+    const seed = Math.abs(this.exitX * 0.618) % 1;
+    const per = 2.7 + seed * 1.9;
+    const c = (t + seed * 9) % per;
+    if (c < 0.12 || (seed > 0.5 && c > 0.3 && c < 0.4)) return; // a blink, some a double
+    const flip = this.face === 'l';
+    const flare = this.face === 'd' && (t * 1.3 + seed * 5) % 3.1 < 0.14;
+    const x = Math.round(this.x), y = Math.round(this.y + 1);
+    // Dark sockets either side first, so the pair stands out of the dither
+    // (and from the buttercups in the grass).
+    for (let i = 0; i < e.length; i += 2) {
+      const ex = x + (flip ? -e[i] : e[i]), ey = y + e[i + 1];
+      px(g, ex - 1, ey, C.plum);
+      px(g, ex + 1, ey, C.plum);
     }
+    for (let i = 0; i < e.length; i += 2) px(g, x + (flip ? -e[i] : e[i]), y + e[i + 1], flare ? C.wool : C.butter);
   }
 }

@@ -28,7 +28,12 @@ import { defOf } from '../ranch/catalog';
 // Everything here reads game state and changes nothing in the sim, except
 // the rancher at a pen gate: a mild pressure source the flock turns from.
 
-export type FolkId = 'rancher' | 'carpenter' | 'miller' | 'drover' | 'auctioneer' | 'judge' | 'shepherd';
+export type FolkId = 'rancher' | 'carpenter' | 'miller' | 'drover' | 'auctioneer' | 'judge' | 'shepherd' | VillageId;
+// Ready-made villagers for the village green: the smith, three stallholders,
+// six cottagers (two of them children) and the hall's warden. Their looks
+// are in CAST; whoever builds the village spawns them (new Person(id, x, y)
+// into game.folk.people) and gives them their day with go(steps).
+export type VillageId = 'smith' | 'baker' | 'grocer' | 'weaver' | 'cottager1' | 'cottager2' | 'cottager3' | 'cottager4' | 'cottager5' | 'cottager6' | 'warden';
 type Facing = 'd' | 'u' | 'l' | 'r';
 type Pose = 'stand' | 'walk' | 'carry' | 'work' | 'crouch' | 'sit' | 'wave';
 
@@ -42,6 +47,17 @@ const CAST: Record<FolkId, { look: VillagerSpec; pitch: number; speed: number; c
   auctioneer: { look: { hat: 'straw', hatColor: 'y', coat: 's', legs: 't', apron: 'y' }, pitch: 300, speed: 22 },
   judge: { look: { hat: 'bowler', hatColor: 'p', coat: 't', legs: 's', hair: 'w', beard: 'w', build: 'tall' }, pitch: 240, speed: 18 },
   shepherd: { look: { hat: 'hood', coat: 'o', legs: 't', beard: true }, pitch: 190, speed: 20, crook: true },
+  smith: { look: { hat: 'cap', hatColor: 's', coat: 'w', legs: 't', apron: 'p', build: 'stout', beard: true }, pitch: 160, speed: 20 },
+  baker: { look: { hat: 'bonnet', hatColor: 's', coat: 'w', legs: 't', skirt: true, apron: 'y' }, pitch: 350, speed: 21 },
+  grocer: { look: { hat: 'straw', hatColor: 'y', coat: 'o', legs: 's', apron: 'w' }, pitch: 250, speed: 22 },
+  weaver: { look: { hat: 'none', hair: 'p', coat: 't', legs: 'o', skirt: true, scarf: 'y' }, pitch: 320, speed: 21 },
+  cottager1: { look: { hat: 'cap', hatColor: 't', coat: 'o', legs: 't' }, pitch: 220, speed: 23 },
+  cottager2: { look: { hat: 'bonnet', hatColor: 'y', coat: 's', legs: 'w', skirt: true }, pitch: 340, speed: 22 },
+  cottager3: { look: { hat: 'none', hair: 'y', coat: 'w', legs: 's', build: 'short' }, pitch: 420, speed: 27 },
+  cottager4: { look: { hat: 'brim', hatColor: 's', coat: 't', legs: 'o', beard: true }, pitch: 200, speed: 22 },
+  cottager5: { look: { hat: 'bonnet', hatColor: 't', coat: 'o', legs: 'y', skirt: true }, pitch: 310, speed: 21 },
+  cottager6: { look: { hat: 'none', hair: 'p', coat: 's', legs: 'w', build: 'short' }, pitch: 440, speed: 28 },
+  warden: { look: { hat: 'bowler', hatColor: 't', coat: 'w', legs: 't', build: 'tall', scarf: 'y' }, pitch: 230, speed: 19 },
 };
 const BUYER: Partial<Record<YardId, FolkId>> = { mill: 'miller', drover: 'drover', sale: 'auctioneer' };
 
@@ -716,9 +732,11 @@ export class Folk {
     return out;
   }
 
+  // Everyone carrying a lantern lights their way.
   lights(ox: number, oy: number): Light[] {
-    const r = this.rancher;
-    return r.shown && r.lantern ? [{ x: r.x - ox, y: r.y - 4 - oy, r: 30 }] : [];
+    const out: Light[] = [];
+    for (const p of this.people) if (p.shown && p.lantern) out.push({ x: p.x - ox, y: p.y - 4 - oy, r: 30 });
+    return out;
   }
 }
 
@@ -736,7 +754,7 @@ function dressNow(): Dress {
 }
 
 // A small per-person offset so folk do not blink and gesture in step.
-const SEED: Record<FolkId, number> = { rancher: 0, carpenter: 1.3, miller: 2.1, drover: 0.7, auctioneer: 1.9, judge: 2.6, shepherd: 0.4 };
+const SEED: Partial<Record<FolkId, number>> = { rancher: 0, carpenter: 1.3, miller: 2.1, drover: 0.7, auctioneer: 1.9, judge: 2.6, shepherd: 0.4, smith: 1.1, baker: 2.4, grocer: 0.2, weaver: 1.7, cottager1: 0.9, cottager2: 2.2, cottager3: 0.5, cottager4: 1.5, cottager5: 2.8, cottager6: 0.3, warden: 1.0 };
 
 // Talking: frames of the gesture loop (hand up, palm out and a nod, a
 // point, a nod) at five a second.
