@@ -1,5 +1,6 @@
 import { C } from '../palette';
 import { px } from '../gfx/draw';
+import { PX, fine } from '../gfx/screen';
 import { Pen, type Rot } from '../ranch/buildings';
 import type { Ranch } from '../ranch/ranch';
 import { TS } from '../world/map';
@@ -7,24 +8,26 @@ import { TS } from '../world/map';
 // Build mode: the drove road's edges (nothing may be built on it), and
 // which way a pen's gate opens.
 
+// Both on the fine grid (two fine pixels to a world pixel).
 export function drawRoad(g: CanvasRenderingContext2D, ranch: Ranch, t0x: number, t0y: number, t1x: number, t1y: number, t: number) {
   const on = (x: number, y: number) => ranch.onRoad(x, y);
-  const shift = Math.floor(t * 4) % 4; // the dashes creep along, like a drove
-  for (let ty = t0y; ty < t1y; ty++)
-    for (let tx = t0x; tx < t1x; tx++) {
-      if (!on(tx, ty)) continue;
-      const X = tx * TS, Y = ty * TS;
-      g.fillStyle = C.butter;
-      for (let i = 0; i < TS; i++) {
-        if ((i + shift) % 4 >= 2) continue;
-        if (!on(tx, ty - 1)) g.fillRect(X + i, Y, 1, 1);
-        if (!on(tx, ty + 1)) g.fillRect(X + i, Y + TS - 1, 1, 1);
-        if (!on(tx - 1, ty)) g.fillRect(X, Y + i, 1, 1);
-        if (!on(tx + 1, ty)) g.fillRect(X + TS - 1, Y + i, 1, 1);
+  const shift = Math.floor(t * 8) % 8; // the dashes creep along, like a drove
+  const N = TS * PX;
+  fine(g, (fg) => {
+    fg.fillStyle = C.butter;
+    for (let ty = t0y; ty < t1y; ty++)
+      for (let tx = t0x; tx < t1x; tx++) {
+        if (!on(tx, ty)) continue;
+        const X = tx * N, Y = ty * N;
+        for (let i = 0; i < N; i += 2) {
+          if ((i + shift) % 8 >= 4) continue;
+          if (!on(tx, ty - 1)) fg.fillRect(X + i, Y, 2, 1);
+          if (!on(tx, ty + 1)) fg.fillRect(X + i, Y + N - 1, 2, 1);
+          if (!on(tx - 1, ty)) fg.fillRect(X, Y + i, 1, 2);
+          if (!on(tx + 1, ty)) fg.fillRect(X + N - 1, Y + i, 1, 2);
+        }
       }
-      // A faint wear pattern down the middle of the road.
-      if ((tx + ty) % 2 === 0) px(g, X + 4, Y + 4, C.moss);
-    }
+  });
 }
 
 // An arrow just outside a pen's gate, pointing the way the stock walks out.
@@ -36,13 +39,13 @@ export function drawGateMark(g: CanvasRenderingContext2D, tx: number, ty: number
   const a = p.gatePoint(5), b = p.gatePoint(11);
   const dx = Math.sign(Math.round(b.x - a.x)), dy = Math.sign(Math.round(b.y - a.y));
   const bob = Math.floor(t * 3) % 2;
-  const x = Math.round(a.x + dx * bob), y = Math.round(a.y + dy * bob);
+  const x = Math.round((a.x + dx * bob) * PX), y = Math.round((a.y + dy * bob) * PX);
   const col = ok ? C.butter : C.wool;
-  // Shaft and head (head points out of the pen).
-  for (let i = 0; i < 5; i++) px(g, x + dx * i, y + dy * i, col);
-  const hx = x + dx * 4, hy = y + dy * 4;
-  for (let k = 1; k <= 2; k++) {
-    px(g, hx - dx * k + dy * k, hy - dy * k + dx * k, col);
-    px(g, hx - dx * k - dy * k, hy - dy * k - dx * k, col);
-  }
+  fine(g, (fg) => {
+    // A plum-edged shaft and head (head points out of the pen).
+    const at = (i: number, j: number, c: string) => px(fg, x + dx * i - dy * j, y + dy * i + dx * j, c);
+    for (let i = -1; i < 10; i++) for (const j of [-2, 2]) at(i, j, C.plum);
+    for (let i = 0; i < 9; i++) for (const j of [-1, 0, 1]) at(i, j, col);
+    for (let k = 1; k <= 5; k++) for (let j = -k; j <= k; j++) at(9 + 5 - k, j, Math.abs(j) === k ? C.plum : col);
+  });
 }
