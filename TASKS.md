@@ -1115,6 +1115,67 @@ less noise". The world is now drawn at two fine pixels to a world pixel
         | worst | 18.4 ms | 18.7 ms | 25.6 ms | 28.8 ms |
         Faster than base: the per-frame ground-shade and season pixel
         passes are gone, and the chunks are painted once per moment.
+- [x] Evening, night and fog at double density (from the user: "make sure
+      the graphic density update makes the evening / night and fog
+      improved"):
+      - Golden hour: the low sun is in the west. Tree and building shadows
+        stretch out long to the east, and the trees' and roofs' west sides
+        warm to buttercup.
+      - Blue hour: the dark comes in teal first (Platform's ramp), calm,
+        with no extra marks.
+      - The farmhouse is lit from within. Its front is graded from the
+        windows out to the corners, the lit panes are drawn above the dark
+        with a soft halo each, and light spills from the ground floor onto
+        the yard. Lanterns have graded halos too. The barn's lit door
+        throws a long pool onto the yard.
+      - Moonlight catches the treetops, the roof ridges and the fence
+        rails. It is drawn above the dark, so they read as edges at night.
+      - Fireflies follow the season: all of them on a summer night, two in
+        five as the leaves turn, none in snow. It is chosen when they are
+        drawn, so the random numbers (and the seeded runs) don't change.
+      - Fog lies by place (world/fog.ts):
+        - thick over the river and ponds and along their banks
+        - pooled in the Rolling Hills' hollows
+        - in a band at the forest's feet
+        - thin on the rock tops and in the High Range
+        At night a bank stands in for some of the dark, so fog nights show
+        pale drifting banks instead of looking like any other night (a
+        small change in render/night.ts, Platform's file, sent to them).
+      - Lightning shows the land for a beat: the dark lifts and the moonlit
+        edges go bright under a thin veil. It used to put a sheet of wool
+        dots over everything.
+      - Dig spots for the loot session (art/dig.ts `digSpot`):
+        - turned earth with clods, and a glint when the dog is close
+        - an open hole with a lit far wall, a lip of soil and a heap
+          beside it (white in snow)
+        - a mound with a bone end showing
+        - stones laid in an X
+      - Before/after shots: `node scripts/skyshots.mjs --tag=...`, then
+        `--compare=before,after` (golden, blue, dusk, night, fog, fog
+        night, storm and a lightning strike, on the tier-5 ranch at phone
+        size).
+      - Checks:
+        - typecheck, build and shot: clean
+        - picturetest: ok
+        - tune --seed=7 identical to before, for sheep and for cows in a
+          winter storm
+        - nighttest and weathertest: the same kind of results as before
+          (both unseeded)
+        - perftest against the commit before (best batch; the machine was
+          busy, so numbers moved about 1 ms run to run):
+          | scene | 4x now | 4x before | 6x now | 6x before |
+          |---|---|---|---|---|
+          | title | 5.7 ms | 5.3 ms | 10.1 ms | 9.5 ms |
+          | day | 10.9 ms | 10.5 ms | 17.1 ms | 17.7 ms |
+          | worst | 18.1 ms | 17.0 ms | 27.2 ms | 26.1 ms |
+          | fog night | | | 29.4 ms (median 30.9) | 26.8 ms (median 31.0) |
+          Drawing one night frame over and over costs the same as before
+          (17.45 vs 17.53 ms at 4x). Three costs found on the way were cut:
+          - Moon edges went from a fill per pixel to slices of a
+            pre-dithered strip, with runs merged and only rails and ridges
+            kept.
+          - The lantern halo is a cached picture.
+          - The farmhouse lost its per-pane light holes and the faint glows.
 
 ## M34 Double density: fine pixels and a readable font (platform, round five)
 - [x] Two grids: world pixels (the sim, the map, layout, the old art) and
@@ -2266,6 +2327,30 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
   gives the same picture (picturetest).
 - `art/fine.ts` `grid()` draws palette-letter pictures on the fine grid,
   compiled into runs once, because cached art is recorded every frame.
+- Moonlit edges (art/moon.ts) are collected as the art draws (roof ridges,
+  rails; the canopy's rims come baked with each chunk) and drawn
+  just above the night overlay. Drawn under it, they would be dithered
+  away like everything else.
+- In the golden hour the sun is taken to be in the west (the shadows fall
+  east), so the warm highlights go on the west side of trees and roofs,
+  not the usual upper right. Long shadows are the shadow silhouette laid
+  again along the sun's line. They are baked into each chunk's lit ground,
+  so they cost nothing per frame.
+- The farmhouse at night is a few lights, not one big disc: a graded
+  pool over the front, spills under the ground-floor windows, the door's
+  pool. The lit panes are drawn above the dark (windowGlow), so they stay
+  clear without a light each. With only the windows' own pools, the front
+  was left in the dither and read as noise at dusk.
+- Moonlit edges are kept to long runs (rails, ridges): post caps and
+  one-pixel roof-slope steps were hundreds of tiny draws a frame, the
+  costliest part of the night work, for glints too small to see.
+- Lightning at night lowers the dark for its beat (by 85%, then 50%, 20%)
+  and keeps only a 3-step veil, rather than a 10-step sheet of wool and
+  buttercup: the scene shows, which is what a flash is for. By day (no
+  dark to lift) it flashes as before.
+- Fog at night lifts some of the dark where it lies (0.45 of its level), so
+  banks show as paler mist. Before, the night's ~2/3 cap left no room for
+  fog at full dark.
 - The screen aims for 432 fine pixels on the short side, not 480: the scale
   must be a whole number of device pixels per fine pixel, and on an upright
   iPhone (1170 device px) that is 3 (195 world px wide) or 2 (292 wide with

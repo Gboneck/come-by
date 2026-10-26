@@ -65,6 +65,8 @@ interface Chunk {
   cKey: string;
   canopy: HTMLCanvasElement | null;
   shadow: HTMLCanvasElement | null; // the canopy's silhouette in sage
+  moon: HTMLCanvasElement | null; // moonlight on the clumps' tops, for nights
+  moonBox: [number, number, number, number]; // where in the chunk it has any
   lKey: string;
   lit: HTMLCanvasElement | null;
   used: number;
@@ -93,7 +95,7 @@ export class FineWorld {
     if (fresh) this.frame++;
     this.look = look;
     this.key = lookKey(look);
-    this.canopyKey = `${look.snow}${look.leaves}${look.bloom}`;
+    this.canopyKey = `${look.snow}${look.leaves}${look.bloom}${look.golden >= 2 ? 1 : 0}`;
     this.dx = dx * PX;
     this.dy = dy * PX;
     this.sun = sun;
@@ -122,8 +124,9 @@ export class FineWorld {
       this.update(baked, c);
     }
     this.stats.ms = performance.now() - t0;
-    // Keep the most recently seen chunks (about 40MB at most), so walking
-    // back over the same ground costs nothing.
+    // Keep the most recently seen chunks (about 40MB at most, a little more
+    // in the woods, which keep their moonlight too), so walking back over
+    // the same ground costs nothing.
     if (this.frame % 60 === 0 && this.chunks.size > MAX_CHUNKS) {
       const old = [...this.chunks.entries()].sort((p, q) => p[1].used - q[1].used);
       for (let k = 0; k < old.length - MAX_CHUNKS; k++) this.chunks.delete(old[k][0]);
@@ -144,7 +147,7 @@ export class FineWorld {
   private chunk(cx: number, cy: number): Chunk {
     const k = cy * 1024 + cx;
     let c = this.chunks.get(k);
-    if (!c) this.chunks.set(k, (c = { cx, cy, gKey: '', ground: null, cKey: '', canopy: null, shadow: null, lKey: '', lit: null, used: this.frame }));
+    if (!c) this.chunks.set(k, (c = { cx, cy, gKey: '', ground: null, cKey: '', canopy: null, shadow: null, moon: null, moonBox: [0, 0, 0, 0], lKey: '', lit: null, used: this.frame }));
     return c;
   }
 
@@ -160,9 +163,51 @@ export class FineWorld {
     if (c.cKey !== this.canopyKey) {
       const px = paintCanopy(baked, fx, fy, CHUNK, CHUNK, this.look);
       c.canopy = toCanvas(px, c.canopy);
-      const sh = new Uint32Array(px.length);
-      for (let i = 0; i < px.length; i++) if (px[i]) sh[i] = U32.sage;
+      // The shadow: the silhouette in sage with a soft two-step dithered
+      // edge (the penumbra of a low sun).
+      const sh = new Uint32Array(px.length), out = new Uint8Array(px.length);
+      for (let i = 0; i < px.length; i++) out[i] = px[i] ? 0 : 3;
+      for (let y = 0; y < CHUNK; y++)
+        for (let x = 0; x < CHUNK; x++) {
+          const i = y * CHUNK + x;
+          if (!out[i]) continue;
+          let v = out[i];
+          if (x > 0) v = Math.min(v, out[i - 1] + 1);
+          if (y > 0) v = Math.min(v, out[i - CHUNK] + 1);
+          out[i] = v;
+        }
+      for (let y = CHUNK - 1; y >= 0; y--)
+        for (let x = CHUNK - 1; x >= 0; x--) {
+          const i = y * CHUNK + x;
+          if (!out[i]) continue;
+          let v = out[i];
+          if (x < CHUNK - 1) v = Math.min(v, out[i + 1] + 1);
+          if (y < CHUNK - 1) v = Math.min(v, out[i + CHUNK] + 1);
+          out[i] = v;
+        }
+      const moonPx = new Uint32Array(px.length);
+      let mx0 = CHUNK, my0 = CHUNK, mx1 = -1, my1 = -1;
+      for (let y = 0; y < CHUNK; y++)
+        for (let x = 0; x < CHUNK; x++) {
+          const i = y * CHUNK + x;
+          const t = BAYER4[(y & 3) * 4 + (x & 3)];
+          if (out[i] === 0) sh[i] = U32.sage;
+          else if (out[i] === 1 ? t < 8 : out[i] === 2 ? t < 3 : false) sh[i] = U32.sage;
+          // Moonlight along the tops of the clumps (where the leaves above
+          // are open sky or a clump's dark rim).
+          const p = px[i];
+          if (p && p !== U32.plum && y > 0 && (!px[i - CHUNK] || px[i - CHUNK] === U32.plum)) {
+            if (t < 5) moonPx[i] = U32.wool;
+            else if (t < 11) moonPx[i] = U32.teal;
+            if (x < mx0) mx0 = x;
+            if (x > mx1) mx1 = x;
+            if (y < my0) my0 = y;
+            my1 = y;
+          }
+        }
       c.shadow = toCanvas(sh, c.shadow);
+      c.moon = mx1 >= 0 ? toCanvas(moonPx, c.moon) : null; // open ground has none
+      c.moonBox = [mx0, my0, mx1 - mx0 + 1, my1 - my0 + 1];
       c.cKey = this.canopyKey;
       // Neighbours' shadows may fall here: their lit grounds are redone.
       for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const n = this.chunks.get((c.cy + j) * 1024 + c.cx + i); if (n) n.lKey = ''; }
@@ -175,14 +220,23 @@ export class FineWorld {
     lg.clearRect(0, 0, CHUNK, CHUNK);
     lg.drawImage(c.ground!, 0, 0);
     if (this.sun) {
-      for (let j = -1; j <= 1; j++)
-        for (let i = -1; i <= 1; i++) {
-          const n = this.chunks.get((c.cy + j) * 1024 + c.cx + i);
-          if (!n?.shadow) continue;
-          const x = i * CHUNK + this.dx, y = j * CHUNK + this.dy;
-          if (x >= CHUNK || y >= CHUNK || x + CHUNK <= 0 || y + CHUNK <= 0) continue;
-          lg.drawImage(n.shadow, x, y);
-        }
+      // In the golden hour the low sun draws the shadows out: the silhouette
+      // is laid again along the sun's line every few fine pixels, out to
+      // twice its reach and more.
+      const reach = 1 + 0.4 * this.look.golden;
+      const steps = Math.max(0, Math.ceil(((reach - 1) * Math.hypot(this.dx, this.dy)) / 3));
+      for (let k = 0; k <= steps; k++) {
+        const f = steps ? 1 + ((reach - 1) * k) / steps : 1;
+        const sx = Math.round(this.dx * f), sy = Math.round(this.dy * f);
+        for (let j = -1; j <= 1; j++)
+          for (let i = -1; i <= 1; i++) {
+            const n = this.chunks.get((c.cy + j) * 1024 + c.cx + i);
+            if (!n?.shadow) continue;
+            const x = i * CHUNK + sx, y = j * CHUNK + sy;
+            if (x >= CHUNK || y >= CHUNK || x + CHUNK <= 0 || y + CHUNK <= 0) continue;
+            lg.drawImage(n.shadow, x, y);
+          }
+      }
     }
     c.lKey = this.litKey();
   }
@@ -199,6 +253,20 @@ export class FineWorld {
           const img = c?.lit && c.lKey ? c.lit : c?.ground;
           if (img) fg.drawImage(img, x, y);
           else fg.drawImage(baked.ground, (cx * CHUNK) / PX, (cy * CHUNK) / PX, CHUNK / PX, CHUNK / PX, x, y, CHUNK, CHUNK);
+        }
+    });
+  }
+
+  // The treetops' moonlight, above the night overlay.
+  drawMoon(g: CanvasRenderingContext2D, ox: number, oy: number, W: number, H: number) {
+    const { c0, c1, r0, r1 } = this.range(ox, oy, W, H, 0);
+    fine(g, (fg) => {
+      for (let cy = r0; cy <= r1; cy++)
+        for (let cx = c0; cx <= c1; cx++) {
+          const c = this.chunks.get(cy * 1024 + cx);
+          if (!c?.moon) continue;
+          const [x, y, w, h] = c.moonBox;
+          fg.drawImage(c.moon, x, y, w, h, cx * CHUNK - ox * PX + x, cy * CHUNK - oy * PX + y, w, h);
         }
     });
   }

@@ -62,6 +62,7 @@ export class Life {
   private birds: Bird[] = [];
   private birdT = 12;
   private glows: Glow[] = [];
+  private glowShare = 1; // how many of the fireflies the season shows
   private prints: Print[] = [];
   private bits: Bit[] = [];
   private smokeT = 0;
@@ -341,6 +342,10 @@ export class Life {
 
   // Fireflies along the meadows at dusk and through the night.
   private updateGlows(game: Game, dt: number, v: { ox: number; oy: number; W: number; H: number }, dark: number, night: boolean) {
+    // All of them show on a summer night, fewer as autumn comes, none in the
+    // snow (drawGlow), so the random numbers drawn here never change.
+    const se = game.season;
+    this.glowShare = se.snow > 0.3 ? 0 : se.leaves > 0.5 ? 0.4 : 1;
     const want = Math.round((((night ? 1 : Math.max(0, dark - 0.2) * 3) * (v.W * v.H)) / 7000) * quality.fx);
     if (this.glows.length < want && Math.random() < dt * 6) {
       const x = v.ox + Math.random() * v.W, y = v.oy + Math.random() * v.H;
@@ -508,9 +513,11 @@ export class Life {
   // Above the night: fireflies pulse in the dark, a glow round the bright
   // ones. On the fine grid.
   drawGlow(g: CanvasRenderingContext2D) {
+    if (this.glowShare <= 0) return;
     fine(g, (fg) => {
       fg.fillStyle = C.butter;
       for (const f of this.glows) {
+        if ((f.rate - 0.6) / 0.8 >= this.glowShare) continue; // the season's share (rate is even over 0.6..1.4)
         const s = Math.sin(f.ph * 2.2);
         if (s < 0.35) continue;
         const X = Math.round(f.x * PX), Y = Math.round(f.y * PX);

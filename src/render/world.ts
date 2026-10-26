@@ -10,7 +10,10 @@ import { valleyLights } from '../art/valley';
 import { penDrawables } from '../art/paddock';
 import type { Look } from '../world/fineground';
 import { farmhouseWindows, windowGlow, barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
-import { defaultFogField, hasFogField, type Light } from './night';
+import { hasFogField, setFogField, type Light } from './night';
+import { fogDensity } from '../world/fog';
+import { drawMoonEdges, moon, moonFrame } from '../art/moon';
+import { PX } from '../gfx/screen';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
 import { blueHour, goldenHour, skyDarkness, skySlope, sunShadow } from './sky';
 import { drawShafts } from './light';
@@ -73,6 +76,9 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // The season: recoloured layers (rebuilt only when a step changes) and
   // the look that roofs, fences and decor read as they draw.
   setSeasonLook(game.season);
+  // Moonlit edges gather as the art draws (art/moon.ts).
+  const darkNow = skyDarkness(game.day);
+  moonFrame(darkNow > 0.35 ? Math.min(1, (darkNow - 0.35) / 0.4) : 0, 0);
   // The ground with the trees' shadows thrown by the sun (none at night);
   // buildings read the same light as they draw.
   const sh = sunShadow(game.day);
@@ -168,9 +174,18 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     lights.push(...game.folk.lights(ox, oy));
     lights.push(...valleyLights(game, ox, oy)); // the village's windows and forge
     const f = game.ranch.farmhouse;
-    if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
+    if (f) {
+      // The farmhouse lit from within: its front graded from the windows out
+      // to the corners (the panes themselves are drawn above the dark, with
+      // windowGlow), light spilling from the ground floor's windows onto the
+      // yard, the door's pool.
+      lights.push({ x: f.cx - ox, y: f.y1 - 8 - oy, r: (f.x1 - f.x0) * 0.58 + fl(0), power: 0.8, soft: 0.7 });
+      for (const [wx, wy, ww] of farmhouseWindows(f)) if (wy >= f.y1 - 9) lights.push({ x: wx + ww / 2 - ox, y: f.y1 + 5 - oy, r: 16, power: 0.7, soft: 0.95 });
+      lights.push({ x: f.cx - ox, y: f.y1 + 5 - oy, r: 20 + fl(9), power: 0.85, soft: 0.85 });
+    }
     decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1), warm: true }));
-    for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
+    // The barn: its lit doorway spills a long pool out onto the yard.
+    for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 4 - oy, r: (b.level >= 2 ? 40 : 34) + fl(b.id), power: 0.85, soft: 0.85 });
     for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2, warm: true }); }
   }
   // (Round four's morning mist reused the fog dither; at double density that
@@ -190,8 +205,22 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     }
   }
   // Fog by place (render/night.ts), worked out once from the land.
-  if ((sk.fog ?? 0) > 0.03 && !hasFogField()) defaultFogField(WORLD_W, WORLD_H, game.baked.soil, (x, y) => game.map.regionAt(x, y)?.id);
-  game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk });
+  if ((sk.fog ?? 0) > 0.03 && !hasFogField()) setFogField(WORLD_W, WORLD_H, fogDensity(game.baked)); // world/fog.ts: water, hollows, forest feet
+  // Lightning in the dark shows the land for a beat: the dark lifts with the
+  // flash and only a thin veil of wool and buttercup is left over it (then
+  // the afterglow), rather than a sheet of white. By day it flashes as ever.
+  const bolt = sk.flash ?? 0;
+  const inDark = dark > 0.25;
+  const reveal = !inDark ? 0 : bolt >= 8 ? 0.85 : bolt >= 3 ? 0.5 : bolt > 0 ? 0.2 : 0;
+  const veil = !inDark ? bolt : bolt >= 8 ? 3 : bolt >= 3 ? 1 : 0;
+  game.night.draw(g, W, H, ox, oy, { dark: dark * (1 - reveal), lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk, flash: veil });
+  // Moonlight on the treetops, roofs and rails, showing through the dark
+  // (and, for a beat, everything a lightning flash shows up).
+  if (moon.on > 0) {
+    moon.flash = bolt >= 3 ? 1 : 0;
+    game.life.lit.drawMoon(g, ox, oy, W, H);
+    drawMoonEdges(g, ox, oy, PX);
+  }
   game.life.wx.drawAir(g, game, W, H, dark > 0.25);
   if (sleeping(game)) {
     g.save();

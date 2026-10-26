@@ -258,7 +258,13 @@ export class NightOverlay {
         }
         if (rim) EE[i] = e;
         let level = over;
-        if (dark > 0) level += dark;
+        if (dark > 0) {
+          // A bank at night catches what light there is (the moon, the
+          // lamps): it stands in for some of the dark rather than hiding
+          // under it, so fog nights show their banks.
+          if (f > 0) dark -= Math.min(dark, f * 0.45);
+          level += dark;
+        }
         // Night and fog together never cover more than ~2/3 of the pixels,
         // so the ground still reads between them.
         if (dark > 0 && level + f > 10) f = Math.max(0, 10 - level);

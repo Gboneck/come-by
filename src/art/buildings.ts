@@ -5,6 +5,7 @@ import { hash2 } from '../rng';
 import { lightLook, seasonLook, snowCap } from './seasonlook';
 import { PX, fine, makeCanvas } from '../gfx/screen';
 import { grid } from './fine';
+import { moonEdge } from './moon';
 import type { Building, RegionGate } from '../ranch/buildings';
 import type { FieldGate, Fence, Barn, Kennel, Market, Windmill } from '../ranch/structures';
 import { CS } from '../world/map';
@@ -22,11 +23,14 @@ const shadowFirst = (b: Building, draw: () => void): Drawable => ({ y: -1e8 + b.
 
 // A standing thing's shadow on the ground: its silhouette (x0..x1 across,
 // top..y1 tall) shifted the way the sun throws it (long and to the west at
-// sunrise, east in the golden hour), and a soft dithered contact shadow
-// hugging its foot.
+// sunrise, east in the golden hour, drawn out longer by the low evening
+// sun), and a soft dithered contact shadow hugging its foot.
 export function groundShadow(g: CanvasRenderingContext2D, x0: number, top: number, x1: number, y1: number) {
   const sx = Math.round(lightLook.dx * 0.8), sy = Math.round(lightLook.dy * 0.5);
-  rect(g, x0 + sx, top + sy, x1 - x0, y1 - top, C.sage);
+  const L = 1 + lightLook.golden;
+  const ex = Math.round(lightLook.dx * 0.8 * L) - sx, ey = Math.round(lightLook.dy * 0.5 * L) - sy;
+  const n = Math.max(Math.abs(ex), Math.abs(ey));
+  for (let k = 0; k <= n; k++) rect(g, x0 + sx + (n ? Math.round((ex * k) / n) : 0), top + sy + (n ? Math.round((ey * k) / n) : 0), x1 - x0, y1 - top, C.sage);
   for (let x = x0 - 1; x <= x1; x++) {
     px(g, x, y1, C.sage);
     if ((x & 1) === 0) px(g, x, y1 + 1, C.sage);
@@ -73,8 +77,10 @@ export function post(g: CanvasRenderingContext2D, x: number, base: number, sturd
 // shadowed underneath, a knot or a grey streak here and there.
 export function railF(fg: CanvasRenderingContext2D, X0: number, X1: number, Y: number, seed: number) {
   if (X1 <= X0) return;
-  const top = seasonLook.snow > 0.4 ? C.wool : C.wool;
+  // Pale on top; warm in the golden hour; the moon catches it at night.
+  const top = lightLook.golden > 0.55 && seasonLook.snow < 0.4 ? C.butter : C.wool;
   rect(fg, X0, Y, X1 - X0, 1, top);
+  moonEdge(X0, Y, X1 - X0);
   rect(fg, X0, Y + 1, X1 - X0, 1, C.sage);
   for (let x = X0 + 2; x < X1 - 1; x += 5) {
     const h = hash2(x >> 2, seed, 404);
@@ -204,10 +210,17 @@ export function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top
         else if (c % 4 === 2) for (let x = a + 3; x < b - 3; x++) if ((x + band * 7 + Math.floor(hash2(band, x >> 4, 426) * 5)) % 14 === 0) px(fg, x, y, course);
       }
       px(fg, a, y, C.plum);
-      if (k > 0) px(fg, b - 1, y, C.sage);
+      // The low evening sun is in the west: in the golden hour it warms the
+      // left hip instead.
+      if (k > 0) {
+        if (lightLook.golden > 0.4) px(fg, a + 1, y, C.butter);
+        else px(fg, b - 1, y, C.sage);
+      }
     }
     rect(fg, A + HP, T, B - A - HP * 2, 1, C.sage);
     rect(fg, A + HP, T + 1, B - A - HP * 2, 1, base);
+    // By moonlight the ridge catches a glint.
+    moonEdge(A + HP, T, B - A - HP * 2);
     rect(fg, A, E - 1, B - A, 1, C.plum);
     // Moss: soft cushions on the shady lower courses, not specks.
     for (let band = 0; band < 2; band++) {
@@ -313,32 +326,44 @@ export function farmhouseWindows(b: Building): [number, number, number, number][
   return out;
 }
 
-// A soft glow round a lit window, drawn above the night: a dithered ring of
-// buttercup that fades out from the frame.
+// A lit window drawn above the night: its pane, and a soft glow round it, a
+// dithered ring of buttercup that fades out from the frame.
 const glows = new Map<string, HTMLCanvasElement>();
 export function windowGlow(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, t: number) {
   const fl = Math.sin(t * 5 + x) > 0.85 ? 1 : 0;
-  // A dithered halo, close round the frame and thinning out: drawn once per
-  // size into a little picture.
+  // A graded halo round the frame: dense against it, thinning out through
+  // four steps of the dither. Drawn once per size into a little picture.
   const key = `${w},${h},${fl}`;
   let c = glows.get(key);
   if (!c) {
-    const Wd = w * PX, Hd = h * PX;
-    const cw = Wd + 12, ch = Hd + 12;
+    const Wd = w * PX, Hd = h * PX, M = 9;
+    const cw = Wd + M * 2, ch = Hd + M * 2;
     const [cc, cg] = makeCanvas(cw, ch);
     cg.fillStyle = C.butter;
+    const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
     for (let yy = 0; yy < ch; yy++)
       for (let xx = 0; xx < cw; xx++) {
-        const X = xx - 6, Y = yy - 6;
+        const X = xx - M, Y = yy - M;
         const d = Math.max(-1 - X, X - Wd, -1 - Y, Y - Hd);
         if (d < 1) continue;
-        const ax = xx, ay = yy;
-        const on = d <= 2 ? ((ax + ay) & 1) === 0 : d <= 4 + fl ? (ax & 1) === 0 && (ay & 1) === 0 && ((ax + ay) & 3) === 0 : false;
-        if (on) cg.fillRect(xx, yy, 1, 1);
+        const lv = d <= 1 ? 9 : d <= 2 ? 5 : d <= 4 + fl ? 2 : d <= 6 + fl ? 0.8 : 0;
+        if (BY[(yy & 3) * 4 + (xx & 3)] < lv) cg.fillRect(xx, yy, 1, 1);
       }
+    // The lit pane itself, as windowAt draws it at night, in its frame.
+    cg.fillStyle = C.plum;
+    cg.fillRect(M - 1, M - 1, Wd + 2, Hd + 2);
+    cg.fillStyle = C.butter;
+    cg.fillRect(M, M, Wd, Hd);
+    cg.fillStyle = C.plum;
+    const mx = M + (Wd >> 1);
+    cg.fillRect(mx, M, 1, Hd);
+    if (Hd >= 6) cg.fillRect(M, M + (Hd >> 1), Wd, 1);
+    cg.fillStyle = C.wool;
+    cg.fillRect(M + 1, M + 1, 1, 1);
+    cg.fillRect(mx + 1, M + 1, 1, 1);
     glows.set(key, (c = cc));
   }
-  fine(g, (fg) => fg.drawImage(c!, x * PX - 6, y * PX - 6));
+  fine(g, (fg) => fg.drawImage(c!, x * PX - 9, y * PX - 9));
 }
 
 // Where the chimney smoke leaves the farmhouse (see render/life.ts).

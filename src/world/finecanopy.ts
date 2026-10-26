@@ -77,6 +77,8 @@ function drawClump(buf: Buf, c: Clump, kind: number, look: Look, clip?: (k: numb
   const scheme = look.leaves > 0 ? autumnScheme(c, look.leaves) : 0;
   const body = scheme === 1 ? butter : scheme === 2 ? sage : teal;
   const hi = scheme === 1 ? wool : scheme === 2 ? moss : sage;
+  // In the golden hour the low sun in the west warms each clump's upper left.
+  const eve = look.golden >= 2 && scheme !== 1;
   const rim = plum;
   for (let dy = -R; dy <= R; dy++) {
     const y = Math.round(c.y) + dy - buf.y0;
@@ -95,6 +97,7 @@ function drawClump(buf: Buf, c: Clump, kind: number, look: Look, clip?: (k: numb
       if (dd > rr - 1.3 && s > -0.15) col = rim;
       else if (dd > rr - 2.4 && s > 0.6) col = rim;
       else if (c.lit && dd > rr - 3.2 && dd < rr - 1.2 && s < -0.5) col = hi;
+      else if (eve && dd > rr - 3.2 && dd < rr - 1.2 && (dx * 0.6 + dy * 0.8) / (dd || 1) < -0.55) col = butter;
       else if (c.tone > 0.8 && dd < rr * 0.45 && s < -0.2) col = hi;
       // Snow lies on the top of each clump.
       if (look.snow > 0 && dy < 0 && dd > rr - 1.5 - look.snow * 0.6 && s < 0.45) col = wool;

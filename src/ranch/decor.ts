@@ -6,7 +6,7 @@ import type { Drawable } from '../art/buildings';
 import { gust } from '../render/wind';
 import { seasonLook, snowCap } from '../art/seasonlook';
 import { TS } from '../world/map';
-import { PX, fine } from '../gfx/screen';
+import { PX, fine, makeCanvas } from '../gfx/screen';
 import { grid, gridAt } from '../art/fine';
 
 // Little touches that make the ranch visibly grow with each tier. They do
@@ -430,18 +430,40 @@ export function decorLights(tier: number): { x: number; y: number; r: number }[]
   return DECOR.filter((d) => d.kind === 'lantern' && d.tier <= tier).map((d) => ({ x: d.x * TS + 4, y: d.y * TS + 2, r: 36 }));
 }
 
-// The lit lanterns' own glow, drawn above the dark: the glass lit, a few
-// rays flickering round it.
+// The lit lanterns' own glow, drawn above the dark: the glass lit white at
+// its heart, a graded halo of buttercup round it (dense, then thinning
+// through the dither), flickering.
 export function drawLampGlow(g: CanvasRenderingContext2D, tier: number, t: number) {
   fine(g, (fg) => {
     for (const d of DECOR) {
       if (d.kind !== 'lantern' || d.tier > tier) continue;
-      const X = (d.x * TS + 4) * PX, Y = (d.y * TS + 6) * PX + 1 - 19;
-      rect(fg, X - 2, Y - 2, 5, 5, C.butter);
-      px(fg, X, Y, C.wool);
-      if (Math.sin(t * 9 + d.x) > -0.6) {
-        for (const [dx, dy] of [[0, -5], [-5, 0], [5, 0], [-4, -4], [4, -4]]) px(fg, X + dx, Y + dy, C.butter);
-      }
+      lampGlow(fg, (d.x * TS + 4) * PX, (d.y * TS + 6) * PX + 1 - 19, Math.sin(t * 9 + d.x));
     }
   });
+}
+
+// The halo is drawn once per size (it flickers between two) into a little
+// picture, so a lantern costs one image a frame.
+const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const halos = new Map<number, HTMLCanvasElement>();
+export function lampGlow(fg: CanvasRenderingContext2D, X: number, Y: number, flick: number) {
+  const R = flick > 0.6 ? 9 : 8;
+  let c = halos.get(R);
+  if (!c) {
+    const [cc, cg] = makeCanvas(R * 2 + 1, R * 2 + 1);
+    cg.fillStyle = C.butter;
+    for (let dy = -R; dy <= R; dy++)
+      for (let dx = -R; dx <= R; dx++) {
+        const r = Math.hypot(dx, dy * 1.1);
+        if (r > R || r < 2.5) continue;
+        // 16 steps: solid near the glass, fading out.
+        const lv = Math.max(0, 14 - ((r - 2.5) / (R - 2.5)) * 16);
+        if (BY[(dy & 3) * 4 + (dx & 3)] < lv) cg.fillRect(R + dx, R + dy, 1, 1);
+      }
+    cg.fillRect(R - 2, R - 2, 5, 5);
+    cg.fillStyle = C.wool;
+    cg.fillRect(R - 1, R - 1, 3, 3);
+    halos.set(R, (c = cc));
+  }
+  fg.drawImage(c, X - R, Y - R);
 }
