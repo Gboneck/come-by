@@ -8,6 +8,8 @@
 //        [--noflush] (the main thread's part only: no raster read-back)
 //        [--idle] (frames drawn a second: playing, and left alone in the
 //        pause menu and build mode)
+//        [--animals=N] (wild flocks added round the valley until the world
+//        holds N animals: a herd-heavy year two; the fixture has about 170)
 //
 // Scenarios (the ranch is scripts/fixtures/tier5.json, a real tier-5 ranch
 // the pace bot built; remake it with scripts/makefixture.mjs):
@@ -40,6 +42,7 @@ const flag = (k) => args.includes(`--${k}`);
 const throttles = opt('throttle', '4,6').split(',').map(Number);
 const only = opt('only', 'title,day,worst').split(',');
 const quality = opt('quality', '');
+const animals = Number(opt('animals', '0'));
 const FRAMES = Number(opt('frames', '60'));
 const BATCHES = Number(opt('batches', '7'));
 const live = flag('live');
@@ -105,7 +108,7 @@ async function run(scene, rate) {
   }, { quality, calls: flag('calls'), live });
   await page.goto(`http://localhost:${PORT}/?${s.query}`);
   await page.waitForFunction(() => window.game);
-  await page.evaluate(async ({ save, ranch, night, nopics, quality, noflush }) => {
+  await page.evaluate(async ({ save, ranch, night, nopics, quality, noflush, animals }) => {
     const g = window.game;
     if (nopics) (await import('/src/gfx/picture.ts')).setPictures(false);
     // The stepped frames skip main.ts, where the setting is applied.
@@ -124,6 +127,16 @@ async function run(scene, rate) {
       }
       g.banner = null;
       g.tip = null;
+      // Year two's crowd: more wild flocks out in the open regions.
+      if (animals > g.animals.length) {
+        const { REGIONS } = await import('/src/world/map.ts');
+        const regs = REGIONS.filter((r) => r.species && r.tier <= g.tier);
+        for (let i = 0; g.animals.length < animals && i < 400; i++) {
+          const r = regs[i % regs.length], pts = g.map.spawns[r.id] ?? [];
+          const p = pts[Math.floor(i / regs.length) % pts.length];
+          if (p) g.spawnFlock(r.species, p.x, p.y, Math.min(10, animals - g.animals.length));
+        }
+      }
       const f = g.ranch.farmhouse;
       g.dog.x = f.cx + 30;
       g.dog.y = f.y1 + 30;
@@ -147,7 +160,7 @@ async function run(scene, rate) {
       // measures the main thread's part alone.)
       if (!noflush) g.screen.vctx.getImageData(0, 0, 1, 1);
     };
-  }, { save: fixture, ranch: !!s.ranch, night: !!s.night, nopics: flag('nopics'), quality, noflush: flag('noflush') });
+  }, { save: fixture, ranch: !!s.ranch, night: !!s.night, nopics: flag('nopics'), quality, noflush: flag('noflush'), animals });
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate });
   let per = [], fps = 0;

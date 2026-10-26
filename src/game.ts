@@ -106,6 +106,8 @@ const newStats = (): DayStats => ({ delivered: {}, deliveredValue: 0, calm: 0, l
 
 
 // Delivery value multiplier from how stressed an animal was on the way home.
+export const DROVE_FROM = 6; // head in one calm batch before the drove bonus starts
+
 export function calmRating(stress: number): { mult: number; label: string } {
   if (stress < 0.3) return { mult: 1.5, label: 'CALM' };
   if (stress < 0.55) return { mult: 1, label: 'STEADY' };
@@ -940,8 +942,16 @@ export class Game {
       if (label === 'CALM') this.totals.calmBatches++;
       this.achievements.drive(this, ev.batch, label);
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
+      // A big drove brought in calm pays extra: a twentieth more a head past
+      // five, up to half again at fifteen (stock of your own pays nothing).
+      const fresh = ev.batch.filter((a) => a.deliveryValue > 0).length;
+      const bonus = label === 'CALM' && fresh >= DROVE_FROM ? Math.round(value * Math.min(0.5, 0.05 * (fresh - DROVE_FROM + 1))) : 0;
+      if (bonus) {
+        this.earn(bonus);
+        this.stats.deliveredValue += bonus;
+      }
       const sp = ev.batch[0].sp;
-      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}`, 2.8);
+      this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}${bonus ? ` +${bonus}$ DROVE` : ''}`, 2.8);
       this.feel.moment = 1.8;
       this.feel.kick(0, 2, 0.16);
       buzz(this.input.touchMode, [18, 50, 36]);

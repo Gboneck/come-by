@@ -54,8 +54,8 @@ original and drawn in code. No external art files, ever.
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
   `scripts/makefixture.mjs`; `--profile`, `--calls`, `--live`,
-  `--quality=low`, `--idle`, `--noflush`; `--only=fognight` the fog's
-  path), `scripts/picturetest.mjs` checks the picture
+  `--quality=low`, `--idle`, `--noflush`, `--animals=N` a herd-heavy world;
+  `--only=fognight` the fog's path), `scripts/picturetest.mjs` checks the picture
   cache (and FineLayer) draws exactly what the art does,
   `scripts/skyshots.mjs --tag=x` shoots dusk, night, fog, fog night and a
   storm night at phone size (`shots/sky/`), `scripts/cameratest.mjs`
@@ -76,7 +76,9 @@ original and drawn in code. No external art files, ever.
   from day one to the valley thriving and logs each tier (days, minutes,
   coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`;
   `--year --days=22` plays on through the seasons and prints a table per
-  season: hay, hungry nights, lambs, the shearer, the fair),
+  season: hay, hungry nights, lambs, the shearer, the fair; every coin is
+  tagged by the system that paid it, with what is still worth buying and
+  how many animals the world holds),
   `scripts/seasontest.mjs` checks the calendar, winter hay, lambing, the
   shearer, the fair, rare breeds and seasons in the save (old saves load),
   `scripts/lambtest.mjs` drives ewes with lambs calm against barking,
@@ -240,6 +242,9 @@ needs a line there.
 - Stress: rises with pressure, barks, nips and isolation; decays with calm.
   Moderate stress bunches the flock, high stress causes panic and splitting.
   Delivery value and produce are scaled down by stress — calm always pays.
+  A big drove brought in calm pays a bonus (six head or more, up to half
+  again at fifteen); a packed paddock makes less (full rate to three-fifths
+  of its room, half when full) and breeds nothing, so room pays too.
 - Young keep to their mothers; a mother cut off from her young turns back
   for it and both fret, so a flock with young is driven as pairs. Every
   kind breeds in its season (spring; ponies in summer): calm, fed stock

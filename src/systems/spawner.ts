@@ -36,8 +36,15 @@ const meanFlock = (reg: RegionDef, tier: number) => {
 const WILD_YOUNG = 0.4;
 
 // `keep` marks wild animals that must stay put (a hidden place's flock).
+// No new wild flocks (or droves) once the valley holds this many wild
+// animals: a cap on the herd you can see and the frame's work, reached in
+// year two if little is brought home. Penned stock is capped by room.
+export const WILD_CAP = 260;
+export const wildCount = (animals: Animal[]) => animals.filter((a) => !a.pen && !a.gone && !a.home && !a.trial && !a.forSale).length;
+
 export function spawnMorning(map: WorldMap, animals: Animal[], day: number, tier: number, unlocked: (r: RegionDef) => boolean, season?: Season, keep?: (a: Animal) => boolean): Animal[] {
   const born: Animal[] = [];
+  const wildAll = wildCount(animals);
   for (const reg of REGIONS) {
     if (!reg.species || !unlocked(reg)) continue;
     const sp = SPECIES[reg.species];
@@ -48,7 +55,7 @@ export function spawnMorning(map: WorldMap, animals: Animal[], day: number, tier
     const pts = [...(map.spawns[reg.id] ?? [])].sort(() => Math.random() - 0.5);
     let made = 0;
     for (const p of pts) {
-      if (have + made >= target) break;
+      if (have + made >= target || wildAll + born.length >= WILD_CAP) break;
       if ([...wild, ...born].some((a) => Math.hypot(a.x - p.x, a.y - p.y) < 90)) continue;
       const n = flockSize(reg, tier);
       for (let i = 0; i < n; i++) {
