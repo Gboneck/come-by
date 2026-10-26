@@ -683,6 +683,23 @@ another origin are never answered from the cache.
       a phone, a download elsewhere)
 - [x] Checks: typecheck, build, shot, uitour at every size, padtest,
       cooptest, perftest before and after
+- [x] The Ledger's pages: cloth tabs on the cover (RANCH first), Q/E,
+      [ ], LB/RB or a tap to turn; other features add pages to
+      `LEDGER_PAGES` (src/ui/ledger.ts) and draw in the book's ink
+- [x] `sharePng()` (src/ui/photo.ts): any canvas as a crisp PNG, the share
+      sheet on a phone, a download elsewhere; photo mode uses it
+- [x] Paddocks in build mode (src/ui/paddockbuild.ts): drag out a field
+      (or SPACE / MARK OUT drops one at the cursor), then size it by its
+      side handles, slide the gate round the fence, move it whole; live
+      price, "HOLDS 12 SHEEP / 24 DUCKS" and the reason a spot is refused,
+      the refused tiles in plum. Phones get W, H and GATE steppers and
+      BUILD / CANCEL, so no drag has to be precise; keys and pads cycle the
+      handle the arrows move (R / Y). A built paddock reopens (tap it, U /
+      Y, EXTEND) with sides that only go outward, priced at the
+      difference; troughs and the like snap inside it; its card shows the
+      mix, a bar of spaces and its fixtures. Waits on the ranch's paddock
+      rules (`setPaddockRules`); `src/ui/paddockdev.ts` is a stand-in for
+      trying it (debug and tests only)
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -1529,3 +1546,14 @@ another origin are never answered from the cache.
 - Perf (perftest, 4x CPU, phone size, best batch): title 5.5 to 5.6 ms,
   day 10.1 to 9.7 ms, worst 11.7 to 12.2 ms: within the noise of a machine
   shared with other sessions.
+- Paddock build UI: the rules (price, capacity, where it may go, building,
+  extending, gates, fixtures) belong to the ranch and come in through one
+  interface, `PaddockRules` in src/ui/paddockbuild.ts; build mode only
+  asks. The editor works on a draft (a rectangle and a gate) that stays
+  open until BUILD, so a rough first drag is fine: every handle can be
+  nudged after, by drag, stepper or key. Extending reuses the editor with
+  the old fence as a floor. Fixtures are charged their catalog price by
+  build mode, as every catalog item is; paddocks and extensions are paid
+  by the rules, since only they know the price.
+- The Ledger keeps its open page between visits (a book stays open where
+  you left it); confirm closes it only when the page does not use it.

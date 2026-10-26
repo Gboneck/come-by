@@ -154,7 +154,11 @@ const RULES: [RegExp, string][] = [
   // Build mode's foot lines and info card.
   [/^ARROWS MOVE {2}Q\/E PICK {2}R TURN {2}SPACE BUILD$/, '(LB)(RB) PICK  (Y) TURN  (A) BUILD  (LT)(RT) TABS'],
   [/^ARROWS MOVE {2}Q\/E PICK {2}SPACE PLACE {2}X PICK UP$/, '(LB)(RB) PICK  (A) PLACE  (X) PICK UP'],
+  [/^ARROWS MOVE {2}Q\/E PICK {2}SPACE MARK OUT$/, '(LB)(RB) PICK  (A) MARK OUT  (LT)(RT) TABS'],
+  [/^ARROWS (MOVE IT|SLIDE THE GATE|PUSH THE \w+ SIDE) {2}R: NEXT HANDLE {2}SPACE: (BUILD|EXTEND) {2}ESC: CANCEL$/, 'STICK: $1  (Y) NEXT HANDLE  (A) $2  (B) CANCEL'],
+  [/^DRAG ONE OUT, OR SPACE TO MARK ONE OUT$/, 'PRESS (A) TO MARK ONE OUT'],
   [/\bU: UPGRADE/g, '(Y) UPGRADE'],
+  [/\bU: EXTEND/g, '(Y) EXTEND'],
   [/\bX: (REMOVE|PICK IT UP)/g, '(X) $1'],
   // Buttons and cards.
   [/\bSPACE: NEXT DAY\b/g, '(A) NEXT DAY'],
