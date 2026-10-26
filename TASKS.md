@@ -700,7 +700,7 @@ another origin are never answered from the cache.
       mix, a bar of spaces and its fixtures. Waits on the ranch's paddock
       rules (`setPaddockRules`); `src/ui/paddockdev.ts` is a stand-in for
       trying it (debug and tests only)
-## M28 Paddocks you size yourself, and the valley grows (gameplay, round four)
+## M29 Paddocks you size yourself, and the valley grows (gameplay, round four)
 - [x] Paddocks instead of fixed pens (`src/ranch/paddock.ts`, the rules for
       build mode): any size from 6x6 to 28 across, the gate on any side at
       any point along it. Room grows with the area (an 8x7 still holds
@@ -813,7 +813,7 @@ The bot has a cottage, the square and the hall by day 8 (the smithy too
 in two seeds of three; seed 1 has all six by day 12); a player who herds
 for the deeds gets there sooner. Grazing a field clear and mending the bridge are slow for the bot,
 which only does them in passing.
-## M28 Characters (graphics round four)
+## M30 Characters (graphics round four)
 Before: the dog snapped between four facings with a four-frame trot and
 gallop; animals had two or three walk frames, the same rhythm for every
 kind, and no fright beyond the head coming up; ducks stood in the pond
@@ -885,7 +885,7 @@ with their legs clipped off. After:
       three: day 14.0 ms before / 15.0 ms after, worst (winter storm night,
       predators, helpers) 19.7 / 18.5 ms, medians overlapping: no
       measurable cost
-## M28 World and light, round four
+## M31 World and light, round four
 Before → after, in plain words:
 - [x] Shadows: trees' shadows were baked in one place all day; now they
       move with the sun, long to the west at sunrise, short at noon, long to
@@ -943,7 +943,7 @@ Before → after, in plain words:
         14.3–15.0 vs 16.3–17.1, worst 20.4 vs 19.7–21.4. Cheaper, because a
         pen's floor is one image now and no longer redrawn pixel by pixel
         into the picture cache every frame.
-## M28 Valley projects (world, round four)
+## M32 Valley projects (world, round four)
 - [x] Herding work out in the valley that changes a place for good and opens
       something new, alongside Gameplay's village, paddocks and old bridge:
       - CLEAR THE REED BED (Willow Pool, tier 2, spring or summer): ducks
@@ -978,7 +978,7 @@ Before → after, in plain words:
       and work the fold's gate
 - [x] `scripts/projecttest.mjs`; `places.mjs --half/--done`; tune.mjs before
       and after; discoverytest, savetest and the loop tests
-## M28 Buyers' favour and achievements (round four)
+## M33 Buyers' favour and achievements (round four)
 - [x] Buyers' favour (`src/systems/favour.ts`, `src/art/favour.ts`): the
       miller, the drover, the sale yard (4 levels each) and the summer
       shearer (3). Filled orders +3, all calm +2, two hours early +1, a
