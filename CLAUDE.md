@@ -54,8 +54,10 @@ original and drawn in code. No external art files, ever.
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
   `scripts/makefixture.mjs`; `--profile`, `--calls`, `--live`,
-  `--quality=low`, `--idle`), `scripts/picturetest.mjs` checks the picture
-  cache draws exactly what the art does, `scripts/pwatest.mjs` builds and
+  `--quality=low`, `--idle`, `--noflush`), `scripts/picturetest.mjs` checks the picture
+  cache (and FineLayer) draws exactly what the art does,
+  `scripts/densitytest.mjs` (`BASE=<a checkout of main>`) checks the world
+  layer is pixel-for-pixel the old one at 2x, `scripts/pwatest.mjs` builds and
   serves the game twice (installable, offline with the server off, a new
   deploy picked up), `scripts/installtest.mjs` the install card,
   `scripts/padtest.mjs` plays every screen with a simulated game pad,
@@ -97,12 +99,32 @@ original and drawn in code. No external art files, ever.
 
 ## Rendering rules
 
-- Render to a small internal canvas (~240px on the short side), then scale up
-  by a whole number with nearest-neighbour filtering. The internal size is
-  derived from the window so the scale is always an integer. The game draws
-  straight into the page's canvas at the internal size and CSS
-  (`image-rendering: pixelated`) does the whole-number scale on the GPU
-  (`src/gfx/screen.ts`; a drawImage copy where `pixelated` is missing).
+- Two grids. **World pixels** are what the game is built in: the sim, the
+  map (`TS = 8`), speeds, layout (`screen.W/H`) and most art. **Fine
+  pixels** are `PX = 2` to a world pixel each way (`src/gfx/screen.ts`).
+  The screen canvas is fine pixels, about 432 on the short side
+  (`TARGET_FINE`), scaled up by a whole number with nearest-neighbour
+  filtering (CSS `image-rendering: pixelated` on the GPU; a drawImage copy
+  where that is missing). An upright iPhone shows 195 x 422 world pixels.
+- Every frame is drawn under `scale(PX)`, so a draw call in world pixels is
+  crisp PX x PX blocks: old art needs no change. For finer art:
+  `fine(g, (fg) => ...)` draws 1:1 in fine pixels with the translation kept
+  (world (x, y) is fine (x*PX, y*PX); `toFine`, `snapFine`); dense sprites
+  `spr(rows, ax, ay, { density: PX })` have their grid in fine pixels and
+  land on the fine grid (`drawSpr` as ever; `sprW/sprH/drawSprAt` when
+  blowing one up); `makeCanvas(w, h, PX)` is a fine offscreen canvas drawn
+  back with `drawImage(c, x, y, w, h)`. A fine layer of the screen is
+  `FW x FH` (`screen.FW/FH`) drawn with `drawImage(c, 0, 0, W, H)`.
+- World-sized pictures in fine pixels go in chunks around the camera
+  (`FineLayer`, `src/gfx/chunks.ts`): a whole world at 2x is tens of MB.
+  Terrain and canopy are still baked in world pixels.
+- Text (`src/gfx/font.ts`, glyphs in `src/gfx/glyphs.ts`) is in fine
+  pixels, with lower case, proportional and kerned. `text(g, s, x, y,
+  colour, { size })`: body (capitals 9 fine px, a line every 6 world px,
+  `LINE_H`), `'small'` (capitals 7, line 5), `'heading'` (the body face by
+  Scale2x: capitals 18, line 12); `lineHeight(size)`, `textWidth(s, scale,
+  size)`, `wrap(s, w, size)` in world pixels; y is the top of the capitals.
+  `heading()` is the older bold capitals face, in world pixels.
 - Procedural art that rarely changes (buildings, fences, ranch decor) goes
   through `cached()` in `src/gfx/picture.ts`: drawn into a recorder, shown
   from a bitmap until it asks for different pixels. Art using paths, clips
@@ -110,14 +132,19 @@ original and drawn in code. No external art files, ever.
 - GRAPHICS (pause menu: AUTO, HIGH, MEDIUM, LOW; `src/gfx/quality.ts`) thins
   only mood: read `quality.fx` (share of rain, splashes, critters),
   `quality.shade` (cloud shadows, wet ground), `quality.sway` (grass in
-  gusts). Never the night, the herd or anything you play with.
-- No blurry or sub-pixel drawing: round every draw position to whole pixels,
-  never draw rotated/scaled images except by integer factors.
+  gusts), `quality.fineSky` (night, fog and ground dithers in fine pixels,
+  HIGH only). Never the night itself, the herd or anything you play with.
+- No blurry or sub-pixel drawing: round every draw position to whole world
+  pixels (whole fine pixels for fine art: half world pixels), never draw
+  rotated/scaled images except by integer factors.
 - Sprites are pixel grids defined in code (`src/art/`), one char per pixel.
 - Layer order: terrain (baked) → shadows → y-sorted entities → canopy (baked)
   → effects → night dither → UI.
 - Night and dusk are a Bayer-dithered plum overlay, not alpha blending, so the
-  palette stays pure. Lanterns and the dog cut holes in it.
+  palette stays pure. Lanterns and the dog cut holes in it. The light is
+  worked out per world pixel and dithered per fine pixel (world-anchored
+  thresholds), so the dither is twice as fine as the art; `ditherRect` and
+  the dim/fade covers use fine dither patterns too.
 
 ## Palette
 
@@ -163,8 +190,9 @@ stays unique.
 | Move a save     | title MOVE A RANCH / pause MOVE THIS RANCH: copy or paste a code, save or load a file | same (share sheet) | same (codes via the browser's box) |
 
 While a pad is in use the prompts read as pad buttons: `src/ui/pad.ts` has
-one table (PROMPTS) of keyboard phrases and what they say on a pad, applied
-to drawn text through a hook in `src/gfx/font.ts`. A new keyboard prompt
+one table (RULES) of keyboard phrases and what they say on a pad, applied
+to drawn text through a hook in `src/gfx/font.ts`. Rules match in any case
+and keep the text's case ("Hold Q" reads "Hold (X)"). A new keyboard prompt
 needs a line there.
 
 ## Design laws
@@ -257,7 +285,9 @@ needs a line there.
 - Platform: `src/input.ts` (keys, touch, and game pads via the Gamepad API),
   `src/ui/pad.ts` (pad buttons per screen, pad typing, pad prompts),
   `src/gfx/quality.ts` (GRAPHICS and AUTO), `src/gfx/picture.ts` (cached
-  pictures of procedural art), `src/pwa/` (icon, worker registration),
+  pictures of procedural art, in fine pixels), `src/gfx/chunks.ts`
+  (FineLayer), `src/gfx/glyphs.ts` (the font's glyphs), `src/pwa/` (icon,
+  worker registration),
   `src/ui/install.ts` (install card), `src/ui/transfer.ts` (moving a save:
   the code, the file, the checks; mode `transfer`). `src/main.ts` polls the
   pad, draws a quiet menu or build mode at 30fps and a 120Hz screen at 60,
