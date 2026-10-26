@@ -1,6 +1,7 @@
 import { C } from '../palette';
+import { prose } from './case';
 import { rect } from '../gfx/draw';
-import { heading, headingWidth, text, wrap } from '../gfx/font';
+import { heading, headingWidth, text } from '../gfx/font';
 import type { Game } from '../game';
 import { CATALOG } from '../ranch/catalog';
 import { REGIONS } from '../world/map';
@@ -96,7 +97,7 @@ export function drawWhatsThis(game: Game, g: CanvasRenderingContext2D, top: numb
   const { ox, oy, W } = game.view();
   const sx = Math.round(th.x - ox), sy = Math.round(th.y - oy);
   const pw = Math.min(W - 8, 150);
-  const lines = wrap(th.line, pw - 10).slice(0, 4);
+  const lines = prose(th.line, pw - 10).slice(0, 4);
   const ph = 13 + lines.length * 7 + 2;
   const drop = Math.round(Math.max(0, 1 - t / 0.2) * -6);
   let x0 = Math.round(Math.max(4, Math.min(W - pw - 4, sx - pw / 2)));

@@ -1,6 +1,7 @@
 import { C } from '../palette';
+import { prose, sentence } from './case';
 import { ditherRect, px, rect } from '../gfx/draw';
-import { heading, text, textWidth, wrap } from '../gfx/font';
+import { heading, text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import type { Building } from '../ranch/buildings';
 import { SPECIES } from '../entities/species';
@@ -395,7 +396,7 @@ export class PaddockEditor {
       title = d.base ? 'EXTEND' : `PADDOCK ${d.r.w}x${d.r.h}`;
       price = d.base ? (q.cost ? `+${q.cost}$` : 'FREE') : `${q.cost}$`;
       lines.push({ s: holdsLine(R.holds(d.r)), c: C.wool });
-      if (q.why) for (const l of wrap(q.why, W - 8)) lines.push({ s: l, c: C.butter });
+      if (q.why) for (const l of prose(q.why, W - 8)) lines.push({ s: l, c: C.butter });
     }
     const rowH = touch ? 17 : 0;
     const rows = touch && d ? 2 : touch ? 1 : 0;
@@ -404,7 +405,7 @@ export class PaddockEditor {
     panel(g, L, y0, W, ch);
     const tw = heading(g, title, L + 4, y0 + 3, C.butter, { shade: C.moss });
     text(g, price, L + 4 + tw + 5, y0 + 5, C.wool, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l.s, L + 4, y0 + 13 + i * 6, l.c, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l.s), L + 4, y0 + 13 + i * 6, l.c, { iconColor: C.butter }));
 
     if (touch) {
       // Buttons: a row of steppers, then CANCEL and BUILD.

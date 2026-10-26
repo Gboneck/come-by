@@ -8,6 +8,7 @@ import { SPECIES, SPECIES_ORDER } from '../entities/species';
 import { nextGoal } from '../systems/progression';
 import { dimView } from './feel';
 import { drawSale, saleLen, type Sale } from './sale';
+import { sentence } from './case';
 import { SKY_WORD, skyIcon } from './icons';
 
 export interface Summary {
@@ -85,35 +86,36 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   tape(g, px0 + pw - 9, py0 - 2, 12);
   const ink = C.plum, ink2 = C.teal;
   const cal = calendar(s.day);
-  heading(g, `DAY ${s.day}`, px0 + 13, py0 + 6, ink, { shade: ink2 });
-  text(g, `${cal.season.toUpperCase()}, YEAR ${cal.year}`, px0 + pw - 6, py0 + 8, C.sage, { align: 'right' });
+  const dw = heading(g, `DAY ${s.day}`, px0 + 13, py0 + 6, ink, { shade: ink2 });
+  // The season beside the day; a calm day's stamp at the right.
+  text(g, `${cal.season[0].toUpperCase()}${cal.season.slice(1)}, year ${cal.year}`, px0 + 13 + dw + 6, py0 + 8, C.sage);
   rect(g, px0 + 4, py0 + 16, pw - 8, 1, ink);
   rect(g, px0 + 4, py0 + 18, pw - 8, 1, ink);
   let y = py0 + 24;
   const iconOpts = { iconColor: C.butter, iconRim: C.plum };
   lines.forEach(([k, v, col], i) => {
     if (age >= (i + 1) * ROW_STEP) {
-      text(g, k, px0 + 13, y, ink, iconOpts);
-      text(g, v, px0 + pw - 6, y, col ?? ink, { align: 'right', ...iconOpts });
+      text(g, sentence(k), px0 + 13, y, ink, iconOpts);
+      text(g, sentence(v), px0 + pw - 6, y, col ?? ink, { align: 'right', ...iconOpts });
     }
     y += 8;
   });
   const late = age >= (lines.length + 2) * ROW_STEP;
   // A calm day earns the page a stamp.
-  if (s.stats.calm > 0 && late) stamp(g, 'CALM', px0 + pw - 26, py0 + 34, C.teal);
+  if (s.stats.calm > 0 && late) stamp(g, 'CALM', px0 + pw - 24, py0 + 9, C.teal);
   // What comes next: the goal, and tomorrow's sky.
   rule(g, px0 + 4, y + 1, pw - 8, C.plum);
   y += 5;
   if (goal) {
     if (late) {
-      text(g, 'NEXT GOAL', px0 + 13, y, ink2);
-      text(g, goal, px0 + pw - 6, y, ink, { align: 'right', ...iconOpts });
+      text(g, 'Next goal', px0 + 13, y, ink2);
+      text(g, sentence(goal), px0 + pw - 6, y, ink, { align: 'right', ...iconOpts });
     }
     y += 8;
   }
   if (late) {
-    const sky = game.weather.forecast, word = SKY_WORD[sky];
-    text(g, 'TOMORROW', px0 + 13, y + 1, ink2);
+    const sky = game.weather.forecast, word = sentence(SKY_WORD[sky]);
+    text(g, 'Tomorrow', px0 + 13, y + 1, ink2);
     text(g, word, px0 + pw - 6, y + 1, ink, { align: 'right' });
     g.fillStyle = C.plum;
     g.fillRect(px0 + pw - 6 - textWidth(word) - 11, y - 1, 9, 9);
@@ -124,9 +126,9 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
     rule(g, px0 + 4, y + 1, pw - 8, C.plum);
     y += 5;
     if (late) {
-      text(g, 'NOW YOU CAN BUILD', px0 + 13, y, ink2);
+      text(g, 'Now you can build', px0 + 13, y, ink2);
       build.forEach((b, i) => {
-        text(g, b, px0 + 13 + (i % 2) * (pw / 2 - 6), y + 8 + Math.floor(i / 2) * 8, ink, iconOpts);
+        text(g, sentence(b), px0 + 13 + (i % 2) * (pw / 2 - 6), y + 8 + Math.floor(i / 2) * 8, ink, iconOpts);
       });
     }
     y += 8 + Math.ceil(build.length / 2) * 8;

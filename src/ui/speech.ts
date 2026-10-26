@@ -1,4 +1,5 @@
 import { C } from '../palette';
+import { sentence } from './case';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
 import { text, textWidth } from '../gfx/font';
@@ -12,7 +13,7 @@ export function drawSpeech(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const p of game.folk.people) {
     const b = p.bubble;
     if (!b || !p.shown) continue;
-    const lines = wrap(b.text, 66);
+    const lines = wrap(sentence(b.text), 66);
     const w = Math.max(...lines.map((l) => textWidth(l))) + 6;
     const h = lines.length * 7 + 3;
     const sx = Math.round(p.x - v.ox), sy = Math.round(p.y - v.oy);

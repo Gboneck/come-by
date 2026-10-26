@@ -1,7 +1,8 @@
 import { C } from '../palette';
+import { prose } from './case';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
-import { text, textWidth, wrap } from '../gfx/font';
+import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import { edgeArrow, type Margins } from './hud';
 import { safeArea } from './safe';
@@ -164,7 +165,7 @@ function drawResult(game: Game, g: CanvasRenderingContext2D, W: number, H: numbe
   const lines: Row[] = [];
   for (const row of rows) {
     if (row.v || row.big) lines.push(row);
-    else wrap(row.k, pw - 14).forEach((l, i) => lines.push({ ...row, k: l, gap: i === 0 && row.gap }));
+    else prose(row.k, pw - 14).forEach((l, i) => lines.push({ ...row, k: l, gap: i === 0 && row.gap }));
   }
   const big = (l: Row) => l.big && textWidth(l.k, 2) <= pw - 14;
   const bh = touch ? 15 : 11;
@@ -227,7 +228,7 @@ function drawResult(game: Game, g: CanvasRenderingContext2D, W: number, H: numbe
 
 export function jobsLedger(game: Game, w: number): { s: string; c: string; x?: number }[] {
   const out: { s: string; c: string; x?: number }[] = [];
-  const add = (s: string, c: string) => wrap(s, w).forEach((l) => out.push({ s: l, c }));
+  const add = (s: string, c: string) => prose(s, w).forEach((l) => out.push({ s: l, c }));
   if (game.won) {
     const done = LEGACY.filter((goal) => goalDone(game, goal)).length;
     out.push({ s: '', c: C.wool });

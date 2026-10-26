@@ -1,8 +1,9 @@
 import { C } from '../palette';
+import { prose, sentence } from './case';
 import { ditherRect, rect, ring } from '../gfx/draw';
 import { panel } from './frame';
-import { heading, text, textWidth, wrap } from '../gfx/font';
-import { drawSpr } from '../gfx/sprite';
+import { heading, text, textWidth } from '../gfx/font';
+import { drawSpr, sprH, sprW } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef, type ItemId } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
@@ -562,7 +563,7 @@ export class BuildMode {
     else this.drawMarket(game, g, W, H);
 
     if (this.msg) {
-      const m = this.msg;
+      const m = { ...this.msg, text: sentence(this.msg.text) };
       const tw = textWidth(m.text);
       panel(g, Math.round(W / 2 - tw / 2 - 5), uiTop + 2, tw + 10, 11, C.plum, m.good ? C.butter : C.sage);
       text(g, m.text, W / 2, uiTop + 5, m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
@@ -600,27 +601,30 @@ export class BuildMode {
     const n = CATALOG.length;
     const S = safeArea(game.screen);
     const L = 2 + S.left, R_ = W - 2 - S.right;
-    const cw = Math.min(28, Math.floor((R_ - L) / n));
-    const bx = Math.round((L + R_) / 2 - (cw * n) / 2), by = H - 26 - S.bottom;
+    // Two rows when one would make the cells too narrow to tap.
+    const rows = Math.floor((R_ - L) / n) < 20 ? 2 : 1;
+    const per = Math.ceil(n / rows);
+    const cw = Math.min(28, Math.floor((R_ - L) / per));
+    const bx = Math.round((L + R_) / 2 - (cw * per) / 2), by = H - 26 * rows - S.bottom;
     const goalItem = goalBuilding(game);
-    panel(g, bx - 2, by - 2, cw * n + 4, 28);
+    panel(g, bx - 2, by - 2, cw * per + 4, 26 * rows + 2);
     CATALOG.forEach((d, i) => {
-      const x = bx + i * cw;
+      const x = bx + (i % per) * cw, y = by + Math.floor(i / per) * 26;
       const sel = i === this.item;
       // The building the current goal asks for blinks in the bar.
-      if (i === goalItem && !sel && Math.floor(game.t * 3) % 2 === 0) panel(g, x, by, cw - 1, 24, C.plum, C.butter);
+      if (i === goalItem && !sel && Math.floor(game.t * 3) % 2 === 0) panel(g, x, y, cw - 1, 24, C.plum, C.butter);
       const locked = d.tier > game.tier;
-      if (sel) panel(g, x, by, cw - 1, 24, C.teal, C.butter);
-      rect(g, x + 2, by + 2, cw - 5, 12, C.meadow);
+      if (sel) panel(g, x, y, cw - 1, 24, C.teal, C.butter);
+      rect(g, x + 2, y + 2, cw - 5, 12, C.meadow);
       const ic = d.icon();
-      drawSpr(g, ic, x + Math.floor((cw - 1 - ic.w) / 2), by + 2 + Math.floor((12 - ic.h) / 2));
+      drawSpr(g, ic, x + Math.floor((cw - 1 - ic.w) / 2), y + 2 + Math.floor((12 - ic.h) / 2));
       if (locked) {
-        ditherRect(g, x + 1, by + 1, cw - 3, 22, 10, C.plum);
-        text(g, `T${d.tier}`, x + cw / 2, by + 16, C.wool, { align: 'center' });
+        ditherRect(g, x + 1, y + 1, cw - 3, 22, 10, C.plum);
+        text(g, `T${d.tier}`, x + cw / 2, y + 16, C.wool, { align: 'center' });
       } else {
-        text(g, `${d.cost}`, x + cw / 2, by + 16, game.coins >= d.cost ? C.butter : C.sage, { align: 'center' });
+        text(g, `${d.cost}`, x + cw / 2, y + 16, game.coins >= d.cost ? C.butter : C.sage, { align: 'center' });
       }
-      if (ui.click(`item-${i}`, x, by, cw - 1, 24)) {
+      if (ui.click(`item-${i}`, x, y, cw - 1, 24)) {
         if (i !== this.item) this.paddock.cancel();
         this.item = i;
       }
@@ -661,15 +665,15 @@ export class BuildMode {
       lines.push('GROWS WITH YOUR RANCH');
     } else {
       title = `${this.def.name}  ${this.def.cost}$`;
-      lines.push(...wrap(this.def.desc, W - 20));
+      lines.push(...prose(this.def.desc, W - 20));
       const gh = this.ghost(game);
-      if (!gh.ok && gh.reason) lines.push(gh.reason);
+      if (!gh.ok && gh.reason) lines.push(sentence(gh.reason));
     }
     const ih = 13 + lines.length * 6 + (pd ? 6 : 0);
     const iy = by - 6 - ih;
     panel(g, L, iy, R_ - L, ih);
     infoTitle(g, title, L + 4, iy + 3);
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
     if (pd) {
       // How full it is: a bar of spaces.
       const bw0 = Math.min(R_ - L - 8, 120), bx0 = L + 4, by0 = iy + 13 + lines.length * 6;
@@ -766,22 +770,28 @@ export class BuildMode {
     const n = PIECES.length;
     const S = safeArea(game.screen);
     const L = 2 + S.left, R = W - 2 - S.right;
-    const cw = Math.min(26, Math.floor((R - L) / n));
-    const bx = Math.round((L + R) / 2 - (cw * n) / 2), by = H - 32 - S.bottom;
-    panel(g, bx - 2, by - 2, cw * n + 4, 34);
+    // Two rows when one would make the cells too narrow to tap.
+    const rows = Math.floor((R - L) / n) < 20 ? 2 : 1;
+    const per = Math.ceil(n / rows);
+    const cw = Math.min(26, Math.floor((R - L) / per));
+    const bx = Math.round((L + R) / 2 - (cw * per) / 2), by = H - 32 * rows - S.bottom;
+    panel(g, bx - 2, by - 2, cw * per + 4, 32 * rows + 2);
     PIECES.forEach((p, i) => {
-      const x = bx + i * cw;
+      const x = bx + (i % per) * cw, y = by + Math.floor(i / per) * 32;
       const sel = i === this.piece;
       const open = p.open(game);
-      if (sel) panel(g, x, by, cw - 1, 30, C.teal, C.butter);
-      rect(g, x + 2, by + 2, cw - 5, 19, C.meadow);
+      if (sel) panel(g, x, y, cw - 1, 30, C.teal, C.butter);
+      rect(g, x + 2, y + 2, cw - 5, 19, C.meadow);
       const ic = pieceIcon(p.id);
-      const sx = Math.max(0, Math.floor((ic.w - (cw - 5)) / 2)), sw = Math.min(ic.w, cw - 5);
-      const sh = Math.min(ic.h, 19);
-      g.drawImage(ic.img, sx, ic.h - sh, sw, sh, x + 2 + Math.floor((cw - 5 - sw) / 2), by + 2 + 19 - sh, sw, sh);
-      if (!open) ditherRect(g, x + 1, by + 1, cw - 3, 28, 10, C.plum);
-      text(g, open ? `${p.cost}` : 'X', x + cw / 2, by + 23, !open ? C.wool : game.coins >= p.cost ? C.butter : C.sage, { align: 'center' });
-      if (ui.click(`piece-${i}`, x, by, cw - 1, 30)) this.piece = i;
+      // The icon's middle, cut to the cell (its canvas may be finer than
+      // a world pixel: sizes from sprW/sprH, the source in its own pixels).
+      const d = ic.d ?? 1, iw = sprW(ic), ih = sprH(ic);
+      const sw = Math.min(iw, cw - 5), sh = Math.min(ih, 19);
+      const sx = Math.max(0, Math.floor((iw - (cw - 5)) / 2));
+      g.drawImage(ic.img, sx * d, (ih - sh) * d, sw * d, sh * d, x + 2 + Math.floor((cw - 5 - sw) / 2), y + 2 + 19 - sh, sw, sh);
+      if (!open) ditherRect(g, x + 1, y + 1, cw - 3, 28, 10, C.plum);
+      text(g, open ? `${p.cost}` : 'X', x + cw / 2, y + 23, !open ? C.wool : game.coins >= p.cost ? C.butter : C.sage, { align: 'center' });
+      if (ui.click(`piece-${i}`, x, y, cw - 1, 30)) this.piece = i;
     });
 
     // Info card: the piece under the cursor, else the selected one.
@@ -795,7 +805,7 @@ export class BuildMode {
     } else {
       const p = this.pieceDef;
       title = `${p.name}  ${p.cost}$`;
-      lines.push(...wrap(p.desc, R - L - 8));
+      lines.push(...prose(p.desc, R - L - 8));
       const { tx, ty } = this.pieceSpot();
       const why = decorBlocked(game, p, tx, ty, (x, y) => this.buildable(game, x, y));
       if (why) lines.push(why);
@@ -805,7 +815,7 @@ export class BuildMode {
     const iy = by - 6 - ih;
     panel(g, L, iy, R - L, ih);
     infoTitle(g, title, L + 4, iy + 3);
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
     if (game.input.touchMode) {
       const bw = 40, bh = 15, rx = R - bw;
       let y = iy - bh - 3;

@@ -1,6 +1,7 @@
 import { C } from '../palette';
+import { prose } from './case';
 import { panel } from './frame';
-import { text, wrap } from '../gfx/font';
+import { text } from '../gfx/font';
 import type { Game } from '../game';
 import { SAVE_KEY, saveData, type SaveData } from '../systems/save';
 import { SPECIES } from '../entities/species';
@@ -351,9 +352,9 @@ export function drawTransfer(game: Game, g: CanvasRenderingContext2D, W: number,
     if (cur) head.push({ s: 'THE RANCH HERE NOW WILL BE GONE.', c: C.sage });
   } else {
     head.push({ s: st.from === 'title' ? 'MOVE A RANCH' : 'MOVE THIS RANCH', c: C.butter });
-    for (const l of wrap('TAKE IT TO ANOTHER PHONE OR COMPUTER AS A CODE OR A FILE, OR BRING ONE HERE.', pw - 16)) head.push({ s: l, c: C.wool });
+    for (const l of prose('TAKE IT TO ANOTHER PHONE OR COMPUTER AS A CODE OR A FILE, OR BRING ONE HERE.', pw - 16)) head.push({ s: l, c: C.wool });
   }
-  const notes = st.note ? wrap(st.note, pw - 16) : [];
+  const notes = st.note ? prose(st.note, pw - 16) : [];
   const ph = 10 + head.length * 7 + 4 + rs.length * (rh + gap) + (notes.length ? notes.length * 7 + 3 : 0);
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(S.top + 4, Math.round(H / 2 - ph / 2));
   panel(g, x0, y0, pw, ph);

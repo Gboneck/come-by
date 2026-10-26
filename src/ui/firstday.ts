@@ -1,5 +1,6 @@
 import { C } from '../palette';
-import { heading, text, wrap } from '../gfx/font';
+import { prose, sentence } from './case';
+import { heading, text } from '../gfx/font';
 import type { Game } from '../game';
 import { panel } from './frame';
 import { safeArea } from './safe';
@@ -34,7 +35,7 @@ export function drawWelcome(game: Game, g: CanvasRenderingContext2D, W: number, 
   const body = [
     `YOU ARE ${game.look.name}, A CATTLE DOG ON A LITTLE RANCH.`,
     'YOUR DUCKS ARE OUT IN THE MEADOW. BRING THEM HOME TO THE PADDOCK.',
-  ].flatMap((p) => wrap(p, pw - 14));
+  ].flatMap((p) => prose(p, pw - 14));
   const how = touch ? 'DRAG WITH YOUR LEFT THUMB TO RUN' : 'WASD OR THE ARROW KEYS TO RUN';
   const ph = 20 + body.length * 7 + 14;
   const x0 = Math.round(W / 2 - pw / 2);
@@ -42,7 +43,7 @@ export function drawWelcome(game: Game, g: CanvasRenderingContext2D, W: number, 
   panel(g, x0, y0, pw, ph, C.plum, C.butter);
   heading(g, 'COME BY!', W / 2, y0 + 5, C.butter, { align: 'center', shade: C.moss });
   body.forEach((l, i) => text(g, l, W / 2, y0 + 16 + i * 7, C.wool, { align: 'center' }));
-  if (Math.floor(age * 2) % 2 === 0 || age < 1) text(g, how, W / 2, y0 + ph - 9, C.butter, { align: 'center' });
+  if (Math.floor(age * 2) % 2 === 0 || age < 1) text(g, sentence(how), W / 2, y0 + ph - 9, C.butter, { align: 'center' });
   if (game.ui.click('welcome', x0, y0, pw, ph)) game.tipsSeen.add('welcome');
 }
 

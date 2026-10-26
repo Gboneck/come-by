@@ -1,4 +1,6 @@
 import { REGIONS, YARDS } from '../world/map';
+import { textWidth, wrap, type TextSize } from '../gfx/font';
+import { TIERS } from '../systems/progression';
 
 // Sentence case for the game's prose. The game's strings are written in
 // capitals (the old font had no lower case); this turns them into ordinary
@@ -26,6 +28,8 @@ function staticNames(): string[] {
     out.add(y.place.replace(/^THE /, ''));
   }
   for (const s of ['SHEARER', 'MILLER', 'DROVER', 'SALE YARD']) out.add(s);
+  // Tier names, but for "ranch", which is mostly just the word.
+  for (const t of TIERS) if (t.name !== 'RANCH') out.add(t.name);
   return [...out].filter((n) => n.length > 2);
 }
 
@@ -61,11 +65,41 @@ export function sentence(s: string): string {
   t = t.replace(/\bI\b/g, () => hold('I'));
   t = t.toLowerCase();
   // Capitals to start each sentence.
-  t = t.replace(/(^|[.!?]\s+)([a-z])/g, (_, a: string, b: string) => a + b.toUpperCase());
+  t = t.replace(/(^[^a-z0-9\u0001]*|[.!?]\s+)([a-z])/g, (_, a: string, b: string) => a + b.toUpperCase());
   t = t.replace(/\u0001(\d+)\u0002/g, (_, i: string) => keep[Number(i)]);
   // A name or key may open a sentence: fine as it is. A lone "a" opening one:
   t = t.replace(/(^|[.!?]\s+)a\b/g, (_, a: string) => `${a}A`);
   if (cache.size > 800) cache.clear();
   cache.set(s, t);
   return t;
+}
+
+// Prose wrapped to a width, in sentence case.
+export function prose(s: string, maxW: number, size?: TextSize): string[] {
+  return wrap(sentence(s), maxW, size);
+}
+
+// Lines already wrapped in capitals (the Ledger's, other features' lists):
+// each in sentence case, but a line that carries on a sentence from the one
+// before does not start with a capital. Given the width they were wrapped
+// to, only a line after one that nearly filled it carries on.
+export function sentenceLines(lines: string[], wrapW = 0): string[] {
+  let open = false; // the line before left a sentence unfinished
+  return lines.map((l) => {
+    if (!l.trim() || /[a-z]/.test(l)) {
+      open = false;
+      return l;
+    }
+    const list = /^[#+\-*] /.test(l);
+    let out = sentence(l);
+    if (open && !list) out = out.replace(/^([^A-Za-z]*)([A-Z])(?![A-Z])/, (m, a: string, b: string) => (startsName(l) ? m : a + b.toLowerCase()));
+    open = !/[.!?:]\s*$/.test(l) && (!wrapW || textWidth(l) > wrapW - 24);
+    return out;
+  });
+}
+
+// Whether a capitals line starts with a name (which keeps its capital).
+function startsName(l: string): boolean {
+  NAMES ??= staticNames();
+  return [...extra, ...NAMES].some((n) => l.startsWith(n)) || /^([B-HJ-Z]|SPACE|TAB|ESC|SHIFT|ENTER|WASD)\b/.test(l);
 }
