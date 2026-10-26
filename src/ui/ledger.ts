@@ -141,8 +141,10 @@ const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? 9 : 7), 0)
 // features add an entry here. Each page draws into the book's paper (`r`,
 // with `spine` the x of the fold on a wide screen, else 0) in ink (`PAPER_INK`:
 // plum writing, teal for what matters, sage for what is not yet). `keys`
-// gets the arrows and confirm while its page is open, and returns true when
-// it used confirm (else confirm closes the book).
+// gets the first look at the keys while its page is open (arrows, confirm,
+// cancel: what it takes with `pressed()` the book never sees) and returns
+// true when it used confirm or cancel, so the book stays open. `dot` puts a
+// buttercup dot on its tab (something new to see).
 export interface LedgerInk { text: string; accent: string; dim: string }
 export const PAPER_INK: LedgerInk = { text: C.plum, accent: C.teal, dim: C.sage };
 export interface LedgerPage {
@@ -150,6 +152,7 @@ export interface LedgerPage {
   tab: string;
   draw: (game: Game, g: CanvasRenderingContext2D, r: { x: number; y: number; w: number; h: number; spine: number }, ink: LedgerInk) => void;
   keys?: (game: Game) => boolean;
+  dot?: (game: Game) => boolean;
 }
 export const LEDGER_PAGES: LedgerPage[] = [];
 // The open page (0: the ranch). The book stays open where you left it.
@@ -159,7 +162,7 @@ export const ledgerView = { page: 0 };
 // pages.
 export function ledgerKeys(game: Game): boolean {
   const inp = game.input;
-  if (inp.pressed('ledger') || inp.pressed('cancel')) return true;
+  if (inp.pressed('ledger')) return true;
   const n = LEDGER_PAGES.length + 1;
   if (n > 1 && (inp.pressed('prev') || inp.pressed('next'))) {
     ledgerView.page = (ledgerView.page + (inp.pressed('next') ? 1 : n - 1)) % n;
@@ -168,7 +171,7 @@ export function ledgerKeys(game: Game): boolean {
   ledgerView.page = Math.min(ledgerView.page, n - 1);
   const page = LEDGER_PAGES[ledgerView.page - 1];
   if (page?.keys?.(game)) return false;
-  return inp.pressed('confirm');
+  return inp.pressed('cancel') || inp.pressed('confirm');
 }
 
 // The Ranch Ledger: where you are, what to do, what comes next. On a wide
@@ -272,6 +275,10 @@ function drawTabs(game: Game, g: CanvasRenderingContext2D, x0: number, top: numb
     rect(g, x + 1, y + 1, w - 2, th + 1, on ? C.wool : C.teal);
     if (!on) for (let k = 2; k < w - 2; k += 3) px(g, x + k, y + 1, C.sage);
     text(g, n, x + w / 2, y + Math.floor((th - 5) / 2) + 1, on ? C.plum : C.wool, { align: 'center' });
+    const pg = LEDGER_PAGES[i - 1];
+    if (!on && pg?.dot?.(game) && Math.floor(game.t * 2) % 2 === 0) {
+      rect(g, x + w - 4, y + 2, 2, 2, C.butter);
+    }
     if (game.ui.click(`ledger-tab-${i}`, x, y - 2, w, th + 4) && i !== ledgerView.page) {
       ledgerView.page = i;
       game.audio?.play('click');
