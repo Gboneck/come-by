@@ -1,5 +1,7 @@
 import type { Game } from '../game';
 import { stacks, type Seasonal } from '../systems/seasonal';
+import type { FavourSave } from '../systems/favour';
+import type { Group } from '../systems/achievements';
 
 // Ranch state that guests need but that is neither the herd nor the world
 // in the snapshot: plain JSON, sent with the ranch's numbers whenever it
@@ -12,6 +14,9 @@ export interface Shared {
 }
 
 export const SHARED: Shared[] = [
+  // Buyers' favour (their yards dress up) and the board by the farmhouse.
+  { key: 'favour', get: (g) => g.favour.save(), set: (g, v) => g.favour.load(v as FavourSave) },
+  { key: 'pins', get: (g) => g.achievements.pins(g), set: (g, v) => (g.achievements.hostPins = v as Group[]) },
   // Winter feed and this year's fair (systems/seasonal.ts).
   { key: 'seasonal', get: (g) => ({ loft: g.seasonal.loft, hungryNights: g.seasonal.hungryNights, fair: g.seasonal.fair }), set: (g, v) => Object.assign(g.seasonal, v as Partial<Seasonal>) },
   // Bales left in each haystack, in building order.

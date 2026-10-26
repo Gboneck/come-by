@@ -651,6 +651,57 @@ another origin are never answered from the cache.
 - [x] `scripts/daytest.mjs`: calm, rough, late and frantic-at-dusk first
       drives all afford the kennel by the end of day one
 
+## M28 Buyers' favour and achievements (round four)
+- [x] Buyers' favour (`src/systems/favour.ts`, `src/art/favour.ts`): the
+      miller, the drover, the sale yard (4 levels each) and the summer
+      shearer (3). Filled orders +3, all calm +2, two hours early +1, a
+      special order +1; a missed order -2 (short -1), never losing a level
+- [x] Each level brings something: pay 10/15/20/30% over (shown as its own
+      "+N$ @" float); special orders from level 2 (the miller's RUSH at
+      double pay, the sale yard's SHOW STOCK for calm stock only at double,
+      the drover's BIG DROVE at 1.5x); gifts at 3 (millstone, show bell and
+      fleece bale decor, free in build mode; the drover walks a rare breed
+      to his gate); at the top, FRIEND OF THE VALLEY (your ranch's name on
+      their yard, the miller's meal for the loft each winter, the drover's
+      old dog trains yours, the valley rosette; the shearer comes twice)
+- [x] The yards dress up: bunting, a striped stall over the cart, flower
+      tubs at the gate, the name board on the front fence, the special
+      order's word by the cart's pennant
+- [x] A buyer's card when they take to you (their line, the new perk,
+      hearts filling), and their line said aloud at the yard
+- [x] Achievements (`src/systems/achievements.ts`): 37 across herding,
+      trials, the ranch, the valley, the seasons and co-op, three secret
+      with hints; most read from the lifetime record, some caught as they
+      happen (a day without a bark, ten home at once all calm, a coyote
+      made to drop its prey, the cattle class won without a nip, calm in a
+      storm, resting to dusk, a friend on your ranch)
+- [x] Badges drawn in code (`src/art/badges.ts`): a frame per kind worked
+      out per pixel (medal, rosette, shield, octagon, wreath, tag) and a
+      pixel icon; locked ones in outline, secret ones a question mark
+- [x] The unlock card slides in with a stamp, confetti (scaled by
+      GRAPHICS), the `thatlldo` / `tierup` stingers and a buzz; one at a
+      time, waiting behind the tier card and the judge's card; tap it for
+      the Ledger at that badge
+- [x] The Ledger gets pages (`src/ui/achievements.ts`): RANCH LEDGER,
+      BUYERS (a favour bar each and what the next level brings) and BADGES
+      (the grid, progress on locked ones, hints for secret ones, a badge
+      opened large with SHARE). Q/E (LB/RB) turn the pages, tabs on touch
+- [x] SHARE makes a postcard of the badge (the dog on the stamp, the
+      ranch and the day) as a crisp PNG: the share sheet on a phone, a
+      download elsewhere
+- [x] The board by the farmhouse door (`src/art/trophies.ts`): rosettes,
+      class cups and the Valley Cup, a pin for every badge; a second board
+      once the first is full
+- [x] Saved additively; an older save is credited with what its totals
+      show (quietly, with one card saying how many). A co-op guest earns
+      only the co-op badges while visiting, kept with their travels and
+      folded into their own save at home; the host's favour and badge pins
+      reach guests through `src/net/shared.ts`
+- [x] `scripts/favourtest.mjs` (31 checks) and `scripts/achievetest.mjs`
+      (34 checks); padtest and cooptest gained checks for the Ledger pages,
+      guest badges and shared favour; savetest, ordertest, daytest pass;
+      `tune.mjs --seed=7` is identical to main for all five species
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1471,3 +1522,21 @@ another origin are never answered from the cache.
   and the worst possible one (frantic, penned at dusk) has 15$ on penning
   and 18$ at day's end. 10$ is below the trough (12$), so the tin cannot be
   spent on anything that would leave the kennel out of reach.
+- Favour levels are never lost: a missed order takes points back only down
+  to the level's start. Pay over the price is paid as a separate float so
+  the order code's price line (which gameplay also edits) stays as it was.
+- One special order a day at most, and the miller's rush only for a kind
+  you have penned at home (a rush from the far pastures would be cruel).
+  A show order does not refuse rattled stock for good: it waits in the
+  yard until it settles (peak stress drifts down), which is calm-beats-chaos.
+- The shearer's track is shorter (3 levels: 4, 9, 15 points) because he
+  comes once a summer; his level 2 brings a second clip, which makes the
+  top reachable in a second summer.
+- Achievement badges are earned once and kept; the lifetime record works
+  out most of them, so an older save loses nothing. Moments that cannot be
+  worked out from totals (a quiet day, a perfect drive) are not guessed.
+- A card's confetti uses Math.random, so cards make no fanfare under the
+  bots (`input.override`): seeded tune runs stay identical to main.
+- Valley projects and the village (other sessions this round) are read
+  through an optional view (`projects.done`, `ranch.village.built`), so
+  this branch builds without them and the badges light up once merged.

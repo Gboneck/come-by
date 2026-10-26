@@ -11,6 +11,8 @@ import type { SpeciesId } from '../world/map';
 import { newTotals, type Totals } from './progression';
 import type { UpKey } from './economy';
 import { morningOrders, type Order } from './orders';
+import type { FavourSave } from './favour';
+import type { AchSave } from './achievements';
 import type { ClassId } from './trials';
 import { applyLook, readLook, type Look } from '../ui/look';
 import { PIECES, type PlacedDecor } from '../ui/decorbuild';
@@ -48,6 +50,9 @@ export interface SaveData {
   // Added with customization; older saves get the defaults.
   look?: Partial<Look>;
   decor?: PlacedDecor[];
+  // Added with buyers' favour and achievements (older saves: worked out on load).
+  favour?: FavourSave;
+  achievements?: AchSave;
   weather?: { sky: Sky; forecast: Sky; dir: [number, number] };
   // Added with exploring.
   discovery?: DiscoverySave;
@@ -140,6 +145,8 @@ export function saveData(game: Game): SaveData {
     trials: { won: game.trials.won, cups: game.trials.cups, last: game.trials.lastPrizeDay },
     look: game.look,
     decor: game.decor,
+    favour: game.favour.save(),
+    achievements: game.achievements.save(),
     weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
     discovery: game.discovery.save(game),
     seasonal: { loft: game.seasonal.loft, hungryNights: game.seasonal.hungryNights, fair: game.seasonal.fair },
@@ -184,6 +191,11 @@ export function ownDiscovery(): DiscoverySave | undefined {
   return read()?.discovery;
 }
 
+// Our own achievements (a co-op guest shows them, and earns no others).
+export function ownAchievements(): AchSave | undefined {
+  return read()?.achievements;
+}
+
 export function saveInfo(): { day: number; tier: number; look?: Partial<Look> } | null {
   const d = read();
   return d ? { day: d.day, tier: d.tier, look: d.look } : null;
@@ -207,6 +219,8 @@ export function loadInto(game: Game): boolean {
   game.upgrades = { ...game.upgrades, ...d.upgrades };
   game.applyUpgrades();
   game.owned = new Set(d.owned);
+  game.favour.load(d.favour);
+  game.achievements.load(game, d.achievements);
 
   game.animals = [];
   const ks = new Map<number, Animal>();
@@ -266,6 +280,7 @@ export function loadInto(game: Game): boolean {
     game.orders.list = d.orders.map((o) => ({ ...o }));
     game.orders.nextId = d.nextOrder ?? game.orders.list.length + 1;
   } else morningOrders(game);
+  game.achievements.backfill(game); // badges an older save had already earned
   saveGame(game);
   return true;
 }
@@ -303,6 +318,7 @@ export function loadWorld(game: Game, d: SaveData, dog: Look) {
   game.upgrades = { ...game.upgrades, ...d.upgrades };
   game.applyUpgrades();
   game.owned = new Set(d.owned);
+  game.favour.load(d.favour);
   buildRanch(game, d);
   const host = readLook(d.look);
   game.look = { ...host, name: dog.name, dog: { ...dog.dog } };

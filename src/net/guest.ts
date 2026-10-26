@@ -24,6 +24,7 @@ import { buzz } from '../ui/settings';
 import type { SpeciesId } from '../world/map';
 import { clamp } from '../util';
 import { Link, relayBase } from './link';
+import { ledgerKeys } from '../ui/achievements';
 import { COLOURS, DOG_HZ, FACES, INTERP_MS, K_JSON, K_SNAP, Reader, Writer, faceId, jsonFrame, writeDog, type DogEvent, type HostMode } from './protocol';
 import { A_CARRIED, A_EAT, A_HOME, A_HOP, A_PANIC, A_ROCK, A_TRIAL, A_WATER, D_LYING, D_SPRINT, FOLK_IDS, PHASES, POSES, PRED_STATES, allPens, applyAnimalExtra, decodeSnap, faceOf, type AnimalRec, type Snap } from './snapshot';
 
@@ -392,9 +393,7 @@ export class GuestNet implements PingNet {
       return;
     }
     if (game.mode === 'pause') pauseKeys(game);
-    else if (game.mode === 'ledger') {
-      if (input.pressed('ledger') || input.pressed('cancel') || input.pressed('confirm')) game.mode = 'play';
-    } else if (game.mode === 'play') {
+    else if (game.mode === 'ledger') ledgerKeys(game); else if (game.mode === 'play') {
       if (input.pressed('pause')) {
         game.mode = 'pause';
         game.pauseSel = 0;

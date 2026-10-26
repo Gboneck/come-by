@@ -121,7 +121,14 @@ export function padFrame(game: Game, dt: number) {
     return;
   }
   if (mode === 'ledger') {
-    if (hit(PAD.A) || hit(PAD.B) || hit(PAD.SELECT) || hit(PAD.START)) push('ledger');
+    // Pages with the bumpers; the badge grid with the d-pad.
+    const d = dirPress(game, dt, RATE);
+    if (d) push(d);
+    if (hit(PAD.A)) push('confirm');
+    if (hit(PAD.B)) push('cancel');
+    if (hit(PAD.LB)) push('prev');
+    if (hit(PAD.RB)) push('next');
+    if (hit(PAD.SELECT) || hit(PAD.START)) push('ledger');
     return;
   }
   // Title, pause, the dog's look, co-op, moving a save: lists of rows.
@@ -151,6 +158,9 @@ const RULES: [RegExp, string][] = [
   [/\bSPACE: NEXT DAY\b/g, '(A) NEXT DAY'],
   [/\bB: BUILD\b/g, '(LB) BUILD'],
   [/\bTAB: CLOSE\b/g, '(B) CLOSE'],
+  [/\bQ\/E: PAGES\b/g, '(LB)(RB) PAGES'],
+  [/\bENTER: (OPEN|SHARE)\b/g, '(A) $1'],
+  [/\bESC: BACK\b/g, '(B) BACK'],
   [/\bESC: RESUME\b/g, '(B) RESUME'],
   [/\bENTER: TYPE A NAME\b/g, '(A) TYPE A NAME'],
   [/\bARROWS: CHANGE\b/g, '(D-PAD) CHANGE'],

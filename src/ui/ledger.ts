@@ -14,6 +14,7 @@ import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
 import { discoveryLines, drawFog, drawPlaceMarks } from './discovery';
 import { travelLines } from '../net/travels';
+import { drawLedgerPage, drawLedgerTabs, ledgerPage } from './achievements';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -108,6 +109,7 @@ const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? 9 : 7), 0)
 // The Ranch Ledger: where you are, what to do, what comes next. On a wide
 // screen the goals sit on the left, the map and the day's jobs on the right.
 export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H: number): boolean {
+  if (ledgerPage()) return drawLedgerPage(game, g, W, H); // BUYERS, BADGES (ui/achievements.ts)
   const ui = game.ui;
   const tier = tierOf(game.tier);
   const next = TIERS[game.tier] ?? null;
@@ -157,8 +159,8 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
   dimView(g, game.view());
   panel(g, x0, y0, pw, ph);
-  text(g, 'RANCH LEDGER', x0 + pw / 2, y0 + 4, C.butter, { align: 'center' });
-  rect(g, x0 + 5, y0 + 11, pw - 10, 1, C.sage);
+  drawLedgerTabs(game, g, x0 + 5, y0 + 4);
+  rect(g, x0 + 5, y0 + 13, pw - 10, 1, C.sage);
   // Tier pips.
   for (let i = 0; i < TIERS.length; i++) rect(g, x0 + pw - 8 - (TIERS.length - i) * 5, y0 + 4, 4, 4, i < game.tier ? C.butter : C.sage);
   if (wide) {

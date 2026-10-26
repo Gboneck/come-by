@@ -4,7 +4,7 @@
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 
-const PORT = 5216;
+const PORT = Number(process.env.DAY_PORT || 5216); // pacetest uses 5216 too
 const server = await createServer({ server: { port: PORT, strictPort: true }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch();

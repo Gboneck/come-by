@@ -142,6 +142,22 @@ check('pause: B resumes', (await g(() => window.game.mode)) === 'play');
 // ---- Ledger ----
 await press(B.SELECT);
 check('SELECT opens the Ledger', (await g(() => window.game.mode)) === 'ledger');
+const page_ = () => g(async () => (await import('/src/ui/achievements.ts')).ledgerPage());
+await press(B.RB);
+check('ledger: RB turns to BUYERS', (await page_()) === 1);
+await press(B.RB);
+check('ledger: RB again to BADGES', (await page_()) === 2);
+await g(() => (window.game.achievements.sel = 0));
+await press(B.RIGHT);
+check('ledger: the d-pad moves on the badge grid', (await g(() => window.game.achievements.sel)) === 1);
+await press(B.A);
+check('ledger: A opens a badge', await g(() => window.game.achievements.detail));
+await shot('ledger-badge');
+await press(B.B);
+check('ledger: B goes back to the grid', (await g(() => !window.game.achievements.detail && window.game.mode === 'ledger')));
+await press(B.LB);
+await press(B.LB);
+check('ledger: LB turns back to the ranch page', (await page_()) === 0);
 await press(B.B);
 check('ledger: B closes it', (await g(() => window.game.mode)) === 'play');
 

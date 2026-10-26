@@ -5,6 +5,7 @@ import { makeCanvas } from '../gfx/screen';
 import { fromCanvas, type Sprite } from '../gfx/sprite';
 import { DECOR } from '../ranch/decor';
 import { TS } from '../world/map';
+import { GIFT_PIECES } from '../art/favour';
 
 // Decor the player places in build mode's DECOR tab. Purely for looks: it
 // never blocks the stock or the dog, so it cannot spoil a drive. Some pieces
@@ -35,6 +36,7 @@ export const PIECES: Piece[] = [
   { id: 'scarecrow', name: 'SCARECROW', cost: 10, w: 1, h: 1, desc: 'KEEPS THE CROWS GUESSING.', open: (g) => g.tier >= 3, lock: 'OPENS AT TIER 3' },
   { id: 'ribbons', name: 'RIBBON BOARD', cost: 8, w: 1, h: 1, desc: 'SHOWS THE RIBBONS YOU HAVE WON.', open: (g) => ribbons(g) > 0, lock: 'WIN A RIBBON AT THE TRIALS' },
   { id: 'trophy', name: 'TROPHY', cost: 20, w: 1, h: 1, desc: 'THE CUP, FOR WINNING A CLASS.', open: (g) => g.trials.won.length > 0, lock: 'WIN A CLASS AT THE TRIALS' },
+  ...GIFT_PIECES, // buyers' gifts, free once given (art/favour.ts)
 ];
 
 export const pieceOf = (id: PieceId) => PIECES.find((p) => p.id === id)!;
