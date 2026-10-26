@@ -5,7 +5,7 @@ import { PX } from '../gfx/screen';
 import { drawSprTop, finePixels, fineShadow, toFinePx } from '../art/hd';
 import { seasonLook } from '../art/seasonlook';
 import { animalSprites, type AnimalSprites } from '../art/animals';
-import { lambSprites } from '../art/young';
+import { youngSprites } from '../art/young';
 import { hash2 } from '../rng';
 import { gust } from './wind';
 import type { Animal } from '../entities/animal';
@@ -51,6 +51,7 @@ function poseOf(a: Animal, t: number, night: boolean): Pose {
   return p;
 }
 
+const YOUNG_SHADOW: Record<SpeciesId, [number, number]> = { duck: [2, 1], sheep: [3, 1], goat: [3, 1], cow: [5, 2], pony: [4, 1] };
 const SHADOW: Record<SpeciesId, [number, number]> = {
   duck: [3, 1],
   sheep: [5, 2],
@@ -61,7 +62,7 @@ const SHADOW: Record<SpeciesId, [number, number]> = {
 
 export function drawAnimalShadow(g: CanvasRenderingContext2D, a: Animal, sun = 0) {
   if (a.inWater) return;
-  const [rx, ry] = a.young ? [3, 1] : SHADOW[a.sp.id];
+  const [rx, ry] = a.young ? YOUNG_SHADOW[a.sp.id] : SHADOW[a.sp.id];
   const side = a.face === 'l' || a.face === 'r';
   const lying = (poses.get(a)?.rest ?? 0) > (poses.get(a)?.lieAfter ?? 1e9);
   // In fine pixels: twice the world sizes, a touch flatter.
@@ -92,7 +93,7 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, ni
   // eyes wide, whatever it is doing.
   const wary = a.stress > 0.4 || a.pressure > 0.2 || a.panicT > 0;
   const scared = a.stress > 0.7 || a.panicT > 0;
-  const S: AnimalSprites = a.young ? lambSprites(a.coat, scared) : animalSprites(a.sp.id, a.coat, scared);
+  const S: AnimalSprites = a.young ? youngSprites(a.sp.id, a.coat, scared) : animalSprites(a.sp.id, a.coat, scared);
   const p = poseOf(a, t, night);
   const id = a.sp.id;
   let hop = a.hop > 0 ? -Math.round(Math.sin(a.hop * Math.PI) * 2) : 0;
