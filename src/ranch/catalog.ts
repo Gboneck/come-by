@@ -1,7 +1,7 @@
 import { spr, type Sprite } from '../gfx/sprite';
 import type { BuildingKind, Rot } from './buildings';
 
-export type ItemId = 'pen' | 'fence' | 'trough' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill' | 'hay';
+export type ItemId = 'pen' | 'fence' | 'trough' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill' | 'hay' | 'shed' | 'dairy' | 'agility';
 
 export interface BuildDef {
   id: ItemId;
@@ -58,6 +58,21 @@ export const CATALOG: BuildDef[] = [
     id: 'hay', kind: 'haystack', name: 'HAY', cost: 40, tier: 2, w: 2, h: 2, rotates: false,
     desc: 'WINTER FEED: 20 BALES. IN A BARN\'S RING THE SNOW CANNOT SPOIL IT.',
     icon: icon('hay', ['.........', '...yyy...', '..yyyyy..', '.yyoyyoy.', '.yoyyyoy.', 'yyyyyyyyy', 'sssssssss']),
+  },
+  {
+    id: 'shed', kind: 'shed', name: 'SHEARING SHED', cost: 60, tier: 2, w: 8, h: 6, rotates: false, max: 1,
+    desc: 'IN SUMMER, WALK SHEEP THROUGH ITS CHUTE: EACH IS SHORN FOR A WOOL BONUS.',
+    icon: icon('shed', ['.........', '..ppppp..', '.ppppppp.', 'ppppppppp', 'wwpwwwpww', '.........', 'w.w.w.w.w']),
+  },
+  {
+    id: 'agility', kind: 'agility', name: 'AGILITY YARD', cost: 45, tier: 2, w: 12, h: 8, rotates: false, max: 1,
+    desc: 'RUN THE COURSE CLEAN AND QUICK: FREE SPEED AND STAMINA TRAINING.',
+    icon: icon('agility', ['p.......p', 'p.y...y.p', 'pwyw.wywp', 'p.y...y.p', 'p...t...p', 'p..ttt..p', 'ppp...ppp']),
+  },
+  {
+    id: 'dairy', kind: 'dairy', name: 'DAIRY', cost: 110, tier: 4, w: 7, h: 7, rotates: false, max: 1,
+    desc: 'MORNINGS, WALK COWS INTO ITS YARD TO BE MILKED. CALM COWS GIVE MORE.',
+    icon: icon('dairy', ['..ppppp..', '.ppppppp.', '.wwwwwww.', '.wwpwpww.', 'p.......p', 'p.......p', 'ppp...ppp']),
   },
   {
     id: 'gate', kind: 'gate', name: 'GATE', cost: 6, tier: 3, w: 2, h: 1, rotates: true,

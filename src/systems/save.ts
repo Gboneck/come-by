@@ -3,6 +3,7 @@ import { Animal } from '../entities/animal';
 import type { Coat } from '../art/animals';
 import { Pen, type BuildingKind, type Rot } from '../ranch/buildings';
 import { defOfKind } from '../ranch/catalog';
+import { valleyLoad, valleySave, type ValleySave } from './valley';
 import { Haystack } from '../ranch/structures';
 import { LOFT_MAX, type FairEntry } from './seasonal';
 import { makeBuilding } from '../ui/build';
@@ -53,6 +54,10 @@ export interface SaveData {
   discovery?: DiscoverySave;
   // Added with seasons (the calendar itself follows from `day`).
   seasonal?: { loft: number; hungryNights: number; fair: FairEntry[] };
+  // Added with the valley growing: the village, paddocks, the old bridge,
+  // and the agility yard's training.
+  valley?: ValleySave;
+  farmwork?: { marks: Partial<Record<UpKey, number>>; trainedDay: number; best: number; cleanRuns: number; shorn: number; milked: number };
 }
 
 function store(): Storage | null {
@@ -143,6 +148,8 @@ export function saveData(game: Game): SaveData {
     weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
     discovery: game.discovery.save(game),
     seasonal: { loft: game.seasonal.loft, hungryNights: game.seasonal.hungryNights, fair: game.seasonal.fair },
+    valley: valleySave(game),
+    farmwork: (({ marks, trainedDay, best, cleanRuns, shorn, milked }) => ({ marks, trainedDay, best, cleanRuns, shorn, milked }))(game.farmwork),
   };
 }
 
@@ -249,6 +256,8 @@ export function loadInto(game: Game): boolean {
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery);
   mergeTravels(game); // places and keepsakes found visiting friends' ranches
+  valleyLoad(game, d.valley);
+  Object.assign(game.farmwork, d.farmwork ?? {});
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));
@@ -310,6 +319,7 @@ export function loadWorld(game: Game, d: SaveData, dog: Look) {
   game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery ? { ...d.discovery, out: [] } : undefined);
+  valleyLoad(game, d.valley);
   game.ranch.restamp();
   if (d.trials) {
     game.trials.won = [...d.trials.won];

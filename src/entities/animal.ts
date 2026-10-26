@@ -75,6 +75,10 @@ export class Animal {
   mother: Animal | null = null;
   lamb: Animal | null = null; // a ewe's lamb (the first, if twins)
   lambedYear = 0;
+  // The valley (src/systems/valley.ts, farmwork.ts): a log hitched behind a
+  // cow for the old bridge, and the day she was last milked.
+  load: 'log' | null = null;
+  milkedDay = 0;
   shorn = 0; // the year it was last shorn
   forSale = 0; // price at the fair's breeders' pen (0: not for sale)
   // Goats: nearest rock to scramble up, and how long they have sat on one.
@@ -512,6 +516,7 @@ function stepAnimal(a: Animal, ctx: HerdCtx, dt: number) {
   spd *= 1 + 0.2 * a.stress;
   if (a.inWater) spd *= 0.6;
   if (!a.pen && ctx.snow) spd *= 1 - 0.12 * ctx.snow;
+  if (a.load) spd *= 0.85; // dragging a log
   if (settling && !driven) spd *= 0.4;
   const acc = spd > a.speed ? sp.accel : sp.accel * (settling ? 3.5 : 2);
   a.speed += clamp(spd - a.speed, -acc * dt, acc * dt);

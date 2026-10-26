@@ -9,7 +9,7 @@ export interface Fixture {
   stamp(map: WorldMap): void;
 }
 
-function smallPen(tx: number, ty: number, w: number, h: number, rot: Rot): Pen {
+export function smallPen(tx: number, ty: number, w: number, h: number, rot: Rot): Pen {
   const p = new Pen(tx, ty, rot);
   p.w = w;
   p.h = h;

@@ -225,7 +225,7 @@ export function drawGood(g: CanvasRenderingContext2D, sp: string, x: number, y: 
 
 // A hipped roof seen from the front: plum, staggered teal shingle courses,
 // a sage ridge, the right hip catching the light and the left in shade.
-function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top: number, eave: number, hip: number, base: string = C.plum, course: string = C.teal) {
+export function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top: number, eave: number, hip: number, base: string = C.plum, course: string = C.teal) {
   const rh = eave - top;
   for (let y = top; y < eave; y++) {
     const k = y - top;
@@ -518,7 +518,7 @@ export function fieldGateDrawables(g: CanvasRenderingContext2D, gt: FieldGate): 
   ];
 }
 
-function shadowRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function shadowRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   rect(g, x - 4, y + 3, w, h, C.sage);
 }
 

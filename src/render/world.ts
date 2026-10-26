@@ -3,8 +3,10 @@ import { ellipse, ring } from '../gfx/draw';
 import type { Game } from '../game';
 import { drawAnimal, drawAnimalMarks, drawAnimalShadow } from './animals';
 import { Building, Farmhouse, Pen, RegionGate } from '../ranch/buildings';
-import { Barn, FieldGate, Fence, Haystack, Kennel, Market, Windmill } from '../ranch/structures';
+import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { haystackDrawable } from '../art/hay';
+import { agilityDrawables, dairyDrawables, shedDrawables } from '../art/farm2';
+import { valleyLights } from '../art/valley';
 import { barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, penDrawables, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
 import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
@@ -94,7 +96,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const b of game.ranch.buildings) {
     if (!inView(b.x0, b.y0 - 30, b.x1, b.y1, 8)) continue;
     const near = Math.hypot(game.dog.x - b.cx, game.dog.y - b.cy) < 120 || game.mode === 'build';
-    ents.push(...cached(g, `b${b.id}`, (cg) => buildingDrawables(cg, b, game.t, night, near)));
+    ents.push(...cached(g, `b${b.id}`, (cg) => buildingDrawables(cg, b, game.t, night, near, game)));
   }
   const tierName = game.look.ranch || tierOf(game.tier).name; // the ranch sign
   ents.push(...game.extraDrawables(g));
@@ -136,6 +138,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     for (const h of game.helpers) lights.push({ x: h.x - ox, y: h.y - oy, r: 26 });
     for (const o of game.coop) lights.push({ x: o.x - ox, y: o.y - oy, r: 36 });
     lights.push(...game.folk.lights(ox, oy));
+    lights.push(...valleyLights(game, ox, oy)); // the village's windows and forge
     const f = game.ranch.farmhouse;
     if (f) lights.push({ x: f.cx - ox, y: f.y1 + 2 - oy, r: 64 + fl(0) });
     decorLights(game.tier).forEach((l, i) => lights.push({ x: l.x - ox, y: l.y - oy, r: l.r + fl(i + 1) }));
@@ -165,7 +168,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   g.restore();
 }
 
-export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: number, night: boolean, sign = false): Drawable[] {
+export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: number, night: boolean, sign = false, game?: Game): Drawable[] {
   if (b instanceof Pen) return penDrawables(g, b, t, sign);
   if (b instanceof Farmhouse) return farmhouseDrawable(g, b, night, t);
   if (b instanceof RegionGate) return regionGateDrawables(g, b, t);
@@ -176,6 +179,9 @@ export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: n
   if (b instanceof Market) return marketDrawable(g, b);
   if (b instanceof Windmill) return windmillDrawable(g, b, t);
   if (b instanceof Haystack) return [haystackDrawable(g, b)];
+  if (b instanceof ShearingShed) return shedDrawables(g, b, game);
+  if (b instanceof Dairy) return dairyDrawables(g, b, t, night);
+  if (b instanceof AgilityYard) return agilityDrawables(g, b, t, game);
   return [];
 }
 

@@ -99,6 +99,22 @@ export const YARDS: YardSite[] = [
 export const YARD_W = 6;
 export const YARD_H = 5;
 
+// ---- The valley grows (src/systems/valley.ts) ----
+// The village green south-west of the crossroads, west of the north road
+// (tiles). The village is built on it one step at a time.
+export const VILLAGE = { cx: 86, cy: 78.5, rx: 11.5, ry: 6.5 };
+// Overgrown paddocks off the ranch's south side: ranch ground, but scrub
+// until a flock has grazed them clear. Then they are land to build on.
+export interface PaddockSite { id: 'southwest' | 'southeast'; name: string; cx: number; cy: number; rx: number; ry: number }
+export const PADDOCKS: PaddockSite[] = [
+  { id: 'southwest', name: 'THE SOUTH-WEST PADDOCK', cx: 78, cy: 119, rx: 8, ry: 5 },
+  { id: 'southeast', name: 'THE SOUTH-EAST PADDOCK', cx: 116, cy: 118, rx: 8, ry: 5 },
+];
+// The old bridge over the ford (tiles across the river on the ford road),
+// and the woodpile in the ford meadow its timber comes from.
+export const BRIDGE = { y0: 103, y1: 106 };
+export const WOODPILE = { tx: 31, ty: 100 };
+
 export const regionById = (id: RegionId) => REGIONS.find((r) => r.id === id)!;
 
 // River centre line x as a function of tile y (only below its spring).
@@ -215,6 +231,10 @@ export class WorldMap {
     // crossroads road.
     this.carveCorridor([[140, 104], [140, 124], [140, 138]], 3.4);
     this.carveEllipse(107, 77, 8, 5, 0, 0.12, 98);
+    // The village green, and the overgrown paddocks (ranch ground). No RNG,
+    // so everything after comes out as before.
+    this.carveEllipse(VILLAGE.cx, VILLAGE.cy, VILLAGE.rx, VILLAGE.ry, 0, 0.1, 96);
+    for (const [i, p] of PADDOCKS.entries()) this.carveEllipse(p.cx, p.cy, p.rx, p.ry, regionById('ranch').index, 0.1, 90 + i);
 
     // Home Meadow: a pond and a few groves.
     this.pond(158, 112, 4.2, 2.8);
@@ -409,6 +429,30 @@ export class WorldMap {
       }
     }
     this.stampProps();
+  }
+
+  // The old bridge across the ford (src/systems/valley.ts mends it): under
+  // its deck the shallows are dry going, so cattle no longer balk there.
+  bridgeOn = false;
+  bridgeSpan(): { x0: number; x1: number; y0: number; y1: number } {
+    let x0 = MW, x1 = 0;
+    for (let y = BRIDGE.y0; y < BRIDGE.y1; y++)
+      for (let x = 40; x < 70; x++)
+        if (this.t(x, y) === Ter.Shallow) {
+          x0 = Math.min(x0, x);
+          x1 = Math.max(x1, x + 1);
+        }
+    return { x0, x1, y0: BRIDGE.y0, y1: BRIDGE.y1 };
+  }
+  setBridge(on: boolean) {
+    this.bridgeOn = on;
+    const b = this.bridgeSpan();
+    for (let cy = b.y0 * 2; cy < b.y1 * 2; cy++)
+      for (let cx = b.x0 * 2; cx < b.x1 * 2; cx++) {
+        if (this.t(cx >> 1, cy >> 1) !== Ter.Shallow) continue;
+        if (on) this.terFlags[cy * CW + cx] &= ~SHALLOW;
+        else this.terFlags[cy * CW + cx] |= SHALLOW;
+      }
   }
 
   // Combined flags for a collision cell.

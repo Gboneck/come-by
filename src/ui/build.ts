@@ -5,7 +5,7 @@ import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
-import { Barn, FieldGate, Fence, Haystack, Kennel, Market, Windmill } from '../ranch/structures';
+import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
 import { SPECIES } from '../entities/species';
@@ -44,6 +44,9 @@ export function makeBuilding(def: BuildDef, tx: number, ty: number, rot: Rot): B
     case 'barn': return new Barn(tx, ty);
     case 'windmill': return new Windmill(tx, ty);
     case 'hay': return new Haystack(tx, ty);
+    case 'shed': return new ShearingShed(tx, ty);
+    case 'dairy': return new Dairy(tx, ty);
+    case 'agility': return new AgilityYard(tx, ty);
     default: return new Building(def.kind, tx, ty, def.w, def.h, rot);
   }
 }
@@ -114,6 +117,8 @@ export class BuildMode {
     if (tx < 0 || ty < 0 || tx >= MW) return false;
     const r = regionById('ranch');
     if (game.map.region[ty * MW + tx] !== r.index || game.map.t(tx, ty) !== Ter.Grass) return false;
+    const land = game.valley.landAt(tx, ty); // a paddock: land once grazed clear
+    if (land !== null) return land;
     const f = REACH[Math.min(REACH.length, game.tier) - 1];
     const dx = (tx + 0.5 - r.cx) / (r.rx * f), dy = (ty + 0.5 - r.cy) / (r.ry * f);
     if (dx * dx + dy * dy > 1) return false;

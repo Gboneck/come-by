@@ -13,6 +13,9 @@ export type BuildingKind =
   | 'market'
   | 'windmill'
   | 'haystack'
+  | 'shed'
+  | 'dairy'
+  | 'agility'
   | 'regiongate';
 
 // Pens open on one side: 0 = south, 1 = west, 2 = north, 3 = east.

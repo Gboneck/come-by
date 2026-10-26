@@ -3,6 +3,7 @@ import { BLOCK_ANIMAL, CW, CH, MH, MW, REGIONS, TS, YARDS, type WorldMap } from 
 import { Building, Farmhouse, Pen, RegionGate, type BuildingKind, type Rot } from './buildings';
 import { FieldGate } from './structures';
 import { Course, Ring, Yard, type Fixture } from './fixtures';
+import { Village } from './village';
 import { setPenPrice } from './catalog';
 import { placementProblem, roadMask } from './road';
 
@@ -19,6 +20,7 @@ export class Ranch {
   yards: Yard[];
   course: Course;
   ring: Ring; // the autumn fair's judging ring
+  village = new Village(); // the village at the crossroads
   fixtures: Fixture[];
   // The drove road through the clearing (tiles), kept free of building.
   road: Uint8Array;
@@ -28,7 +30,7 @@ export class Ranch {
     this.yards = YARDS.map((s) => new Yard(s));
     this.course = new Course();
     this.ring = new Ring();
-    this.fixtures = [...this.yards, this.course, this.ring];
+    this.fixtures = [...this.yards, this.course, this.ring, this.village];
     for (const r of REGIONS) {
       if (!r.gate) continue;
       const span = this.gateSpan(r.gate.x, r.gate.y, r.gate.vertical);

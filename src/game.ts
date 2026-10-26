@@ -45,6 +45,9 @@ import { Weather } from './systems/weather';
 import { Seasons } from './systems/season';
 import { Seasonal, seasonalEvening } from './systems/seasonal';
 import { fairDrawables } from './art/fair';
+import { Valley } from './systems/valley';
+import { Farmwork, farmworkEvening } from './systems/farmwork';
+import { valleyDrawables } from './art/valley';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
 import { Trials, closeResult, trialNip } from './systems/trials';
@@ -164,6 +167,8 @@ export class Game {
   weather = new Weather();
   season = new Seasons();
   seasonal = new Seasonal(); // lambs, the shearer, the fair, winter hay
+  valley!: Valley; // the village, the paddocks, the old bridge
+  farmwork = new Farmwork(); // the shearing shed, the dairy, the agility yard
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
@@ -189,6 +194,7 @@ export class Game {
     this.map = new WorldMap();
     this.baked = bake(this.map);
     this.ranch = new Ranch(this.map);
+    this.valley = new Valley(this.map);
     this.ranch.setupStarter();
     const door = this.doorPoint();
     this.dog = new Dog(door.x, door.y);
@@ -397,6 +403,7 @@ export class Game {
     }
     this.predators = [];
     seasonalEvening(this); // winter hay, the fair packs up
+    farmworkEvening(this); // the dairy yard empties
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
@@ -1045,7 +1052,7 @@ export class Game {
 
   // Trial course, buyers' yards and carts, hidden places, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.

@@ -5,6 +5,7 @@ import type { Pen } from '../ranch/buildings';
 import type { SpeciesId } from '../world/map';
 import { SPECIES } from '../entities/species';
 import { valueOf, type Animal } from '../entities/animal';
+import { isMarketDay } from './valley';
 
 // ---- Goods ----
 
@@ -46,6 +47,7 @@ export function sellAllGoods(game: Game): { value: number; counts: Partial<Recor
     counts[p.species] = (counts[p.species] ?? 0) + p.goods;
     p.goods = 0;
   }
+  if (isMarketDay(game)) value = Math.round(value * 1.25); // market day: goods sell dearer
   return { value, counts };
 }
 
