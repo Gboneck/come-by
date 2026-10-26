@@ -1,7 +1,7 @@
 import { C } from '../palette';
-import { line, rect } from '../gfx/draw';
 import { fineShadow } from '../art/hd';
 import { drawSpr } from '../gfx/sprite';
+import { fine, toFine } from '../gfx/screen';
 import { dressedSoon, peopleSprites, type Dress, type PeopleSprites, type Pic, type VillagerSpec } from '../art/people';
 import { seasonLook } from '../art/seasonlook';
 import type { Drawable } from '../art/buildings';
@@ -817,28 +817,46 @@ function drawPerson(g: CanvasRenderingContext2D, p: Person, jobs: Job[]) {
 // Scaffolding round a big job, and a stack of timber by any site.
 function drawSite(g: CanvasRenderingContext2D, j: Job) {
   const b = j.b, k = j.done / j.work;
-  const x0 = b.x0 + 1, x1 = b.x1 - 2, top = b.y0 - 8, base = b.y1;
-  if (j.big) {
-    for (const x of [x0, x1, Math.round((x0 + x1) / 2)]) line(g, x, base, x, top, C.plum);
-    if (k > 0.15) {
-      // A ladder up the left side.
-      line(g, x0 + 3, base, x0 + 3, top + 6, C.plum);
-      line(g, x0 + 5, base, x0 + 5, top + 6, C.plum);
-      for (let y = base - 2; y > top + 6; y -= 3) line(g, x0 + 3, y, x0 + 5, y, C.plum);
+  // In fine pixels (two to a world pixel): poles with lashings at the
+  // joints, a ladder, planks with their seams; timber with cut ends.
+  const X0 = toFine(b.x0 + 1), X1 = toFine(b.x1 - 2), TOP = toFine(b.y0 - 8), BASE = toFine(b.y1);
+  fine(g, (fg) => {
+    const fill = (x: number, y: number, w: number, h: number, c: string) => { fg.fillStyle = c; fg.fillRect(x, y, w, h); };
+    if (j.big) {
+      const mid = Math.round((X0 + X1) / 2);
+      for (const x of [X0, X1, mid]) {
+        fill(x, TOP, 2, BASE - TOP + 1, C.plum);
+        fill(x + 1, TOP + 1, 1, BASE - TOP - 1, C.sage); // the lit side of the pole
+      }
+      if (k > 0.15) {
+        // A ladder up the left side.
+        const lx = X0 + 6, ly = TOP + 12;
+        fill(lx, ly, 1, BASE - ly + 1, C.plum);
+        fill(lx + 4, ly, 1, BASE - ly + 1, C.plum);
+        for (let y = BASE - 3; y > ly; y -= 5) fill(lx + 1, y, 3, 1, C.moss);
+      }
+      for (const [at, from] of [[BASE - 12, 0.3], [Math.round((TOP + BASE) / 2), 0.55], [TOP + 6, 0.8]] as const) {
+        if (k < from) continue;
+        fill(X0, at, X1 - X0 + 2, 3, C.moss);
+        fill(X0, at, X1 - X0 + 2, 1, C.butter); // the planks' sunny top edge
+        fill(X0, at + 3, X1 - X0 + 2, 1, C.plum);
+        for (let x = X0 + 7; x < X1; x += 9) fill(x, at + 1, 1, 2, C.sage); // seams
+        for (const x of [X0, X1, mid]) fill(x - 1, at - 1, 4, 1, C.butter); // lashings
+      }
     }
-    for (const [at, from] of [[base - 6, 0.3], [Math.round((top + base) / 2), 0.55], [top + 3, 0.8]] as const) {
-      if (k < from) continue;
-      rect(g, x0, at, x1 - x0 + 1, 2, C.moss);
-      line(g, x0, at + 2, x1, at + 2, C.plum);
+    if (k < 0.92) {
+      // The timber pile, getting smaller as it goes up: logs with their
+      // cut ends towards us.
+      const n = Math.max(1, Math.ceil((1 - k) * 3));
+      const px = toFine(b.x1 + 3), py = toFine(b.y1 + 2);
+      for (let i = 0; i < n; i++) {
+        const y = py - 5 - i * 4, x = px - 2 + (i % 2) * 2;
+        fill(x, y, 16, 5, C.plum);
+        fill(x + 1, y + 1, 12, 3, C.moss);
+        fill(x + 1, y + 1, 12, 1, C.sage);
+        fill(x + 13, y + 1, 2, 3, C.butter); // the cut end
+        fill(x + 13, y + 2, 1, 1, C.moss); // its rings
+      }
     }
-  }
-  if (k < 0.92) {
-    // The timber pile, getting smaller as it goes up.
-    const n = Math.max(1, Math.ceil((1 - k) * 3));
-    const px = b.x1 + 3, py = b.y1 + 2;
-    for (let i = 0; i < n; i++) {
-      rect(g, px - 1, py - 2 - i * 2, 9, 3, C.plum);
-      rect(g, px, py - 1 - i * 2, 7, 1, C.moss);
-    }
-  }
+  });
 }
