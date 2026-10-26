@@ -12,7 +12,6 @@ import { focusField, stopTyping, takeEscape, textField, typingId } from './textf
 import { safeArea } from './safe';
 import { edgeArrow } from './hud';
 import { touchLayout } from './touch';
-import { tierOf } from '../systems/progression';
 import { drawPings, pingArrows, pingControls } from '../net/ping';
 
 // The co-op screens. A host opens INVITE A FRIEND from the pause menu: a
@@ -213,22 +212,6 @@ function card(game: Game, g: CanvasRenderingContext2D, W: number, H: number, big
   ls.forEach((l, i) => text(g, l, W / 2, y0 + 14 + i * 7, C.wool, { align: 'center' }));
 }
 
-function summaryCard(game: Game, g: CanvasRenderingContext2D, W: number, H: number, host: string) {
-  const s = game.summary;
-  const out: string[] = [];
-  if (s) {
-    const got = Object.values(s.stats.delivered).reduce((a, b) => a + (b ?? 0), 0);
-    out.push(`${got} BROUGHT HOME  +${s.stats.deliveredValue}$`);
-    if (s.stats.goodsValue) out.push(`GOODS SOLD  +${s.stats.goodsValue}$`);
-    const lost = Object.values(s.stats.lost).reduce((a, b) => a + (b ?? 0), 0);
-    if (lost) out.push(`LOST IN THE NIGHT: ${lost}`);
-    out.push(`${host}'S PURSE: ${s.coins}$`);
-  }
-  out.push('');
-  out.push(`WAITING FOR ${host} TO START THE NEXT DAY...`);
-  card(game, g, W, H, s ? `DAY ${s.day} IS DONE` : 'THE DAY IS DONE', out);
-}
-
 // Name tags over friends' dogs ('world', under the HUD); the guest's cards
 // and the co-op screens ('ui', over it).
 export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer: 'world' | 'ui') {
@@ -240,7 +223,8 @@ export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer
       if (!d.tag) continue;
       const sx = Math.round(d.x - v.ox), sy = Math.round(d.y - v.oy);
       if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
-      const tag = net?.isAway(d) ? `${d.tag} ZZZ` : d.tag;
+      const note = net?.noteOf(d);
+      const tag = note ? `${d.tag} ${note}` : d.tag;
       const w = textWidth(tag);
       rect(g, sx - Math.ceil(w / 2) - 1, sy - 19, w + 3, 7, C.plum);
       text(g, tag, sx + 1, sy - 18, C.butter, { align: 'center' });
@@ -276,10 +260,11 @@ export function drawCoop(game: Game, g: CanvasRenderingContext2D, v: View, layer
     if (!net.ready) return card(game, g, W, H, 'WALKING OVER...', [`TO ${host}'S RANCH`]);
     if (net.hostBg) return card(game, g, W, H, `${host} STEPPED AWAY`, ['THEIR SCREEN IS OFF, SO THE RANCH IS WAITING. IT WILL GO ON WHEN THEY ARE BACK.']);
     if (net.stale) return card(game, g, W, H, `WAITING FOR ${host}`, ['THEIR GAME HAS STOPPED FOR A MOMENT. MAYBE THEIR SCREEN WENT TO SLEEP.']);
-    const m = net.hostMode;
-    if (m === 'summary') return summaryCard(game, g, W, H, host);
-    if (m === 'build') return card(game, g, W, H, `${host} IS BUILDING`, [`${tierOf(game.tier).name}: ${game.coins}$ IN THE PURSE`, 'THE HERD WAITS TILL THEY ARE DONE.']);
-    if (m === 'result') return void text(g, `WAITING FOR ${host}...`, W / 2, H - 14 - S.bottom, C.wool, { align: 'center', shadow: C.plum });
+  }
+  // The day's end, on either screen: who is ready, who is still building.
+  if (net && game.mode === 'summary') {
+    const lines = net.readyLines();
+    lines.forEach((l, i) => text(g, l, W / 2, S.top + 4 + i * 8, C.wool, { align: 'center', shadow: C.plum }));
   }
   // Pings: F, or the PING button by the thumb buttons.
   if (together && net && !game.trials.result) {

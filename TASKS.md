@@ -1238,6 +1238,30 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
 | day | 6x | 19.0 ms | 20.7 ms | 17.8 ms |
 | worst | 6x | 25.5 ms | 26.9 ms | 22.5 ms |
 
+## M35 Co-op, round five: both players do everything
+- [x] Build mode for guests: the host's build screen (paddocks dragged,
+      extended and gated, fixtures, buildings, decor, the ranch's paint,
+      kennel training, helpers, selling), each change sent to the host and
+      played there through build mode's own methods; what it says comes
+      back; the ranch comes back at once. One builder at a time ("ZIGGY IS
+      BUILDING" on the other screen and on their name tag)
+- [x] E for guests does all E does: start a trial at the post (their run:
+      the judge's eye is on their dog), pen gates and letting stock out,
+      buying at the sale yard or the fair, the agility course, buying fields
+- [x] Helper commands (H) and closing the judge's card from either screen
+- [x] The day's end: the same summary card on both screens (READY on the
+      guest's), who is ready shown over it; either may build from it; the
+      next day starts when everyone is ready, or on the host's second press
+- [x] Busy screens: the host's build mode and the judge's card no longer
+      stop the world while friends are there; a guest in build mode or a
+      menu still sees the ranch go on
+- [x] The same goals, hints, coach tips and arrows for the guest; the
+      tutorial step comes from the host; no more "it's the host's" lines
+- [x] cooptest: the guest builds a paddock, extends it and puts a trough in
+      it; the lock both ways; the host's build mode does not stop the
+      guest; the guest lets stock out for an order, starts and closes a
+      trial; both say ready for the next day
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -2391,3 +2415,26 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
   (the night pass, the ground dither), and LOW is cheaper than round
   four's HIGH.
 
+- Co-op, everyone does everything: the guest's build mode is the real one,
+  run on their copy of the ranch; each change is the UI's `BuildAction`,
+  sent to the host (`build.remote`) and done there by `applyBuild`, the
+  same code a local build runs, so no rule or price is copied; the answer
+  comes back through `build.answer`. The guest's screen checks first for a
+  quick "NEED 40$", the host's check is the one that counts. Buildings go
+  over the wire by corner tile and kind (`src/net/buildwire.ts`): each
+  browser numbers its own buildings, so ids would not match.
+- One builder at a time: two editors would each be looking at a ranch the
+  other is changing. The other player keeps herding meanwhile.
+- Kennel training is the ranch's: every dog on the ranch, guests' included,
+  runs with the ranch's upgrades, and a guest training at the kennel trains
+  them all from the shared purse. A guest's own save keeps its own
+  training at home. (Simpler than carrying two sets of stats, and it makes
+  the kennel a shared project.)
+- A guest's E is played as if their dog were the ranch's dog for that
+  moment (`game.dog` swapped, `game.actor` = their slot), so every E rule
+  in jobs, orders, trials, the sale yard, farmwork and the valley applies
+  unchanged; a trial or agility run remembers whose dog it is
+  (`runner` / `who`) and follows that dog.
+- The next day waits for everyone (napping or dropped friends do not
+  count); the host's second press goes without them, so nobody is stuck.
+  Building from the day's card counts as ready when you leave it.

@@ -145,7 +145,8 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   panel(g, bx1, by, bw, bh, hot1 || (wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.butter : C.sage);
   text(g, touch ? 'BUILD' : 'B: BUILD', bx1 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
   panel(g, bx2, by, bw, bh, hot2 || (!wantBuild && pulse) ? C.teal : C.plum, wantBuild ? C.sage : C.butter);
-  text(g, touch ? 'NEXT DAY' : 'SPACE: NEXT DAY', bx2 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
+  const next = game.net?.role === 'guest' ? 'READY' : 'NEXT DAY'; // co-op: a guest says ready, the host starts the day
+  text(g, touch ? next : `SPACE: ${next}`, bx2 + bw / 2, ty, ready ? C.wool : C.sage, { align: 'center' });
   const p = touch ? 3 : 0;
   if (ui.click('sbuild', bx1 - p, by - p, bw + p, bh + p * 2) && ready) return 'build';
   if (ui.click('next', bx2, by - p, bw + p, bh + p * 2) && ready) return 'next';

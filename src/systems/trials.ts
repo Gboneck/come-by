@@ -40,10 +40,11 @@ export const CLASSES: TrialClass[] = [
 export const BRACE: TrialClass = { id: 'brace', name: 'BRACE', species: 'sheep', n: 10, tier: 2, needs: null, limit: 240, rivals: [52, 76], prizes: [70, 40, 20] };
 
 // A friend's dog at the post beside yours (only the host starts runs).
+// Two players' dogs at the post together (only ever in co-op).
 export function braceReady(game: Game): boolean {
-  if (game.net?.role !== 'host' || game.tier < BRACE.tier) return false;
+  if (!game.coop.length || game.tier < BRACE.tier) return false;
   const p = game.ranch.course.post;
-  return game.coop.some((d) => Math.hypot(d.x - p.x, d.y - (p.y + 4)) < 22);
+  return [game.ownDog, ...game.coop].filter((d) => Math.hypot(d.x - p.x, d.y - (p.y + 4)) < 22).length >= 2;
 }
 
 export const TRIAL_EVERY = 3;
@@ -83,6 +84,7 @@ export interface Run {
   awayT: number; // time the dog has been off the field
   endT: number; // pause between "that'll do" and the card
   penned: boolean; // all in the pen: the run is complete
+  runner?: number; // co-op: the player whose dog runs it (0 or absent: this screen's)
 }
 
 export interface TrialResult {
@@ -153,7 +155,7 @@ export function startRun(game: Game): boolean {
   }
   tr.run = {
     cls, prize, t: 0, step: 0, flock, scores: PARTS.map(() => 0), bolts: 0, grips: 0, stressT: 0, outrun: 0,
-    startX: c.release.x, startY: c.release.y, side: new Map(), through: new Set(), panicking: new Set(), awayT: 0, endT: 0, penned: false,
+    startX: c.release.x, startY: c.release.y, side: new Map(), through: new Set(), panicking: new Set(), awayT: 0, endT: 0, penned: false, runner: game.actor,
   };
   c.pen.open = false;
   game.totals.trialRuns = (game.totals.trialRuns ?? 0) + 1;
@@ -233,7 +235,7 @@ export function updateRun(game: Game, dt: number) {
   }
   // Walking off the field retires the run (in a brace, either dog).
   const off = (d: { x: number; y: number }) => game.map.regionAt(d.x, d.y)?.id !== 'show';
-  if (off(game.dog) || (r.cls === BRACE && game.coop.some(off))) {
+  if (off(game.dogOf(r.runner ?? 0)) || (r.cls === BRACE && [game.ownDog, ...game.coop].some(off))) {
     if ((r.awayT += dt) > 2.5) return endRun(game, true);
   } else r.awayT = 0;
   if (r.t >= r.cls.limit) return endRun(game, false);

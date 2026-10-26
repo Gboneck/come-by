@@ -10,6 +10,8 @@ import { friendDogSprites } from '../art/dogstyle';
 import type { Coat } from '../art/animals';
 import { loadWorld, ownDiscovery, saveInfo, type SaveData } from '../systems/save';
 import { Travels } from './travels';
+import { toWire } from './buildwire';
+import type { BuildResult } from '../ui/build';
 import { SKIES } from '../systems/weather';
 import { DAY_PACE, SEASON_LIST, calendar } from '../systems/season';
 import { sharedIn } from './shared';
@@ -19,7 +21,9 @@ import { tierOf } from '../systems/progression';
 import type { StingerKind } from '../systems/music';
 import { DOG_NAMES, pickName, readLook, type Look } from '../ui/look';
 import { pauseKeys } from '../ui/title';
-import { resultAge } from '../ui/jobs';
+import { lookKeys } from '../ui/lookui';
+import { updateCoach } from '../ui/coach';
+import { RESULT_READY, resultAge } from '../ui/jobs';
 import { buzz } from '../ui/settings';
 import type { SpeciesId } from '../world/map';
 import { clamp } from '../util';
@@ -61,6 +65,10 @@ interface Meta {
   host: string;
   helpers: string[];
   shared?: Record<string, unknown>; // round three's extra ranch state (shared.ts)
+  builder?: number | null; // who has build mode open (one at a time)
+  ready?: number[]; // guests ready for tomorrow
+  hostReady?: boolean;
+  tut?: number;
 }
 
 // The guest session being set up on the title screen (main.ts takes it).
@@ -145,6 +153,28 @@ export class GuestNet implements PingNet {
     }
   };
 
+  // A word on a friend's name tag: napping, building, ready for tomorrow.
+  noteOf(d: Dog): string {
+    for (const [slot, p] of this.puppets) {
+      if (p !== d) continue;
+      if (this.players.get(slot)?.away) return 'ZZZ';
+      if (this.meta?.builder === slot) return 'BUILDING';
+      const ready = slot === 0 ? this.meta?.hostReady : this.meta?.ready?.includes(slot);
+      return this.game?.mode === 'summary' && ready ? 'READY' : '';
+    }
+    return '';
+  }
+
+  // At the day's end: where each of us has got to.
+  readyLines(): string[] {
+    const m = this.meta;
+    const state = (slot: number, ready: boolean) => (m?.builder === slot ? 'BUILDING' : ready ? 'READY' : 'NOT READY YET');
+    const out = [`${this.hostName}: ${state(0, !!m?.hostReady)}`];
+    for (const [slot, p] of this.players) if (slot !== 0 && slot !== this.slot) out.push(`${p.name}: ${state(slot, !!m?.ready?.includes(slot))}`);
+    out.push(`YOU: ${state(this.slot, this.readyNow)}`);
+    return out;
+  }
+
   // Is this friend's dog napping or waiting on a dropped line?
   isAway(d: Dog): boolean {
     for (const [slot, p] of this.puppets) if (p === d) return !!this.players.get(slot)?.away;
@@ -193,6 +223,8 @@ export class GuestNet implements PingNet {
       this.slot = m.slot as number;
       this.retry = 0;
       this.failT = 0;
+      this.buildAsk = null; // answers lost with the old line will not come
+      if (this.game) this.game.build.waiting = null;
       this.base = null; // a whole snapshot comes after the hello
       this.status = this.game ? (m.host ? 'playing' : 'away') : 'joining';
       this.link?.send(jsonFrame(0, { t: 'hello', name: this.look.name, look: { dog: this.look.dog } }));
@@ -220,10 +252,25 @@ export class GuestNet implements PingNet {
       this.worldNew = true;
       // First world: the title screen swaps us into the ranch (main.ts).
       if (!this.game && joining === this) this.status = 'joining';
+    } else if (m.t === 'build') {
+      // The host's answer about build mode.
+      const ask = this.buildAsk;
+      this.buildAsk = null;
+      if (!this.game || !ask) return;
+      if (m.ok) this.openBuild(this.game, ask.fromSummary);
+      else this.game.showBanner(`${m.who || this.hostName} IS BUILDING`, 'ONE AT A TIME: HAVE A LOOK ROUND MEANWHILE', 2);
+    } else if (m.t === 'said') {
+      // What the host's build mode made of our change.
+      if (this.game) this.game.build.answer(this.game, m.res as BuildResult);
     } else if (m.t === 'meta') {
-      this.meta = m as unknown as Meta;
-      this.hostName = this.meta.host || this.hostName;
-      if (this.game) this.applyMeta(this.game);
+      // The herd is drawn a little behind (INTERP_MS), so the ranch's numbers
+      // wait for the moment they belong to: a trial's start turns up with its
+      // sheep, the purse with the coins flying to it. (Sent after the latest
+      // snapshot, so they belong just after it.)
+      const meta = m as unknown as Meta;
+      const last = this.frames[this.frames.length - 1];
+      if (!this.game || !last) this.takeMeta(meta);
+      else this.metaQ.push({ t: last.t, meta });
     } else if (m.t === 'players') {
       this.players.clear();
       for (const p of m.list as { slot: number; name: string; look: Look['dog']; away?: boolean }[]) this.players.set(p.slot, { name: p.name, look: p.look, away: p.away });
@@ -314,6 +361,19 @@ export class GuestNet implements PingNet {
     game.cam.y = d.y;
   }
 
+  private metaQ: { t: number; meta: Meta }[] = [];
+
+  private takeMeta(meta: Meta) {
+    this.meta = meta;
+    this.hostName = meta.host || this.hostName;
+    if (this.game) this.applyMeta(this.game);
+  }
+
+  // The ranch's numbers whose moment has been drawn (all of them, rt = Infinity).
+  private flushMeta(rt: number) {
+    while (this.metaQ.length && this.metaQ[0].t <= rt) this.takeMeta(this.metaQ.shift()!.meta);
+  }
+
   private applyMeta(game: Game) {
     const m = this.meta!;
     game.coins = m.coins;
@@ -357,6 +417,7 @@ export class GuestNet implements PingNet {
       }
     }
     sharedIn(game, m.shared);
+    if (m.tut !== undefined) game.tut = m.tut; // the same first-days hints as the host's
     while (game.helpers.length < m.helpers.length) game.helpers.push(new Helper(m.helpers[game.helpers.length], 0, 0, 'flank', game.helpers.length));
     game.helpers.length = m.helpers.length;
   }
@@ -368,11 +429,51 @@ export class GuestNet implements PingNet {
     return this.frames.length ? this.frames[this.frames.length - 1].s.mode : 'play';
   }
 
-  // The host is at a card everyone waits on.
+  // The host is at a card everyone waits on: only the day's end (in build
+  // mode or a menu the world goes on, and so do we).
   get waiting(): boolean {
     const m = this.hostMode;
-    return m === 'summary' || m === 'build' || m === 'result' || m === 'title';
+    return m === 'summary' || m === 'title';
   }
+
+  // ---- Doing everything the host can: build mode, the day's end ----
+
+  private buildAsk: { fromSummary: boolean } | null = null;
+  private wasMode: Game['mode'] = 'play';
+
+  // Ask for build mode (one builder at a time; the host says yes or who has
+  // it: what we last heard may be a moment old, so the host decides).
+  private askBuild(_game: Game, fromSummary: boolean) {
+    if (this.buildAsk) return;
+    this.buildAsk = { fromSummary };
+    this.link?.send(jsonFrame(0, { t: 'build', on: true }));
+  }
+
+  private openBuild(game: Game, fromSummary: boolean) {
+    game.buildFromSummary = fromSummary;
+    game.mode = 'build';
+    game.build.remote = (a) => this.link?.send(jsonFrame(0, { t: 'cmd', a: toWire(game, a) }));
+    game.build.enter(game);
+    input(game).clearQueue();
+  }
+
+  private closeBuild(game: Game) {
+    game.build.exit(game);
+    game.build.remote = null;
+    this.link?.send(jsonFrame(0, { t: 'build', on: false }));
+    // Done building at the day's end is ready for tomorrow.
+    if (game.buildFromSummary) this.setReady(game, true);
+    game.mode = this.hostMode === 'summary' ? 'summary' : 'play';
+    input(game).clearQueue();
+  }
+
+  private setReady(game: Game, on: boolean) {
+    this.link?.send(jsonFrame(0, { t: 'ready', on }));
+    this.readyNow = on;
+    if (on) game.showBanner('READY FOR TOMORROW', `WAITING FOR ${this.hostName}`, 1.8);
+  }
+
+  readyNow = false; // we said ready at this day's end
 
   update(game: Game, dt: number) {
     game.t += dt;
@@ -392,11 +493,29 @@ export class GuestNet implements PingNet {
       this.apply(game, dt);
       return;
     }
+    // The day's end: the same card as the host's, READY instead of NEXT.
+    const hm = this.hostMode;
+    if (hm === 'summary' && game.summary && (game.mode === 'play' || game.mode === 'pause' || game.mode === 'ledger')) {
+      game.mode = 'summary';
+      game.summaryT = 0;
+      this.readyNow = false;
+    } else if (hm !== 'summary' && game.mode === 'summary') game.mode = 'play';
     if (game.mode === 'pause') pauseKeys(game);
     else if (game.mode === 'ledger') {
       if (ledgerKeys(game)) game.mode = 'play';
+    } else if (game.mode === 'look') lookKeys(game);
+    else if (game.mode === 'build') {
+      if (game.build.update(game, dt) === 'exit') this.closeBuild(game);
+      game.buildCamera(dt);
+    } else if (game.mode === 'summary') {
+      if ((game.summaryT += dt) < 0.6) input.clearQueue();
+      else if (input.pressed('build')) this.askBuild(game, true);
+      else if (input.pressed('confirm') || input.pressed('bark')) this.setReady(game, !this.readyNow);
     } else if (game.mode === 'play') {
-      if (input.pressed('pause')) {
+      if (game.trials.result) {
+        // The judge's card: either of us may close it, for both.
+        if (resultAge(game, 0) >= RESULT_READY && (input.pressed('confirm') || input.pressed('bark') || input.pressed('cancel'))) this.link?.send(jsonFrame(0, { t: 'close-result' }));
+      } else if (input.pressed('pause')) {
         game.mode = 'pause';
         game.pauseSel = 0;
         input.clearQueue();
@@ -404,12 +523,18 @@ export class GuestNet implements PingNet {
         game.mode = 'ledger';
         input.clearQueue();
       }
-      if (input.pressed('build')) game.showBanner(`THE BUILDING IS ${this.hostName}'S`, 'YOU ARE HERE TO HERD', 1.6);
-      if (input.pressed('helper') && game.helpers.length) game.showBanner(`${game.helpers.map((h) => h.name).join(' + ')} WORK FOR ${this.hostName}`, undefined, 1.6);
+      if (input.pressed('build')) {
+        if (game.inRanch()) this.askBuild(game, false);
+        else game.showBanner('GO HOME TO BUILD', undefined, 1.4);
+      }
+      if (input.pressed('helper') && game.helpers.length) this.link?.send(jsonFrame(0, { t: 'helpers' }));
     } else game.mode = 'play';
+    // Back from our dog's look screen: the others see the new markings.
+    if (this.wasMode === 'look' && game.mode !== 'look') this.link?.send(jsonFrame(0, { t: 'hello', name: this.look.name, look: { dog: game.look.dog } }));
+    this.wasMode = game.mode;
 
     // Our own dog, moved here. Not while everyone waits on the host.
-    const free = game.mode === 'play' && this.status === 'playing' && this.ready && !this.waiting && !this.stale;
+    const free = game.mode === 'play' && this.status === 'playing' && this.ready && !this.waiting && !this.stale && !game.trials.result;
     if (!free) input.clearQueue();
     const d = game.dog;
     d.update(dt, input, game.map, game.fx, free);
@@ -428,8 +553,9 @@ export class GuestNet implements PingNet {
     game.animalCalls(dt);
     game.fx.update(dt);
     game.life.update(game, dt);
-    game.updateCamera(dt);
+    if (game.mode !== 'build') game.updateCamera(dt);
     game.updateTips(dt);
+    if (game.mode === 'play') updateCoach(game, dt); // the same guidance as the host gets
   }
 
   // Our bark or nip: heard and felt here at once; the herd hears it from
@@ -469,9 +595,10 @@ export class GuestNet implements PingNet {
   // ---- The host's world, drawn a little behind ----
 
   private apply(game: Game, dt: number) {
-    if (!this.frames.length || this.offset === null) return;
+    if (!this.frames.length || this.offset === null) return this.flushMeta(Infinity);
     const now = performance.now();
     const rt = now - this.offset - INTERP_MS;
+    this.flushMeta(rt);
     const F = this.frames;
     let bi = F.findIndex((f) => f.t > rt);
     if (bi < 0) bi = F.length - 1;
@@ -757,22 +884,16 @@ export class GuestNet implements PingNet {
     const host = this.hostName, t = game.t - this.joinedAt;
     // The first visit ever explains a little more.
     if (this.firstVisit) {
-      if (t < 9) return `YOU ARE ON ${host}'S RANCH: THE PAY GOES TO THEM, BUT HIDDEN PLACES AND KEEPSAKES YOU FIND ARE YOURS.`;
+      if (t < 9) return `YOU AND ${host} SHARE THIS RANCH AND ONE PURSE: BUILD, TRADE AND RUN TRIALS AS YOU LIKE. HIDDEN PLACES YOU FIND ARE YOURS.`;
       if (t < 18) return pingHelp(game.input.touchMode);
-    } else if (t < 8) return `HELP ${host} BRING THEM HOME.`;
-    // At the Show Ground's post: two dogs make a brace.
-    const p = game.ranch.course.post;
-    const at = (x: number, y: number) => Math.hypot(x - p.x, y - (p.y + 4)) < 22;
-    if (!game.trials.run && at(game.dog.x, game.dog.y)) {
-      const h = this.puppets.get(0);
-      return h && at(h.x, h.y) ? `${host} PRESSES ${game.input.touchMode ? 'NIP' : 'E'} TO START THE BRACE: TEN SHEEP, BOTH OF YOU.` : `A BRACE RUN NEEDS ${host} AT THE POST TOO. PING THEM OVER.`;
-    }
-    return null;
+    } else if (t < 6) return `YOU AND ${host}: ONE RANCH, ONE PURSE.`;
+    // The day's end: who we are waiting for.
+    if (game.mode === 'summary') return this.readyNow ? `READY. WAITING FOR ${host}.` : null;
+    return null; // then the same hints as the host's
   }
 
-  // A region's first-visit tip, where a guest's is different.
-  regionTip(id: string): string | undefined {
-    if (id === 'show') return `THE TRIALS ARE ${this.hostName}'S TO RUN. STAND AT THE CROOK WITH THEM FOR A BRACE: TWO DOGS, TEN SHEEP.`;
+  // A region's first-visit tip, where a guest's is different (none now).
+  regionTip(_id: string): string | undefined {
     return undefined;
   }
 
@@ -818,3 +939,5 @@ export class GuestNet implements PingNet {
 }
 
 const touch = (game: Game) => game.input.touchMode;
+
+const input = (game: Game) => game.input;
