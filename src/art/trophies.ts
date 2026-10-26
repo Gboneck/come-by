@@ -37,9 +37,9 @@ export function boardContents(game: Game): BoardContents {
   return { rosettes, cups: classes, bigCup: game.trials.cups > 0, pins: game.achievements.pins(game), shears: game.favour.level('shear') >= 3 };
 }
 
-const FACE_W = 28, FACE_H = 17;
-const PER = 5; // rosettes on one board
-const PINS = 12; // pins on one board
+const FACE_W = 24, FACE_H = 18;
+const PER = 4; // rosettes on one board
+const PINS = 20; // pins on one board, two rows
 
 function cup(g: CanvasRenderingContext2D, x: number, y: number, big: boolean) {
   // (x, y): the foot, on the shelf.
@@ -70,29 +70,29 @@ function shears(g: CanvasRenderingContext2D, x: number, y: number) {
 
 // One board on two posts; (x, y) is the ground at its middle.
 function board(g: CanvasRenderingContext2D, x: number, y: number, ros: string[][], cups: number, bigCup: boolean, pins: BadgeGroup[], sh: boolean, snow: number) {
-  const l = x - Math.floor(FACE_W / 2), top = y - 6 - FACE_H;
+  const l = x - Math.floor(FACE_W / 2), top = y - 5 - FACE_H;
   rect(g, l - 1, y + 1, FACE_W + 2, 1, C.sage); // its shadow
-  rect(g, l + 3, y - 6, 1, 7, C.plum);
-  rect(g, l + FACE_W - 4, y - 6, 1, 7, C.plum);
+  rect(g, l + 3, y - 5, 1, 6, C.plum);
+  rect(g, l + FACE_W - 4, y - 5, 1, 6, C.plum);
   // The face: a plum frame, a teal cloth, a moss rail under the rosettes.
   rect(g, l, top, FACE_W, FACE_H, C.plum);
   rect(g, l + 1, top + 1, FACE_W - 2, FACE_H - 2, C.teal);
   for (let i = l + 2; i < l + FACE_W - 2; i += 3) px(g, i, top + 1, C.sage);
   if (snow > 0.3) rect(g, l, top - 1, FACE_W, 1, C.wool);
-  ros.slice(0, PER).forEach(([petal, mid], i) => rosette(g, l + 4 + i * 5, top + 4, petal, mid));
+  ros.slice(0, PER).forEach(([petal, mid], i) => rosette(g, l + 4 + i * 5, top + 3, petal, mid));
   // The shelf.
-  rect(g, l + 1, top + 12, FACE_W - 2, 1, C.moss);
+  rect(g, l + 1, top + 14, FACE_W - 2, 1, C.moss);
   let cx = l + 4;
   if (bigCup) {
-    cup(g, cx + 1, top + 12, true);
+    cup(g, cx + 1, top + 14, true);
     cx += 7;
   }
-  for (let i = 0; i < Math.min(cups, 4); i++, cx += 4) cup(g, cx, top + 12, false);
-  if (sh) shears(g, l + FACE_W - 7, top + 8);
+  for (let i = 0; i < Math.min(cups, 3); i++, cx += 4) cup(g, cx, top + 14, false);
+  if (sh) shears(g, l + FACE_W - 7, top + 9);
   // The badge pins.
   pins.slice(0, PINS).forEach((gr, i) => {
-    const px0 = l + 2 + i * 2;
-    px(g, px0, top + 14, groupRim(gr));
+    const row = Math.floor(i / 10);
+    px(g, l + 2 + row + (i % 10) * 2, top + 15 + row, groupRim(gr));
   });
 }
 
@@ -102,16 +102,16 @@ export function trophyDrawables(game: Game, g: CanvasRenderingContext2D): Drawab
   const b = boardContents(game);
   if (!b.rosettes.length && !b.cups && !b.bigCup && !b.pins.length) return [];
   const { ox, oy, W, H } = game.view();
-  // Against the front wall, to the left of the door.
-  const door = game.doorPoint();
-  const x = Math.round(door.x - 22), y = Math.round(f.y1 + 4);
+  // Beside the house's front right corner, clear of the windows and the
+  // porch's decor; the farmhouse lot keeps that strip free of buildings.
+  const x = Math.round(f.x1 + 13), y = Math.round(f.y1 - 2);
   if (x + 60 < ox || x - 60 > ox + W || y + 10 < oy || y - 40 > oy + H) return [];
   const snow = game.season.snow;
-  // A second board, to the left, once the first is full.
+  // A second board, to the right, once the first is full.
   const more = b.rosettes.length > PER || b.pins.length > PINS;
   return cached(g, 'trophies', (cg) => {
     const out: Drawable[] = [{ y, draw: () => board(cg, x, y, b.rosettes, b.cups, b.bigCup, b.pins, b.shears, snow) }];
-    if (more) out.push({ y, draw: () => board(cg, x - FACE_W - 3, y, b.rosettes.slice(PER), 0, false, b.pins.slice(PINS), false, snow) });
+    if (more) out.push({ y, draw: () => board(cg, x + FACE_W + 2, y, b.rosettes.slice(PER), 0, false, b.pins.slice(PINS), false, snow) });
     return out;
   });
 }

@@ -80,14 +80,10 @@ function tub(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
 }
 
 export function rosette(g: CanvasRenderingContext2D, x: number, y: number, petal: string, mid: string) {
-  rect(g, x - 2, y - 1, 5, 3, petal);
+  // A round of petals with a heart of another colour, two tails below.
   rect(g, x - 1, y - 2, 3, 5, petal);
-  px(g, x - 2, y - 2, petal);
-  px(g, x + 2, y - 2, petal);
-  px(g, x - 2, y + 2, petal);
-  px(g, x + 2, y + 2, petal);
-  rect(g, x - 1, y - 1, 3, 3, mid);
-  px(g, x, y, petal);
+  rect(g, x - 2, y - 1, 5, 3, petal);
+  px(g, x, y, mid);
   px(g, x - 1, y + 3, mid);
   px(g, x - 1, y + 4, mid);
   px(g, x + 1, y + 3, mid);
