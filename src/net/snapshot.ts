@@ -5,6 +5,7 @@ import { Dairy } from '../ranch/structures';
 import { SPECIES_ORDER } from '../entities/species';
 import { SKIES } from '../systems/weather';
 import { SEASON_LIST } from '../systems/season';
+import { LOAD_OF, blessed, loaded, setLoad } from '../systems/projects';
 import { FACES, HOST_MODES, K_SNAP, Reader, Writer, faceId, type HostMode } from './protocol';
 
 // One moment of the host's world, as the guests see it. Everything is kept
@@ -82,14 +83,19 @@ export function allPens(game: Game): Pen[] {
 // coat): one byte, filled in here by whoever adds it and read back on a
 // guest's screen in applyAnimalExtra (guest.ts). Zero means nothing extra.
 // Bit 0: a lamb (drawn small, at its mother's side). Bit 1: a cow dragging
-// a log to the old bridge.
+// a log to the old bridge. Bit 2: carrying a valley project's load (a slate,
+// a stone: by its kind). Bit 3: blessed at midsummer (systems/projects.ts).
 export function animalExtra(a: Animal): number {
-  return (a.young ? 1 : 0) | (a.load === 'log' ? 2 : 0);
+  return (a.young ? 1 : 0) | (a.load === 'log' ? 2 : 0) | (loaded.has(a) ? 4 : 0) | (blessed.has(a) ? 8 : 0);
 }
 
 export function applyAnimalExtra(a: Animal, v: number) {
   a.young = (v & 1) !== 0;
   a.load = v & 2 ? 'log' : null;
+  if (v & 4) setLoad(a, LOAD_OF[a.sp.id] ?? null);
+  else if (loaded.has(a)) setLoad(a, null);
+  if (v & 8) blessed.add(a);
+  else blessed.delete(a);
 }
 
 export function animalRec(a: Animal, pens: Pen[]): AnimalRec {

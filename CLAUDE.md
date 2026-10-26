@@ -48,7 +48,8 @@ original and drawn in code. No external art files, ever.
   `scripts/resttest.mjs`, `scripts/daytest.mjs` (day one affords the kennel
   however the first drive goes), `scripts/weathertest.mjs`, `scripts/transittest.mjs`
   (an order's flock across a built-up ranch to each yard)
-  `scripts/discoverytest.mjs` and `scripts/tour.mjs` check the loops end to
+  `scripts/discoverytest.mjs`, `scripts/projecttest.mjs` (the valley
+  projects) and `scripts/tour.mjs` check the loops end to
   end, `scripts/perftest.mjs` measures each frame's work at a phone size
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
@@ -61,7 +62,8 @@ original and drawn in code. No external art files, ever.
   `scripts/paddockuitest.mjs` drives the paddock editor in build mode by
   touch (drag out, handles, gate, build, extend, a trough inside),
   `scripts/transfertest.mjs` moves a save between two browsers, `scripts/places.mjs` screenshots every hidden place and its way in
-  (`--found`, `--only=circle,hut`),
+  (`--found`, `--only=circle,hut`, `--half` and `--done` for the valley
+  projects before and after),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,
   coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`;
@@ -221,7 +223,9 @@ needs a line there.
   `valley.ts` (the village's steps, the paddocks, the old bridge, market
   day and festivals: `game.valley`, the village itself in
   `game.ranch.village`), `farmwork.ts` (the shearing shed, the dairy, the
-  agility yard: `game.farmwork`).
+  agility yard: `game.farmwork`),
+  `projects.ts` (valley projects: herding work in the hidden places that
+  changes them for good: `game.projects`; art in `src/art/projects.ts`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
   pieces, `textfield.ts` typed names; `frame.ts` the UI's frames (panel,

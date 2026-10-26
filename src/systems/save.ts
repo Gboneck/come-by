@@ -17,6 +17,7 @@ import { applyLook, readLook, type Look } from '../ui/look';
 import { PIECES, type PlacedDecor } from '../ui/decorbuild';
 import { SKIES, type Sky } from './weather';
 import type { DiscoverySave } from './discovery';
+import type { ProjectsSave } from './projects';
 import { mergeTravels } from '../net/travels';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
@@ -54,6 +55,7 @@ export interface SaveData {
   weather?: { sky: Sky; forecast: Sky; dir: [number, number] };
   // Added with exploring.
   discovery?: DiscoverySave;
+  projects?: ProjectsSave; // added with the valley projects
   // Added with seasons (the calendar itself follows from `day`).
   seasonal?: { loft: number; hungryNights: number; fair: FairEntry[] };
   // Added with the valley growing: the village, paddocks, the old bridge,
@@ -154,6 +156,7 @@ export function saveData(game: Game): SaveData {
     decor: game.decor,
     weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
     discovery: game.discovery.save(game),
+    projects: game.projects.save(),
     seasonal: { loft: game.seasonal.loft, hungryNights: game.seasonal.hungryNights, fair: game.seasonal.fair },
     valley: valleySave(game),
     farmwork: (({ marks, trainedDay, best, cleanRuns, shorn, milked }) => ({ marks, trainedDay, best, cleanRuns, shorn, milked }))(game.farmwork),
@@ -262,6 +265,7 @@ export function loadInto(game: Game): boolean {
   game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery);
+  game.projects.load(game, d.projects);
   mergeTravels(game); // places and keepsakes found visiting friends' ranches
   valleyLoad(game, d.valley);
   Object.assign(game.farmwork, d.farmwork ?? {});
@@ -335,6 +339,7 @@ export function loadWorld(game: Game, d: SaveData, dog: Look) {
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery ? { ...d.discovery, out: [] } : undefined);
   valleyLoad(game, d.valley);
+  game.projects.load(game, d.projects);
   game.ranch.restamp();
   if (d.trials) {
     game.trials.won = [...d.trials.won];

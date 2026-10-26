@@ -23,6 +23,8 @@ export const SHARED: Shared[] = [
   { key: 'paddocks', get: (g) => g.ranch.pens.map((p) => [p.tx, p.ty, p.w, p.h, p.rot, p.gateAt, p.fixtures]), set: (g, v) => applyPaddocks(g, v as PaddockRec[]) },
   // The village, the paddocks' scrub, the old bridge (systems/valley.ts).
   { key: 'valley', get: (g) => valleyShared(g), set: (g, v) => valleyApply(g, v as ValleySave) },
+  // Valley projects: progress, what is done, the fold's gate (systems/projects.ts).
+  { key: 'projects', get: (g) => g.projects.shared(), set: (g, v) => g.projects.applyShared(g, v) },
 ];
 
 type PaddockRec = [number, number, number, number, Rot, number | null, PenFixture[]];

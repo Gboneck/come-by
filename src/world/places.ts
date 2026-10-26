@@ -160,16 +160,49 @@ export function inPlace(p: PlaceDef, x: number, y: number, k = 1): boolean {
 }
 
 // ---- Things standing in the places (px), drawn by src/art/landmarks.ts ----
-export type PropKind = 'stone' | 'fallen' | 'cairn' | 'fruit' | 'willow' | 'post' | 'hutwall' | 'fold' | 'wagon' | 'falls';
+// (and, for the valley projects, by src/art/projects.ts)
+export type PropKind =
+  | 'stone' | 'fallen' | 'cairn' | 'fruit' | 'willow' | 'post' | 'hutwall' | 'fold' | 'wagon' | 'falls'
+  // Valley projects (src/systems/projects.ts):
+  | 'reeds' | 'bramble' | 'scrub' | 'hutfixed' | 'foldgate' | 'slates' | 'fieldstone' | 'sign' | 'hayrick' | 'wheelpit' | 'waterwheel' | 'mud';
 export interface Prop {
   kind: PropKind;
-  place: PlaceId;
+  place: PlaceId | null;
   x: number;
   y: number; // base (feet) of the thing, for the y-sort
   w?: number;
   h?: number;
   v?: number; // variant
   solid?: [number, number, number, number]; // px rect that blocks, relative to x, y
+  // Valley projects:
+  project?: string; // the project this belongs to
+  when?: 'before' | 'after'; // shown until it is done / once it is done
+  ring?: number; // a ring stone, raised by the (ring+1)th stone brought
+  stage?: number; // overgrowth, cleared once the project is this far along (0..1)
+  pile?: number; // a load waiting at its pile (shown while it is there)
+  shut?: boolean; // blocks only while shut (the fold's gate)
+}
+
+// What the props need to know of the valley projects (src/systems/projects.ts).
+export interface ProjectView {
+  isDone(id: string): boolean;
+  delivered(id: string): number; // loads brought so far
+  foldShut: boolean;
+}
+
+// Is a prop there, given how the projects stand?
+export function propShown(p: Prop, v: ProjectView | null): boolean {
+  if (!p.project) return true;
+  const done = !!v?.isDone(p.project);
+  if (p.when === 'before') return !done;
+  if (p.when === 'after') return done;
+  if (p.ring !== undefined) return done || (v?.delivered(p.project) ?? 0) > p.ring;
+  return true;
+}
+
+// Does it block (its `solid` rect), given how the projects stand?
+export function propBlocks(p: Prop, v: ProjectView | null): boolean {
+  return !!p.solid && propShown(p, v) && (!p.shut || !!v?.foldShut);
 }
 
 function stoneRing(): Prop[] {
@@ -178,7 +211,13 @@ function stoneRing(): Prop[] {
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + 0.2;
     const x = Math.round(cx + Math.cos(a) * 27), y = Math.round(cy + Math.sin(a) * 22);
-    if (i === 5) out.push({ kind: 'fallen', place: 'circle', x, y, v: i, solid: [-6, -2, 12, 4] });
+    // Four stones lie out in the hills until ponies bring them back (the
+    // circle project), and the fallen one is raised when it is done.
+    const missing = [1, 3, 6, 7].indexOf(i);
+    if (i === 5) {
+      out.push({ kind: 'fallen', place: 'circle', x, y, v: i, solid: [-6, -2, 12, 4], project: 'circle', when: 'before' });
+      out.push({ kind: 'stone', place: 'circle', x, y, v: i, solid: [-2, -3, 5, 4], project: 'circle', when: 'after' });
+    } else if (missing >= 0) out.push({ kind: 'stone', place: 'circle', x, y, v: i, solid: [-2, -3, 5, 4], project: 'circle', ring: missing });
     else out.push({ kind: 'stone', place: 'circle', x, y, v: i, solid: [-2, -3, 5, 4] });
   }
   return out;
@@ -196,11 +235,11 @@ export const PROPS: Prop[] = [
   // Lookout Knoll: a big cairn on the top.
   { kind: 'cairn', place: 'knoll', x: 1332, y: 228, v: 1, solid: [-5, -4, 10, 5] },
   // The Shepherd's Hut: four broken walls and a fold beside it.
-  { kind: 'hutwall', place: 'hut', x: 248, y: 632, w: 48, h: 4, v: 0, solid: [0, -4, 32, 4] }, // back (north), the east end fallen
-  { kind: 'hutwall', place: 'hut', x: 248, y: 664, w: 18, h: 4, v: 2, solid: [0, -4, 18, 4] }, // front, west of the door
-  { kind: 'hutwall', place: 'hut', x: 278, y: 664, w: 18, h: 4, v: 2, solid: [0, -4, 18, 4] }, // front, east of the door
-  { kind: 'hutwall', place: 'hut', x: 248, y: 662, w: 4, h: 30, v: 1, solid: [0, -30, 4, 30] }, // west
-  { kind: 'hutwall', place: 'hut', x: 292, y: 662, w: 4, h: 22, v: 1, solid: [0, -22, 4, 22] }, // east, top fallen
+  { kind: 'hutwall', place: 'hut', x: 248, y: 632, w: 48, h: 4, v: 0, solid: [0, -4, 32, 4], project: 'hut', when: 'before' }, // back (north), the east end fallen
+  { kind: 'hutwall', place: 'hut', x: 248, y: 664, w: 18, h: 4, v: 2, solid: [0, -4, 18, 4], project: 'hut', when: 'before' }, // front, west of the door
+  { kind: 'hutwall', place: 'hut', x: 278, y: 664, w: 18, h: 4, v: 2, solid: [0, -4, 18, 4], project: 'hut', when: 'before' }, // front, east of the door
+  { kind: 'hutwall', place: 'hut', x: 248, y: 662, w: 4, h: 30, v: 1, solid: [0, -30, 4, 30], project: 'hut', when: 'before' }, // west
+  { kind: 'hutwall', place: 'hut', x: 292, y: 662, w: 4, h: 22, v: 1, solid: [0, -22, 4, 22], project: 'hut', when: 'before' }, // east, top fallen
   // The fold: a low drystone square on the hut's east side, open to the south.
   { kind: 'fold', place: 'hut', x: 300, y: 652, w: 26, h: 4, v: 0, solid: [0, -4, 26, 4] },
   { kind: 'fold', place: 'hut', x: 300, y: 676, w: 4, h: 24, v: 1, solid: [0, -24, 4, 24] },
@@ -215,6 +254,52 @@ export const PROPS: Prop[] = [
   { kind: 'cairn', place: 'cairn', x: 80, y: 202, v: 2, solid: [-6, -5, 12, 6] },
   // The Showman's Wagon.
   { kind: 'wagon', place: 'wagon', x: 596, y: 1260, solid: [-13, -8, 26, 8] },
+];
+
+// ---- The valley projects' things (px), drawn by src/art/projects.ts ----
+
+// Overgrowth scattered over a pocket: n clumps in an ellipse (px), kept off
+// the given spots, each cleared at its own stage of the project.
+function overgrowth(kind: PropKind, project: string, place: PlaceId, cx: number, cy: number, rx: number, ry: number, n: number, keep: [number, number][]): Prop[] {
+  const out: Prop[] = [];
+  for (let i = 0, k = 0; out.length < n && k < 400; k++) {
+    const a = k * 2.399963, r = Math.sqrt((k + 0.5) / (n * 1.6));
+    if (r > 1) break;
+    const x = Math.round(cx + Math.cos(a) * rx * r), y = Math.round(cy + Math.sin(a) * ry * r);
+    if (keep.some(([kx, ky]) => Math.hypot(kx - x, ky - y) < 11)) continue;
+    out.push({ kind, place, project, x, y, v: k, stage: (i + 1) / (n + 1) });
+    i++;
+  }
+  return out;
+}
+
+export const WORKS: Prop[] = [
+  // Willow Pool: reeds choke the pool until ducks keep them down; then a
+  // hay meadow on the drained edge.
+  ...overgrowth('reeds', 'reeds', 'willow', 1468, 834, 36, 30, 16, [[1450, 834], [1436, 852], [1458, 864]]),
+  { kind: 'hayrick', place: 'willow', project: 'reeds', when: 'after', x: 1458, y: 864, solid: [-7, -3, 14, 4] },
+  { kind: 'sign', place: 'willow', project: 'reeds', x: 1436, y: 852 },
+  // The Old Orchard: brambles and long grass between the trees.
+  ...overgrowth('bramble', 'orchard', 'orchard', 1414, 1060, 46, 36, 16, [[1388, 1048], [1416, 1042], [1442, 1050], [1396, 1078], [1430, 1082], [1452, 1072], [1406, 1060], [1384, 1034]]),
+  { kind: 'sign', place: 'orchard', project: 'orchard', x: 1384, y: 1034 },
+  // The Hidden Valley: scrub over its west end.
+  ...overgrowth('scrub', 'scrub', 'valley', 76, 672, 34, 36, 14, [[64, 640], [56, 696], [96, 716]]),
+  { kind: 'sign', place: 'valley', project: 'scrub', x: 128, y: 640 },
+  // The Shepherd's Hut: mended, with a gate on the fold; slate from the
+  // quarry under the outcrop in Rocky Rise.
+  { kind: 'hutfixed', place: 'hut', project: 'hut', when: 'after', x: 248, y: 664, w: 48, h: 36, solid: [0, -36, 48, 36] },
+  { kind: 'foldgate', place: 'hut', project: 'hut', when: 'after', x: 308, y: 678, w: 10, h: 4, solid: [0, -4, 10, 4], shut: true },
+  { kind: 'slates', place: null, project: 'hut', x: 452, y: 532, solid: [-9, -4, 18, 6] },
+  { kind: 'sign', place: 'hut', project: 'hut', x: 236, y: 690 },
+  // The Waterfall Pool: a leaking pool and a broken wheel pit; once cattle
+  // have puddled the clay, a waterwheel turns beside the falls.
+  ...([[420, 674], [436, 668], [412, 662], [446, 682]] as const).map(([x, y], i): Prop => ({ kind: 'mud', place: 'falls', project: 'mill', when: 'before', x, y, v: i })),
+  { kind: 'wheelpit', place: 'falls', project: 'mill', when: 'before', x: 444, y: 692, solid: [-7, -3, 14, 4] },
+  { kind: 'waterwheel', place: 'falls', project: 'mill', when: 'after', x: 444, y: 692, solid: [-9, -3, 18, 4] },
+  { kind: 'sign', place: 'falls', project: 'mill', x: 460, y: 700 },
+  // The Stone Circle: four stones lie fallen about the Rolling Hills.
+  ...([[1044, 404], [1204, 308], [1284, 484], [1364, 404]] as const).map(([x, y], i): Prop => ({ kind: 'fieldstone', place: null, project: 'circle', x, y, pile: i, v: i })),
+  { kind: 'sign', place: 'circle', project: 'circle', x: 1436, y: 368 },
 ];
 
 // Rare strays and wild flocks, and where they turn up (px).

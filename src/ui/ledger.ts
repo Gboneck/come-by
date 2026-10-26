@@ -13,7 +13,7 @@ import { safeArea } from './safe';
 import { SKY_WORD, skyIcon } from './icons';
 import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
-import { discoveryLines, drawPaperFog, drawPlaceMarks } from './discovery';
+import { discoveryLines, drawPaperFog, drawPlaceMarks, drawProjectMarks, projectLines } from './discovery';
 import { travelLines } from '../net/travels';
 import { valleyLedger } from './valley';
 
@@ -70,6 +70,7 @@ function drawMap(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number
     }
   }
   drawPlaceMarks(game, g, x0, y0);
+  drawProjectMarks(game, g, x0, y0);
   // Flocks out in the pastures, as ink dots.
   for (const gr of game.groups) {
     if (!game.discovery.known(gr.x, gr.y)) continue; // no flocks in the fog
@@ -213,6 +214,7 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   add('');
   for (const l of discoveryLines(game, colW - 12)) add(l.s, l.c);
   for (const l of travelLines(colW - 12)) add(l.s, l.c);
+  for (const l of projectLines(game, colW - 12)) add(l.s, l.c); // the valley projects, in the hidden places
   add('');
   const tot = game.totals;
   const deliv = Object.values(tot.delivered).reduce((s, n) => s + (n ?? 0), 0);

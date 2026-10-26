@@ -1,9 +1,11 @@
 // Screenshot every hidden place at real scale, and the way in to it from its
 // region (where the waymarker cairn stands):
-//   node scripts/places.mjs [--out=shots/places] [--only=circle,hut] [--found] [--night]
+//   node scripts/places.mjs [--out=shots/places] [--only=circle,hut] [--found] [--night] [--half] [--done]
 // Writes <out>/<place>.png and <out>/<place>-way.png at 1280x720.
 // --found discovers every place first (flowers on the waymarkers, the hurdle
 // open, keepsakes taken); without it they are as a new player finds them.
+// --half sets every valley project halfway; --done finishes them all (and
+// celebrates them today), to see the places before, during and after.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { mkdirSync } from 'node:fs';
@@ -28,8 +30,9 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(e.message));
 await page.goto(`http://localhost:${PORT}/?debug`);
 await page.waitForFunction(() => window.game);
-const spots = await page.evaluate(async ({ found, night }) => {
+const spots = await page.evaluate(async ({ found, night, half, done }) => {
   const { PLACES } = await import('/src/world/places.ts');
+  const { PROJECTS } = await import('/src/systems/projects.ts');
   const g = window.game;
   g.setTier(5);
   g.tut = 99;
@@ -44,11 +47,22 @@ const spots = await page.evaluate(async ({ found, night }) => {
     g.map.setHurdle(true);
     g.discovery.hurdleSwing = 1;
   }
+  if (half || done) {
+    for (const p of PROJECTS) {
+      if (p.place) g.discovery.found.add(p.place);
+      if (done) {
+        g.projects.done.add(p.id);
+        g.projects.celebrated[p.id] = g.day.day;
+      } else if (p.kind === 'graze') g.projects.grazed[p.id] = p.need / 2;
+      else g.projects.deliveredFrom[p.id] = p.piles.map((q, i) => (i < p.piles.length / 2 || p.piles.length === 1 ? Math.floor(q.n / 2) || (p.piles.length > 1 ? 1 : 0) : 0));
+    }
+    g.map.setProjects(g.projects);
+  }
   return PLACES.map((p) => {
     const mid = p.rx ? [p.cx, p.cy] : p.way[p.way.length - 2];
     return { id: p.id, x: mid[0] * 8 + 4, y: mid[1] * 8 + 4, wx: p.mark[0] * 8 + 4, wy: p.mark[1] * 8 + 4, way: p.way.map(([x, y]) => [x * 8 + 4, y * 8 + 4]) };
   });
-}, { found: flag('found'), night: flag('night') });
+}, { found: flag('found'), night: flag('night'), half: flag('half'), done: flag('done') });
 
 async function shoot(file, camX, camY, dogX, dogY) {
   await page.evaluate(({ camX, camY, dogX, dogY }) => {

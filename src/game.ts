@@ -50,6 +50,8 @@ import { Farmwork, farmworkEvening } from './systems/farmwork';
 import { valleyDrawables } from './art/valley';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
+import { Projects } from './systems/projects';
+import { projectDrawables } from './art/projects';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
 import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
@@ -171,6 +173,7 @@ export class Game {
   valley!: Valley; // the village, the paddocks, the old bridge
   farmwork = new Farmwork(); // the shearing shed, the dairy, the agility yard
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
+  projects = new Projects(); // valley projects: herding work that changes a place for good
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
   private idleT = 0;
@@ -393,6 +396,7 @@ export class Game {
     this.showBanner(`DAY ${this.day.day}`, 'BRING THEM HOME BEFORE DUSK', 2.6);
     jobsMorning(this, spawn);
     this.discovery.morning(this);
+    this.projects.morning(this, spawn);
     saveGame(this);
   }
 
@@ -409,6 +413,7 @@ export class Game {
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
+    this.projects.evening(this, sale.value); // the mill at the falls
     this.totals.days++;
     const wild = this.animals.filter((a) => !a.pen && !a.gone);
     const strays = wild.filter((a) => a.stray).length;
@@ -619,6 +624,7 @@ export class Game {
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y, this.coop)) this.onRanchEvent(ev);
     jobsUpdate(this, dt);
     this.discovery.update(this, dt);
+    this.projects.update(this, dt);
     if (!night && !this.trials.run) updateProduce(this, dt * this.rest);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
@@ -663,9 +669,9 @@ export class Game {
   // ends it at once. Never at night or under the bot.
   canRest(): boolean {
     const d = this.dog;
-    if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || !this.inRanch()) return false;
+    if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || (!this.inRanch() && !this.projects.restsHere(d.x, d.y))) return false;
     // Co-op: everyone has to be lying down at home for the day to fly by.
-    if (this.coop.some((o) => !o.lying || this.map.regionAt(o.x, o.y)?.id !== 'ranch')) return false;
+    if (this.coop.some((o) => !o.lying || (this.map.regionAt(o.x, o.y)?.id !== 'ranch' && !this.projects.restsHere(o.x, o.y)))) return false;
     // Anything loose right by the dog stops it; further off, only stock that
     // is moving or upset does (calm strays grazing by the yard do not).
     return !this.animals.some((a) => {
@@ -796,7 +802,7 @@ export class Game {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
-    gates.push(...jobGates(this));
+    gates.push(...jobGates(this), ...this.projects.gates());
     return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather, snow: this.season.snow, dogs: this.coop.length ? this.coop : undefined };
   }
 
@@ -1063,9 +1069,9 @@ export class Game {
     return { ox, oy, W, H };
   }
 
-  // Trial course, buyers' yards and carts, hidden places, for the y-sorted world layer.
+  // Trial course, buyers' yards and carts, hidden places, valley projects, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...projectDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.

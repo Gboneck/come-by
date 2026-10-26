@@ -943,6 +943,41 @@ Before → after, in plain words:
         14.3–15.0 vs 16.3–17.1, worst 20.4 vs 19.7–21.4. Cheaper, because a
         pen's floor is one image now and no longer redrawn pixel by pixel
         into the picture cache every frame.
+## M28 Valley projects (world, round four)
+- [x] Herding work out in the valley that changes a place for good and opens
+      something new, alongside Gameplay's village, paddocks and old bridge:
+      - CLEAR THE REED BED (Willow Pool, tier 2, spring or summer): ducks
+        paddle the reeds down; a hay meadow: 8 more bales in the loft each autumn
+      - GRAZE THE ORCHARD CLEAR (the Old Orchard, tier 2, not winter): any
+        flock; good pasture, a sheep flock there every morning but in winter
+      - BROWSE BACK THE SCRUB (the Hidden Valley, tier 3, not winter): any
+        flock, goats quickest; its wild goats come back every day, seven of them
+      - MEND THE SHEPHERD'S HUT (tier 3): goats carry five slates from the
+        quarry under the outcrop on Rocky Rise; a waystation (lie down by the
+        hut to rest as at home) and the fold with a gate E shuts on a flock
+      - PUDDLE THE MILL POND (the Waterfall Pool, tier 4, not winter): cattle
+        held standing in the pool; a waterwheel, goods sell for a quarter more
+      - RAISE THE STONE CIRCLE (tier 5): ponies drag the four fallen stones
+        back from the Rolling Hills; midsummer on summer's second day, when
+        flocks walked through the ring pay double
+- [x] Grazing at the paddocks' per-species rates; hauling picks a load up at
+      a pile, and an animal that panics drops it back there
+- [x] Before and after drawn in code (`src/art/projects.ts`): reeds, brambles,
+      scrub, the hayrick and lilies, wildflowers, the mended hut with a slate
+      roof and smoke, the fold gate, the slate pile, fallen stones, the mill
+      pool's mud and broken wheel pit, the turning waterwheel; signboards with
+      progress; slate panniers and stone travois on the animals; bunting and
+      folk the day one is done; the midsummer bonfire and gathering
+- [x] The Ledger lists the valley (projects done, those under way with what
+      they need and bring, the next one) and flags each workable site on the
+      map; first-sight tips, progress in the place name while you work there,
+      a morning tip when one comes within reach, a banner, confetti and the
+      tier-up stinger when one is done
+- [x] Saved (old saves start with nothing); co-op: shared state, loads and
+      blessings ride in animalExtra bits 2 and 3, guests' dogs herd for them
+      and work the fold's gate
+- [x] `scripts/projecttest.mjs`; `places.mjs --half/--done`; tune.mjs before
+      and after; discoverytest, savetest and the loop tests
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -1921,3 +1956,73 @@ Before → after, in plain words:
   `fixtures?: { kind, tx, ty }[]` and `hurdle?: { vertical, at, gate, swing }`
   (types in `src/art/paddock.ts`). If there is `hasTrough` and no list, a
   trough goes by the back fence, as before.
+- Valley projects (M28) were planned with the ford bridge among them; the
+  Gameplay session was already mending the old bridge (valley.ts), so tier 4
+  got the mill pond at the Waterfall Pool instead: puddling is cattle work
+  (they balk at water, so it takes nips and then a hold in the shallows).
+- Grazing uses valley.ts's GRAZE rates (duck 0, sheep 1/60, goat 2/60, cow
+  1.5/60, pony 1/60 a second; lambs half) and its rule: an animal counts
+  while its stress is 0.45 or less, it is not panicking and it moves slower
+  than 0.7x its walk. Work needed: the orchard and the scrub 12 each (any
+  kind with a rate), the reed bed 6 (ducks only, paddling at 1/60), the mill
+  pond 6 (cattle only, and only while standing in water). Measured
+  (projecttest, seeded): six ducks driven in by the bot and held clear the
+  reeds in ~66s; eight sheep graze the orchard in 90s; five goats browse the
+  scrub in 72s; four cattle held in the pool puddle it in ~95s (they step out
+  between nips, so holding them is the work).
+- Hauling: an animal of the right kind (not a lamb, stress under 0.6) that
+  passes within 20px of a pile with a load left takes one; at stress over
+  0.8 or in a panic it drops it, and the load is back on its pile; within
+  the site's radius it is counted. Loads in transit go back overnight and on
+  a load. They are tracked in projects.ts and also set `Animal.load` (as
+  Gameplay's log does), so once both branches are in a loaded animal leans
+  into it (Characters' pose) and walks at 0.85 (Gameplay's drag).
+- What each brings: the reed bed, 8 more bales in the loft each autumn
+  (through Gameplay's `seasonal.loftBonus`: the autumn refill is LOFT_MAX
+  plus the bonus; until that field is merged in, projects.ts adds the 8 on
+  autumn's first morning itself); the orchard, 5-7
+  sheep each morning but in winter when fewer than 3 are there (plain wild
+  stock); the scrub, the valley's wild goats every day (7) instead of every
+  3 days (5); the hut, a waystation (lying within 34px of its door rests the
+  dog as at home, friends' dogs too) and the fold's gate (E; solid when
+  shut; the open fold draws driven stock in like a pen gate), and the crook
+  if it was never picked up; the mill, a quarter more on each evening's
+  goods; the circle, midsummer (summer's second day): animals within 28px
+  of the ring's middle are blessed, and a blessed animal penned (not your
+  own let-out stock) pays its delivery value again.
+- Projects open by tier, once their hidden place is found, and by season
+  (the reed bed in spring or summer; the orchard, the scrub and the mill pond
+  not in winter); progress keeps out of season. The Ledger lists them as
+  their own THE VALLEY n/6 under HIDDEN PLACES in the first column (the
+  village is Gameplay's list above it; the second column overflowed a
+  landscape screen once an order was up): the ones under way (the one in
+  hand with what it needs), NEXT (and what it brings when nothing is under
+  way); a plum flag on the map at each workable site (teal while it waits
+  for its season), the place's star once done.
+- Project props are `WORKS` in places.ts, and the hut's walls and the ring's
+  stones carry `project`/`when`/`ring`. `map.setProjects` restamps only the
+  project props' cells, so the hurdle and Gameplay's bridge deck keep theirs.
+- The stone circle now starts with four stones missing: they lie fallen in
+  the Rolling Hills from the first day (a tip calls them out), so a
+  returning player sees four gaps in the ring until ponies bring them back.
+- The Shepherd's Hut's way stays narrow (goats carry slate through it in
+  single file). Widening it turned a few Rocky Rise tiles to grass, and since
+  each region's spawn points come from one seeded stream walking candidate
+  tiles, every flock from Rocky Rise on started somewhere else: pacetest
+  (seeded, deterministic) went from days 8/7/7 to 9/9/8 on that new layout.
+  Narrow again, the runs match test/round-4 exactly.
+- Co-op: the projects' state is one SHARED line; carried loads and
+  midsummer blessings are animalExtra bits 2 and 3 (Gameplay's log is bit
+  1); a guest's first copy changes the map without a ceremony.
+- The Waterfall Pool keeps its size: a bigger pocket and pool (room for
+  more cattle) shifted the seeded random stream through the decorative
+  layer, enough to change the two duck chase runs in tune.mjs. Four cattle
+  fit in its shallows and stream as it is.
+- Checks, before (test/round-4) and after: tune.mjs `--seed=1` identical
+  line for line for all five species; pacetest seeds 1-3 identical (the
+  valley thrives on days 8, 7, 7); cooptest 47/47 (one run had the brace
+  check catch the guest a frame early, a timing flake that passes on a rerun
+  and on the base); savetest, discoverytest and the loop tests (econtest,
+  flowtest, nighttest, pentest, trialtest, ordertest, resttest, daytest,
+  weathertest, transittest, seasontest, lambtest) pass as on the base.
+
