@@ -16,7 +16,7 @@ import { isTyping, padType, stopTyping } from './textfield';
 //            X remove, Y upgrade (over a building) or turn, LB/RB pick,
 //            LT/RT change tab
 //   ledger   LB/RB turn the pages, A closes (or acts on a page's own
-//            choice), B / SELECT / START close
+//            choice), B goes back or closes, SELECT / START close
 //   names    up/down change the last letter, right adds one, left
 //            deletes, A or B is done (B on the join screen leaves it)
 //
@@ -123,12 +123,14 @@ export function padFrame(game: Game, dt: number) {
     return;
   }
   if (mode === 'ledger') {
-    // A closes the ranch page (or acts on another page), B, SELECT and
-    // START close, LB/RB turn the pages, the d-pad is the page's own.
+    // A closes the ranch page (or acts on another page), B goes back (or
+    // closes), SELECT and START close, LB/RB turn the pages, the d-pad is
+    // the page's own.
     const d = dirPress(game, dt, RATE);
     if (d) push(d);
     if (hit(PAD.A)) push('confirm');
-    if (hit(PAD.B) || hit(PAD.SELECT) || hit(PAD.START)) push('ledger');
+    if (hit(PAD.B)) push('cancel');
+    if (hit(PAD.SELECT) || hit(PAD.START)) push('ledger');
     if (hit(PAD.LB)) push('prev');
     if (hit(PAD.RB)) push('next');
     return;
