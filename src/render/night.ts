@@ -24,7 +24,8 @@ export interface Light {
 // - overcast and wet weather: a few more plum pixels everywhere;
 // - fog: a wool (sage at night) veil in drifting banks, thicker where the
 //   place is foggy (setFogField: by water, in hollows), thin round the dog
-//   and the lamps;
+//   and the lamps, lying in short level streaks of mist on a ramp of its
+//   own (mist()) that slide with the drift;
 // - lightning: a frame of wool and buttercup over everything.
 //
 // The light is worked out per world pixel, then (at GRAPHICS HIGH) dithered
@@ -56,6 +57,19 @@ const BAYER8 = (() => {
   return out;
 })();
 const T8 = new Float32Array(BAYER8.map((v) => (v + 0.5) / 4));
+
+// Fog's own ramp, so mist lies in short level runs (4 fine pixels; 2 world
+// pixels at MEDIUM/LOW) rather than the night's even dots: the 8x8 ramp
+// over runs instead of pixels, each band of 8 rows shifted along by a hash
+// so the runs do not line up in columns, and the whole sliding with the
+// drift. 64 rows by one period (8 runs); rebuilt each frame for the drift.
+function mist(t: Float32Array, run: number, shift: number) {
+  const n = 8 << run;
+  for (let r = 0; r < 64; r++) {
+    const off = Math.floor(hash2(r >> 3, 0, 913) * n) - shift, row = (r & 7) * 8;
+    for (let c = 0; c < n; c++) t[r * n + c] = T8[row + (((c + off) >> run) & 7)];
+  }
+}
 
 // Fog by place: a quarter-resolution field of 0..1 over the world, set by
 // whoever knows the land (the default leans on water and the high ground).
@@ -139,6 +153,8 @@ export class NightOverlay {
   private E = new Float32Array(1); // 0..1: in a pool's falloff (for the cool rim)
   private exs = new Float32Array(1);
   private col = new Float32Array(1);
+  private mistF = new Float32Array(64 * 32); // fog's ramp in fine pixels
+  private mistW = new Float32Array(64 * 16); // and in world pixels
 
   constructor() {
     [this.c, this.g] = makeCanvas(1, 1);
@@ -247,7 +263,9 @@ export class NightOverlay {
         // so the ground still reads between them.
         if (dark > 0 && level + f > 10) f = Math.max(0, 10 - level);
         LL[i] = level;
-        FF[i] = f;
+        // Fog is dithered on its own ramp over what the night leaves clear,
+        // so it is scaled up to still cover f of the 16 steps.
+        FF[i] = f > 0 && level < 16 ? (f * 16) / (16 - level) : 0;
       }
     }
     const buf = this.buf, plum = U32.plum, teal = U32.teal, fogCol = o.fogNight ? U32.sage : U32.wool, wool = U32.wool, butter = U32.butter;
@@ -255,15 +273,17 @@ export class NightOverlay {
     const anyFog = fog > 0;
     if (d === 1) {
       // MEDIUM and LOW: one threshold a world pixel, the 4x4 ramp.
+      const MW = this.mistW;
+      if (anyFog) mist(MW, 1, fx);
       for (let y = 0; y < H; y++) {
-        const by = ((y + oy) & 3) * 4;
+        const by = ((y + oy) & 3) * 4, mrow = ((y + oy) & 63) * 16;
         for (let x = 0, i = y * W; x < W; x++, i++) {
           const thr = BAYER4[by + ((x + ox) & 3)], l = LL[i];
           buf[i] =
             thr < flash ? (thr < flash * 0.3 ? butter : wool)
             : thr < l ? (anyWarm && thr >= l - warm[i] * 3.2 ? butter : (blueK && l > over && thr >= l * blueK) || (rim && thr >= l * (1 - 0.55 * EE[i])) ? teal : plum)
             : anyWarm && thr < warm[i] * 3.2 ? butter
-            : anyFog && thr < l + FF[i] ? fogCol : 0;
+            : anyFog && MW[mrow + ((x + ox) & 15)] < FF[i] ? fogCol : 0;
         }
       }
     } else {
@@ -271,13 +291,15 @@ export class NightOverlay {
       // with the 8x8 ramp, anchored to the world (64 steps: the light
       // changes slowly enough that easing between world pixels is not
       // worth its cost).
-      const FW = W * PX;
+      const FW = W * PX, MF = this.mistF;
+      if (anyFog) mist(MF, 2, Math.floor((o.fogX ?? 0) * PX));
       for (let y = 0; y < H; y++) {
-        const by = ((y + oy) * PX) & 7, o0 = y * PX * FW;
+        const fy = (y + oy) * PX, by = fy & 7, o0 = y * PX * FW;
         const tA = by * 8, tB = ((by + 1) & 7) * 8; // the two Bayer rows
+        const mA = (fy & 63) * 32, mB = ((fy + 1) & 63) * 32; // and the fog's
         for (let x = 0, i = y * W; x < W; x++, i++) {
           const l = LL[i];
-          const bx = ((x + ox) * PX) & 7, o = o0 + x * PX;
+          const bx = ((x + ox) * PX) & 7, o = o0 + x * PX, c = ((x + ox) * PX) & 31;
           const t0 = T8[tA + bx], t1 = T8[tA + bx + 1], t2 = T8[tB + bx], t3 = T8[tB + bx + 1];
           const wr = anyWarm ? warm[i] * 3.2 : 0, f = anyFog ? FF[i] : 0, e = rim ? EE[i] : 0;
           if (flash <= 0 && !wr && !f && !e && !blueK) {
@@ -293,18 +315,19 @@ export class NightOverlay {
           // teal before the plum; the blue hour's dark comes in partly teal.
           const warmAt = wr ? l - wr : Infinity;
           const coolAt = Math.min(e > 0 ? l * (1 - 0.55 * e) : Infinity, blueK && l > over ? l * blueK : Infinity);
-          const hiAt = Math.min(warmAt, coolAt), lf = l + f;
+          const hiAt = Math.min(warmAt, coolAt);
           if (flash > 0) {
             for (let j = 0; j < 4; j++) {
               const t = j === 0 ? t0 : j === 1 ? t1 : j === 2 ? t2 : t3;
-              buf[o + (j >> 1) * FW + (j & 1)] = t < flash ? (t < flash * 0.3 ? butter : wool) : t < l ? (t < hiAt ? plum : t >= warmAt ? butter : teal) : t < wr ? butter : t < lf ? fogCol : 0;
+              const fogAt = f > 0 && MF[(j >> 1 ? mB : mA) + c + (j & 1)] < f;
+              buf[o + (j >> 1) * FW + (j & 1)] = t < flash ? (t < flash * 0.3 ? butter : wool) : t < l ? (t < hiAt ? plum : t >= warmAt ? butter : teal) : t < wr ? butter : fogAt ? fogCol : 0;
             }
             continue;
           }
-          buf[o] = t0 < l ? (t0 < hiAt ? plum : t0 >= warmAt ? butter : teal) : t0 < wr ? butter : t0 < lf ? fogCol : 0;
-          buf[o + 1] = t1 < l ? (t1 < hiAt ? plum : t1 >= warmAt ? butter : teal) : t1 < wr ? butter : t1 < lf ? fogCol : 0;
-          buf[o + FW] = t2 < l ? (t2 < hiAt ? plum : t2 >= warmAt ? butter : teal) : t2 < wr ? butter : t2 < lf ? fogCol : 0;
-          buf[o + FW + 1] = t3 < l ? (t3 < hiAt ? plum : t3 >= warmAt ? butter : teal) : t3 < wr ? butter : t3 < lf ? fogCol : 0;
+          buf[o] = t0 < l ? (t0 < hiAt ? plum : t0 >= warmAt ? butter : teal) : t0 < wr ? butter : f > 0 && MF[mA + c] < f ? fogCol : 0;
+          buf[o + 1] = t1 < l ? (t1 < hiAt ? plum : t1 >= warmAt ? butter : teal) : t1 < wr ? butter : f > 0 && MF[mA + c + 1] < f ? fogCol : 0;
+          buf[o + FW] = t2 < l ? (t2 < hiAt ? plum : t2 >= warmAt ? butter : teal) : t2 < wr ? butter : f > 0 && MF[mB + c] < f ? fogCol : 0;
+          buf[o + FW + 1] = t3 < l ? (t3 < hiAt ? plum : t3 >= warmAt ? butter : teal) : t3 < wr ? butter : f > 0 && MF[mB + c + 1] < f ? fogCol : 0;
         }
       }
     }

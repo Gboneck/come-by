@@ -54,8 +54,12 @@ original and drawn in code. No external art files, ever.
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
   `scripts/makefixture.mjs`; `--profile`, `--calls`, `--live`,
-  `--quality=low`, `--idle`, `--noflush`), `scripts/picturetest.mjs` checks the picture
+  `--quality=low`, `--idle`, `--noflush`; `--only=fognight` the fog's
+  path), `scripts/picturetest.mjs` checks the picture
   cache (and FineLayer) draws exactly what the art does,
+  `scripts/skyshots.mjs --tag=x` shoots dusk, night, fog, fog night and a
+  storm night at phone size (`shots/sky/`), `scripts/cameratest.mjs`
+  checks the camera keeps the flock and its gate in view,
   `scripts/densitytest.mjs` (`BASE=<a checkout of main>`) checks the world
   layer is pixel-for-pixel the old one at 2x, `scripts/pwatest.mjs` builds and
   serves the game twice (installable, offline with the server off, a new
@@ -112,6 +116,8 @@ original and drawn in code. No external art files, ever.
   (`TARGET_FINE`), scaled up by a whole number with nearest-neighbour
   filtering (CSS `image-rendering: pixelated` on the GPU; a drawImage copy
   where that is missing). An upright iPhone shows 195 x 422 world pixels.
+  VIEW (pause menu) WIDE is one whole-number scale down (293 x 633 on an
+  iPhone): `screen.setView('close' | 'wide')`, `screen.cssPerFine`.
 - Every frame is drawn under `scale(PX)`, so a draw call in world pixels is
   crisp PX x PX blocks: old art needs no change. For finer art:
   `fine(g, (fg) => ...)` draws 1:1 in fine pixels with the translation kept
@@ -126,11 +132,14 @@ original and drawn in code. No external art files, ever.
   Terrain and canopy are still baked in world pixels.
 - Text (`src/gfx/font.ts`, glyphs in `src/gfx/glyphs.ts`) is in fine
   pixels, with lower case, proportional and kerned. `text(g, s, x, y,
-  colour, { size })`: body (capitals 9 fine px, a line every 6 world px,
-  `LINE_H`), `'small'` (capitals 7, line 5), `'heading'` (the body face by
-  Scale2x: capitals 18, line 12); `lineHeight(size)`, `textWidth(s, scale,
-  size)`, `wrap(s, w, size)` in world pixels; y is the top of the capitals.
-  `heading()` is the older bold capitals face, in world pixels.
+  colour, { size })`, sizes as roles: `'small'` (capitals 7 fine px, a line
+  every 5 world px), `'body'` (capitals 9, line 6), `'large'` (capitals 12,
+  line 8: body text on phones), `'heading'` (the body face by Scale2x:
+  capitals 18, line 12). Where a fine pixel is physically small (WIDE on a
+  phone) every role steps up one face so words keep their size
+  (`setTextBoost`, set in main.ts). Lay out with `lineHeight(size)`,
+  `textWidth(s, scale, size)`, `wrap(s, w, size)` (world pixels); y is the
+  top of the capitals. `heading()` is the older bold capitals face.
 - Procedural art that rarely changes (buildings, fences, ranch decor) goes
   through `cached()` in `src/gfx/picture.ts`: drawn into a recorder, shown
   from a bitmap until it asks for different pixels. Art using paths, clips
@@ -147,10 +156,16 @@ original and drawn in code. No external art files, ever.
 - Layer order: terrain (baked) → shadows → y-sorted entities → canopy (baked)
   → effects → night dither → UI.
 - Night and dusk are a Bayer-dithered plum overlay, not alpha blending, so the
-  palette stays pure. Lanterns and the dog cut holes in it. The light is
-  worked out per world pixel and dithered per fine pixel (world-anchored
-  thresholds), so the dither is twice as fine as the art; `ditherRect` and
-  the dim/fade covers use fine dither patterns too.
+  palette stays pure (`src/render/night.ts`). The light is worked out per
+  world pixel and dithered per fine pixel with an 8x8 ramp (64 steps,
+  world-anchored) at HIGH, 4x4 in world pixels at MEDIUM/LOW. Lights
+  (`Light`: r, warm, power, soft) cut pools that fall off smoothly; the
+  outer fall cools to teal before the plum and a flame's ring warms its
+  edge with buttercup. Fog lies in drifting banks of short level streaks
+  (a ramp of its own), thicker by place
+  (`setFogField`; the default from the soil: by water, not on high ground).
+  At night every animal on screen has a faint halo so the flock reads.
+  `ditherRect` and the dim/fade covers use fine dither patterns too.
 
 ## Palette
 
@@ -189,6 +204,7 @@ stays unique.
 | Mute            | M                                | sliders to 0 in pause menu    | pause menu                |
 | Volume          | pause menu, left/right           | pause menu, - and +           | pause menu, left/right    |
 | Graphics        | pause menu, GRAPHICS (AUTO / HIGH / MEDIUM / LOW) | same         | same                      |
+| View            | pause menu, VIEW (CLOSE / WIDE: more field)       | same         | same                      |
 | Invite a friend | pause menu, INVITE A FRIEND (code + link) | same, SHARE LINK      | same                      |
 | Join a friend   | title, JOIN A FRIEND, type the code (or open the link) | same     | same (B leaves)           |
 | Leave a friend's ranch | pause menu, LEAVE ...'S RANCH | same                     | same                      |

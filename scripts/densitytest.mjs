@@ -1,7 +1,7 @@
 // The 2x pipeline draws the old art exactly as before, only at two fine
-// pixels a world pixel (the fine-pixel sky dithers switched off, as at
-// GRAPHICS MEDIUM, and the world layer alone: text is a new face on
-// purpose): renders the same seeded frames here and in another
+// pixels a world pixel (the world layer alone, without the sky overlay or
+// text, which are new on purpose): renders the same seeded frames here and
+// in another
 // checkout of the game (BASE=path, e.g. a worktree of main) at a size where
 // both show the same world, and checks each old pixel is a solid 2x2 block
 // of the same colour in the new frame.
@@ -48,7 +48,9 @@ async function frame(port, s) {
   await page.waitForFunction(() => window.game);
   const out = await page.evaluate(async ({ save, s }) => {
     const g = window.game;
-    // The fine-pixel dithers are new on purpose: compare without them.
+    // The sky overlay (night, fog, the light) and the ground's fine dither
+    // are new on purpose: compare the world without them.
+    g.night.draw = () => {};
     const q = await import('/src/gfx/quality.ts');
     if ('fineSky' in q.quality) q.quality.fineSky = false;
     if (s.ranch) {
@@ -68,6 +70,8 @@ async function frame(port, s) {
     const { drawWorld } = await import('/src/render/world.ts');
     (await import('/src/gfx/font.ts')).setTextFilter(() => '');
     g.tip = null; g.banner = null;
+    // The same view on both sides (the camera's framing is new too).
+    g.cam.x = Math.round(g.dog.x); g.cam.y = Math.round(g.dog.y);
     drawWorld(g, g.g, g.view());
     g.screen.present();
     const c = g.screen.buf;
