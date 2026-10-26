@@ -5,8 +5,9 @@ import { makeCanvas } from '../gfx/screen';
 import { hash2 } from '../rng';
 import { ROOFS, farmLook } from './ranchstyle';
 import { seasonLook, snowCap } from './seasonlook';
-import { gateLeaf, groundShadow, post, postCap, railCol, type Drawable } from './buildings';
+import { gateLeaf, groundShadow, postCap, postF, postH, railF, vRailsF, type Drawable } from './buildings';
 import { goodsDrawables } from './goods';
+import { PX, fine } from '../gfx/screen';
 import type { Pen } from '../ranch/buildings';
 import { CS, TS } from '../world/map';
 
@@ -57,62 +58,48 @@ function postsAlong(a: number, b: number, step: number, gap?: [number, number]):
   return out.sort((x, y) => x - y);
 }
 
-// A corner or gate post: taller and stouter than the rest, on a stone.
-function heavyPost(g: CanvasRenderingContext2D, x: number, base: number, sturdy: boolean) {
-  const h = sturdy ? 8 : 7;
-  rect(g, x, base - h + 1, 2, h, C.plum);
-  rect(g, x, base - h + 1, 2, 1, sturdy || seasonLook.snow > 0.4 ? C.wool : postCap(x, base));
-  px(g, x - 1, base, C.wool);
-  px(g, x + 2, base, C.sage);
-  px(g, x + 2, base - 1, C.sage);
-}
-
-// A north or south side of fence: rails post to post, worn here and there.
+// A north or south side of fence: rails post to post on the fine grid,
+// worn here and there (a knot, a grey streak, a rail sagging in the middle).
 function hSide(g: CanvasRenderingContext2D, xs: number[], base: number, gap: [number, number] | undefined, sturdy: boolean, a: number, b: number) {
-  const rc = railCol();
   const gate = (q: number) => !!gap && (q === gap[0] || q === gap[1] - 1);
-  for (let i = 0; i + 1 < xs.length; i++) {
-    const xa = xs[i], xb = xs[i + 1];
-    if (gap && xa === gap[0]) continue;
-    const w = xb - xa - 2;
-    if (w <= 0) continue;
-    rect(g, xa + 2, base + 1, w + 2, 1, C.sage);
-    const wear = hash2(xa, base, 409);
-    const sag = wear > 0.84 && w >= 6;
-    rect(g, xa + 2, base - 2, w, 1, rc);
-    if (sag) {
-      rect(g, xa + 2, base - 4, 2, 1, rc);
-      rect(g, xa + 4, base - 3, w - 4, 1, rc);
-      rect(g, xb - 2, base - 4, 2, 1, rc);
-    } else rect(g, xa + 2, base - 4, w, 1, rc);
-    if (sturdy) rect(g, xa + 2, base - 6, w, 1, rc);
-    // Knots, and a weathered grey streak along the odd rail.
-    for (let x = xa + 2; x < xb; x++) {
-      if (hash2(x, base, 404) < 0.05) px(g, x, base - 4, C.sage);
-      if (wear < 0.14 && hash2(x, base, 411) < 0.35) px(g, x, base - 2, C.sage);
+  fine(g, (fg) => {
+    const B = base * PX + 1;
+    for (let i = 0; i + 1 < xs.length; i++) {
+      const xa = xs[i], xb = xs[i + 1];
+      if (gap && xa === gap[0]) continue;
+      const X0 = xa * PX + 3, X1 = xb * PX;
+      if (X1 <= X0) continue;
+      rect(fg, X0, B + 1, X1 - X0 + 1, 1, C.sage);
+      const wear = hash2(xa, base, 409);
+      railF(fg, X0, X1, B - 5, xa);
+      if (wear > 0.84 && X1 - X0 >= 10) {
+        // The top rail sags a pixel in the middle of its span.
+        railF(fg, X0, X0 + 3, B - 9, xa + 1);
+        railF(fg, X0 + 3, X1 - 3, B - 8, xa + 1);
+        railF(fg, X1 - 3, X1, B - 9, xa + 1);
+      } else railF(fg, X0, X1, B - 9, xa + 1);
+      if (sturdy) railF(fg, X0, X1, B - 13, xa + 2);
+      if (wear < 0.14) for (let x = X0 + 1; x < X1 - 1; x += 2) px(fg, x, B - 5, C.sage);
     }
-  }
-  for (const x of xs) {
-    if (x === a || x === b || gate(x)) heavyPost(g, x, base, sturdy);
-    else post(g, x, base, sturdy);
-  }
+    for (const x of xs) {
+      const heavy = x === a || x === b || gate(x);
+      const cap = sturdy || heavy || seasonLook.snow > 0.4 ? C.wool : postCap(x, base);
+      postF(fg, x * PX, B, sturdy ? (heavy ? 7 : 6) : heavy ? 6 : postH(x, base), cap, sturdy, heavy);
+    }
+  });
 }
 
 // One stretch of an east or west side, post `ya` to post `yb`: the rails as
-// two lines in 3/4 view, and the post at the top unless it is a corner.
+// two lines seen from above, and the post at the top unless it is a corner.
 function vStretch(g: CanvasRenderingContext2D, x: number, ya: number, yb: number, rail: boolean, top: 'none' | 'post' | 'heavy', sturdy: boolean) {
-  if (rail && yb > ya) {
-    const rc = railCol();
-    rect(g, x + 2, ya - 2, 1, yb - ya, C.sage);
-    rect(g, x, ya - 4, 1, yb - ya, rc);
-    rect(g, x + 1, ya - 3, 1, yb - ya, rc);
-    if (sturdy) rect(g, x, ya - 6, 1, yb - ya, rc);
-    const wear = hash2(x, ya, 405);
-    if (wear < 0.4) px(g, x + 1, ya + Math.floor(hash2(x, ya, 406) * (yb - ya)) - 3, C.sage);
-    else if (wear > 0.86) for (let y = ya; y < yb; y++) if (hash2(x, y, 412) < 0.4) px(g, x, y - 4, C.sage);
-  }
-  if (top === 'heavy') heavyPost(g, x, ya, sturdy);
-  else if (top === 'post') post(g, x, ya, sturdy);
+  fine(g, (fg) => {
+    const X = x * PX, Ya = ya * PX + 1, Yb = yb * PX + 1;
+    if (rail && yb > ya) vRailsF(fg, X, Ya, Yb, sturdy, ya);
+    if (top === 'none') return;
+    const heavy = top === 'heavy';
+    const cap = sturdy || heavy || seasonLook.snow > 0.4 ? C.wool : postCap(x, ya);
+    postF(fg, X, Ya, sturdy ? (heavy ? 7 : 6) : heavy ? 6 : postH(x, ya), cap, sturdy, heavy);
+  });
 }
 
 function vSide(out: Drawable[], g: CanvasRenderingContext2D, x: number, ys: number[], gap: [number, number] | undefined, sturdy: boolean, a: number, b: number) {
@@ -149,7 +136,7 @@ export function penDrawables(g: CanvasRenderingContext2D, pen: Pen, t: number, s
   const field = fieldness(p);
   const step = field > 0.5 ? 10 : 8;
 
-  out.push({ y: -1e9 + p.id, draw: () => { const f = floorPicture(p, fixtures, s); g.drawImage(f.c, f.x, f.y); } });
+  out.push({ y: -1e9 + p.id, draw: () => { const f = floorPicture(p, fixtures, s); g.drawImage(f.c, f.x, f.y, f.w, f.h); } });
 
   for (const f of fixtures) out.push(...fixtureDrawables(g, f, t));
 
@@ -255,77 +242,101 @@ function fixtureDrawables(g: CanvasRenderingContext2D, f: Fixture, t: number): D
   }
 }
 
-// A plum water trough on stubby legs, a glint moving on the water.
+// A plum water trough on stubby legs, a glint moving on the water. On the
+// fine grid: a rim catching the light, planks, the water inside.
 function trough(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  rect(g, x - 1, y + 5, 14, 1, C.sage);
-  rect(g, x, y, 14, 4, C.plum);
-  rect(g, x + 1, y + 1, 12, 1, seasonLook.snow > 0.7 ? C.wool : C.teal);
-  rect(g, x, y, 14, 1, C.moss);
-  px(g, x + 4 + (Math.floor(t * 2) % 5), y + 1, C.wool);
-  px(g, x + 1, y + 4, C.plum);
-  px(g, x + 12, y + 4, C.plum);
+  fine(g, (fg) => {
+    const X = x * PX, Y = y * PX;
+    rect(fg, X - 1, Y + 10, 28, 1, C.sage);
+    rect(fg, X, Y, 28, 8, C.plum);
+    rect(fg, X, Y, 28, 1, C.moss);
+    rect(fg, X + 2, Y + 2, 24, 2, seasonLook.snow > 0.7 ? C.wool : C.teal);
+    rect(fg, X + 2, Y + 4, 24, 1, C.plum);
+    rect(fg, X + 1, Y + 6, 26, 1, C.sage); // the plank seam
+    px(fg, X + 8 + ((Math.floor(t * 2) % 5) * 3), Y + 2, C.wool);
+    px(fg, X + 9 + ((Math.floor(t * 2) % 5) * 3), Y + 2, C.wool);
+    rect(fg, X + 2, Y + 8, 2, 2, C.plum);
+    rect(fg, X + 24, Y + 8, 2, 2, C.plum);
+  });
 }
 
 // A hay rack: a slatted V on four legs, hay heaped above it and pulled out
-// through the slats. (x, base) is its left foot.
+// through the slats, wisps fallen below. (x, base) is its left foot; fine.
 const RACK = [
-  '..y.yywyy.y...',
-  '.yyyyyyyyyyyy.',
-  'pppppppppppppp',
-  'pypypypypypypy',
-  '.ypypypypypyp.',
-  '..pppppppppp..',
-  '..p........p..',
-  '..p........p..',
+  '....y..yy.y..y.y......',
+  '..yyy.yyyyyyyyyyy.y...',
+  '.yyyyyyywyyyyyyyyyyy..',
+  'yyyywyyyyyyyyyywyyyyy.',
+  'pppppppppppppppppppppp',
+  'pyypyypyypyypyypyypyyp',
+  '.pyypyypyypyypyypyypp.',
+  '..pyypyypyypyypyyppp..',
+  '...pyypyypyypyyp.p....',
+  '....pppppppppppppp....',
+  '....pp..........pp....',
+  '....pp..........pp....',
+  '....pp..........pp....',
 ];
 const RC: Record<string, string> = { p: C.plum, y: C.butter, w: C.wool };
 
 function hayRack(g: CanvasRenderingContext2D, x: number, base: number) {
-  rect(g, x + 2, base + 1, 11, 1, C.sage);
-  const top = base - RACK.length + 1;
-  for (let r = 0; r < RACK.length; r++)
-    for (let c = 0; c < RACK[r].length; c++) {
-      const ch = RACK[r][c];
-      if (ch !== '.') px(g, x + c, top + r, RC[ch]);
-    }
-  if (seasonLook.snow > 0.4) snowCap(g, x + 1, top, 12);
+  fine(g, (fg) => {
+    const X = x * PX - 4, B = base * PX + 1;
+    rect(fg, X + 3, B + 1, 18, 1, C.sage);
+    for (const [wx, wy] of [[2, 0], [5, -1], [17, 0], [20, -1]]) px(fg, X + wx, B + wy, C.butter);
+    const top = B - RACK.length + 1;
+    for (let r = 0; r < RACK.length; r++)
+      for (let c = 0; c < RACK[r].length; c++) {
+        const ch = RACK[r][c];
+        if (ch !== '.') px(fg, X + c, top + r, RC[ch]);
+      }
+  });
+  if (seasonLook.snow > 0.4) snowCap(g, x - 1, base - 6, 11);
 }
 
 // A small field shelter: an open-fronted lean-to with a single-pitch roof
 // in the ranch's roofing, boarded sides, straw bedding in the dark inside.
-// (x, base) is its front left foot; 24 wide.
+// (x, base) is its front left foot; 24 wide. Fine grid.
 function shelterInside(g: CanvasRenderingContext2D, x: number, base: number) {
-  const top = base - 20;
-  rect(g, x + 2, top + 5, 20, 15, C.plum);
-  for (let yy = base - 4; yy <= base; yy++)
-    for (let xx = x + 3; xx < x + 21; xx++) {
-      const h = hash2(xx, yy, 413);
-      if (h < 0.55 - (base - yy) * 0.1) px(g, xx, yy, h < 0.1 ? C.wool : C.butter);
-    }
-  rect(g, x + 2, top + 5, 20, 1, C.sage);
+  fine(g, (fg) => {
+    const X = x * PX, B = base * PX + 1, T = B - 40;
+    rect(fg, X + 4, T + 10, 40, 30, C.plum);
+    // Straw bedding in the light at the front, in tufts.
+    for (let yy = B - 8; yy <= B; yy++)
+      for (let xx = X + 6; xx < X + 42; xx++) {
+        const h = hash2(xx >> 1, yy >> 1, 413);
+        if (h < 0.6 - (B - yy) * 0.07) px(fg, xx, yy, h < 0.12 ? C.wool : C.butter);
+      }
+    rect(fg, X + 4, T + 10, 40, 2, C.sage);
+    // The back wall's boards in the dark.
+    for (let xx = X + 9; xx < X + 42; xx += 6) rect(fg, xx, T + 12, 1, 18, C.sage);
+  });
 }
 
 function shelterFrame(g: CanvasRenderingContext2D, x: number, base: number) {
   const roof = ROOFS[farmLook.roof];
-  const top = base - 20;
-  // Boarded sides seen edge-on, the left in shade.
-  rect(g, x, top + 4, 2, 17, C.sage);
-  rect(g, x + 22, top + 4, 2, 17, C.wool);
-  for (let yy = top + 6; yy < base; yy += 3) {
-    px(g, x, yy, C.plum);
-    px(g, x + 22, yy, C.sage);
-  }
-  // Front posts.
-  rect(g, x + 2, top + 5, 1, 16, C.plum);
-  rect(g, x + 21, top + 5, 1, 16, C.plum);
-  // The roof: a slope from the high back to the front eave.
-  rect(g, x - 1, top, 26, 5, roof.base);
-  for (let xx = x; xx < x + 25; xx += 2) px(g, xx, top + 1 + ((xx >> 1) & 1), roof.course);
-  rect(g, x - 1, top, 26, 1, C.sage);
-  rect(g, x - 1, top + 4, 26, 1, C.plum);
-  px(g, x + 24, top + 1, C.sage);
-  px(g, x + 24, top + 2, C.sage);
-  snowCap(g, x - 1, top, 26, top + 5);
+  fine(g, (fg) => {
+    const X = x * PX, B = base * PX + 1, T = B - 40;
+    // Boarded sides seen edge-on, the left in shade.
+    rect(fg, X, T + 8, 4, 33, C.sage);
+    rect(fg, X + 44, T + 8, 4, 33, C.wool);
+    for (let yy = T + 12; yy < B; yy += 5) {
+      rect(fg, X, yy, 4, 1, C.plum);
+      rect(fg, X + 44, yy, 4, 1, C.sage);
+    }
+    // Front posts, lit on the right.
+    for (const px0 of [X + 4, X + 41]) {
+      rect(fg, px0, T + 10, 3, 31, C.plum);
+      rect(fg, px0 + 2, T + 11, 1, 29, C.sage);
+    }
+    // The roof: courses sloping to the front eave, a pale ridge, a dark lip.
+    rect(fg, X - 2, T, 52, 10, roof.base);
+    for (let r = 3; r < 9; r += 3) rect(fg, X - 1, T + r, 50, 1, roof.course);
+    rect(fg, X - 2, T, 52, 1, C.sage);
+    rect(fg, X - 2, T + 9, 52, 1, C.plum);
+    rect(fg, X + 49, T + 1, 1, 8, C.sage);
+  });
+  snowCap(g, x - 1, base - 20, 26, base - 15);
 }
 
 // ---- The floor ----
@@ -341,7 +352,7 @@ function fieldness(p: Pen) {
 // lane a couple of pixels in.
 const LANE = [0.3, 0.6, 0.85, 0.7, 0.35, 0.12, 0];
 
-const floors = new Map<number, { key: string; c: HTMLCanvasElement; x: number; y: number }>();
+const floors = new Map<number, { key: string; c: HTMLCanvasElement; x: number; y: number; w: number; h: number }>();
 const APRON = 10;
 
 function floorPicture(p: Paddock, fixtures: Fixture[], s: { x0: number; y0: number; x1: number; y1: number }) {
@@ -356,9 +367,10 @@ function floorPicture(p: Paddock, fixtures: Fixture[], s: { x0: number; y0: numb
   const w = p.x1 - p.x0 + APRON * 2, hh = p.y1 - p.y0 + APRON * 2;
   // Always a new canvas: the picture cache knows an image by its object, so
   // repainting the old one would leave the cached ranch showing the old floor.
-  const c = makeCanvas(w, hh)[0];
+  // It is fine: PX canvas pixels to a world pixel, drawn back at world size.
+  const c = makeCanvas(w * PX, hh * PX)[0];
   paintFloor(c, p, fixtures, s, x, y, snow, bloom);
-  const e = { key, c, x, y };
+  const e = { key, c, x, y, w, h: hh };
   floors.set(p.id, e);
   return e;
 }
@@ -367,14 +379,32 @@ function floorPicture(p: Paddock, fixtures: Fixture[], s: { x0: number; y0: numb
 const rectDist = (x: number, y: number, x0: number, y0: number, x1: number, y1: number) =>
   Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(y0 - y, 0, y - y1));
 
+const BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const WISPS = [['yy', '.y'], ['y.', '.yy'], ['.y', 'yw'], ['yyy']];
+const TUSSOCK = [['s.s', 'sos'], ['.s.', 'sos', 'oso'], ['s..s', '.ss.']];
+const HOOF = ['s.s'];
+
+// The floor on the fine grid: trodden ground as clean worn shapes with a
+// short dithered edge (lanes inside the fence, the gate's apron muddy in the
+// middle and printed with hooves, the track to the trough, rings round the
+// fixtures), straw in wisps, and on a big field tussocks in the corners the
+// stock leave alone and flowers in spring and summer.
 function paintFloor(c: HTMLCanvasElement, p: Paddock, fixtures: Fixture[], s: { x0: number; y0: number; x1: number; y1: number }, ox: number, oy: number, snow: number, bloom: number) {
   const W = c.width, H = c.height;
   const cg = c.getContext('2d')!;
   const img = cg.createImageData(W, H);
   const d = new Uint32Array(img.data.buffer);
-  const set = (x: number, y: number, col: number) => {
-    const i = (y - oy) * W + (x - ox);
-    if (x >= ox && y >= oy && x < ox + W && y < oy + H) d[i] = col;
+  const COLS: Record<string, number> = { y: U32.butter, w: U32.wool, s: U32.sage, o: U32.moss };
+  const putF = (FX: number, FY: number, rows: string[], only?: (i: number) => boolean) => {
+    for (let r = 0; r < rows.length; r++)
+      for (let k = 0; k < rows[r].length; k++) {
+        const ch = rows[r][k];
+        if (ch === '.') continue;
+        const x = FX + k, y = FY + r;
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        if (only && !only(y * W + x)) continue;
+        d[y * W + x] = COLS[ch];
+      }
   };
   const f = fieldness(p);
   const ix0 = p.ix0, iy0 = p.iy0, ix1 = p.ix1 - 1, iy1 = p.iy1 - 1;
@@ -393,29 +423,28 @@ function paintFloor(c: HTMLCanvasElement, p: Paddock, fixtures: Fixture[], s: { 
   });
   const hl = p.hurdle ? hurdleLine(p, p.hurdle, p.y0 + CS - 1, p.y1 - 1, p.x0 + 1, p.x1 - CS + 1) : null;
   const R = 9 + 4 * f;
+  const strawAt = new Float32Array(W * H);
+  const inside = new Uint8Array(W * H);
 
-  for (let y = oy; y < oy + H; y++)
-    for (let x = ox; x < ox + W; x++) {
-      const inside = x >= ix0 && x <= ix1 && y >= iy0 && y <= iy1;
-      // Outside, only the worn apron in front of the gate.
-      const dOut = Math.hypot(x - (mx + ax * 6), (y - (my + ay * 6)) * (ax ? 1 : 1.4));
-      if (!inside) {
+  for (let FY = 0; FY < H; FY++)
+    for (let FX = 0; FX < W; FX++) {
+      const x = ox + FX / PX, y = oy + FY / PX;
+      const i = FY * W + FX;
+      const bay = BAY[(FY & 3) * 4 + (FX & 3)] / 16;
+      const isIn = x >= ix0 && x <= ix1 + 0.5 && y >= iy0 && y <= iy1 + 0.5;
+      if (!isIn) {
+        // Outside, only the worn apron in front of the gate.
         const beyond = p.rot === 0 ? y >= p.y1 : p.rot === 2 ? y < p.y0 : p.rot === 1 ? x < p.x0 : x >= p.x1;
-        if (!beyond || dOut > 8) continue;
+        if (!beyond) continue;
+        const dOut = Math.hypot(x - (mx + ax * 6), (y - (my + ay * 6)) * (ax ? 1 : 1.4));
         const k = 1 - dOut / 8;
-        const hh = hash2(x, y, 414);
-        if (((x + y) & 1) === 0 && hh < k * 0.9) set(x, y, U32.moss);
-        else if (hh < k * 0.12) set(x, y, U32.sage);
+        if (k > 0.45) d[i] = U32.moss;
+        else if (k > 0.15 && bay < (k - 0.15) / 0.3) d[i] = U32.moss;
         continue;
       }
-      const hh = hash2(x, y, 410);
+      inside[i] = 1;
       // The gate apron: trodden hard, muddy in the middle.
       const dg = Math.hypot(x - inX, (y - inY) * (ax ? 1.4 : 1));
-      if (dg < R) {
-        const k = 1.15 - dg / R;
-        if (dg < R * 0.45 && hh < 0.16) { set(x, y, U32.sage); continue; }
-        if (((x + y) & 1) === 0 && hh < k) { set(x, y, U32.moss); continue; }
-      }
       // Lanes along the fence (and both sides of a hurdle).
       let de = Math.min(x - ix0, ix1 - x, y - iy0, iy1 - y);
       if (hl) de = Math.min(de, hl.base ? Math.abs(y - hl.base) - 1 : Math.abs(x - hl.x - 1) - 1);
@@ -424,33 +453,55 @@ function paintFloor(c: HTMLCanvasElement, p: Paddock, fixtures: Fixture[], s: { 
       const u = Math.max(0, Math.min(1, ((x - inX) * tdx + (y - inY) * tdy) / tl2));
       const dt = Math.hypot(x - (inX + tdx * u), y - (inY + tdy * u));
       const reach = goal ? 1 : 0.55;
-      const track = dt < 3.5 && u < reach ? (dt < 1.5 ? 0.85 : dt < 2.5 ? 0.55 : 0.25) * (1 - (u / reach) * (goal ? 0.25 : 0.9)) : 0;
-      // Bare rings round the fixtures, straw round the rack and shelter.
+      const track = dt < 3.5 && u < reach ? (dt < 1.5 ? 0.85 : dt < 2.5 ? 0.6 : 0.3) * (1 - (u / reach) * (goal ? 0.25 : 0.9)) : 0;
       let ringK = 0, straw = 0;
       for (const q of fx) {
         const r = rectDist(x, y, q.x0, q.y0, q.x1, q.y1);
-        if (r < 6) ringK = Math.max(ringK, 0.55 * (1 - r / 6));
-        if (q.kind !== 'trough' && r < 9) straw = Math.max(straw, 0.16 * (1 - r / 9));
+        if (r < 6) ringK = Math.max(ringK, 0.8 * (1 - r / 6));
+        if (q.kind !== 'trough' && r < 9) straw = Math.max(straw, 0.5 * (1 - r / 9));
       }
+      const apron = dg < R ? 1.15 - dg / R : 0;
       // A pen's floor is trodden all over and strewn with straw.
       const pen = 1 - f;
-      const trod = Math.max(lane, track, ringK, pen * 0.1);
-      straw = Math.max(straw, pen * 0.04);
-      if (trod > 0.6 && hash2(x, y, 419) < (trod - 0.6) * 0.3) set(x, y, U32.sage);
-      else if (hh < trod * (((x + y) & 1) === 0 ? 1 : 0.55)) set(x, y, U32.moss);
-      else if (hash2(x, y, 415) < straw) set(x, y, hash2(x, y, 416) < 0.2 ? U32.wool : U32.butter);
-      else if (f > 0 && de > 6 && dt > 5) {
-        // A grazed field: the odd tussock, and flowers in spring and summer.
-        const k = hash2(x, y, 417);
-        // Longer grass in the corners the stock leave alone.
-        const corner = Math.min(Math.hypot(x - ix0, y - iy0), Math.hypot(ix1 - x, y - iy0), Math.hypot(x - ix0, iy1 - y), Math.hypot(ix1 - x, iy1 - y));
-        const rough = corner < 26 && dg > R * 2 ? 0.02 * (1 - corner / 26) : 0;
-        if (k < (0.004 + rough) * f && !snow) {
-          set(x, y, U32.sage);
-          set(x, y - 1, U32.moss);
-        } else if (bloom && k > 1 - 0.003 * f && !snow) set(x, y, hash2(x, y, 418) < 0.5 ? U32.butter : U32.wool);
-      }
+      const trod = Math.max(lane, track, ringK, apron, pen * 0.35);
+      strawAt[i] = Math.max(straw, pen * 0.18);
+      if (dg < R * 0.4) d[i] = U32.sage; // mud
+      else if (trod > 0.6) d[i] = U32.moss;
+      else if (trod > 0.38 && bay < (trod - 0.38) / 0.22) d[i] = U32.moss;
     }
+  // Straw in wisps, hoofprints in the apron, and on a field tussocks and
+  // flowers, all as little drawn things on a jittered grid.
+  const cell = (cw: number, chh: number, seed: number, fn: (FX: number, FY: number, h: number, cx: number, cy: number) => void) => {
+    for (let cy = 0; cy * chh < H; cy++)
+      for (let cx = 0; cx * cw < W; cx++) {
+        const FX = cx * cw + Math.floor(hash2(cx, cy, seed) * (cw - 1)), FY = cy * chh + Math.floor(hash2(cx, cy, seed + 1) * (chh - 1));
+        if (FX >= W || FY >= H) continue;
+        fn(FX, FY, hash2(cx, cy, seed + 2), cx, cy);
+      }
+  };
+  const inPen = (i: number) => inside[i] === 1;
+  cell(5, 4, 440, (FX, FY, h, cx) => {
+    const i = FY * W + FX;
+    if (!inside[i] || h > strawAt[i]) return;
+    putF(FX, FY, WISPS[cx % WISPS.length], inPen);
+  });
+  cell(7, 6, 450, (FX, FY, h) => {
+    const x = ox + FX / PX, y = oy + FY / PX;
+    const dg = Math.hypot(x - inX, (y - inY) * (ax ? 1.4 : 1));
+    if (dg > R * 0.95 || dg < R * 0.4 || h > 0.5 || snow > 1) return;
+    putF(FX, FY, HOOF, inPen);
+  });
+  if (f > 0 && !snow) {
+    cell(9, 7, 460, (FX, FY, h, cx) => {
+      const i = FY * W + FX;
+      if (!inside[i] || d[i]) return;
+      const x = ox + FX / PX, y = oy + FY / PX;
+      const corner = Math.min(Math.hypot(x - ix0, y - iy0), Math.hypot(ix1 - x, y - iy0), Math.hypot(x - ix0, iy1 - y), Math.hypot(ix1 - x, iy1 - y));
+      const rough = corner < 26 ? 0.5 * (1 - corner / 26) : 0.04;
+      if (h < rough * f) putF(FX, FY - 1, TUSSOCK[cx % TUSSOCK.length], (k) => inside[k] === 1 && !d[k]);
+      else if (bloom && h > 1 - 0.05 * f) putF(FX, FY, cx & 1 ? ['.w.', 'wyw', '.w.'] : ['.y.', 'yoy', '.y.'], (k) => inside[k] === 1 && !d[k]);
+    });
+  }
   cg.clearRect(0, 0, W, H);
   cg.putImageData(img, 0, 0);
 }

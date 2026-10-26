@@ -2,7 +2,8 @@ import { C } from '../palette';
 import { line, px, rect } from '../gfx/draw';
 import { text } from '../gfx/font';
 import { hash2 } from '../rng';
-import { hFence, hipRoof, penDrawables, shadowRect, vFenceSeg, type Drawable } from './buildings';
+import { hFence, hipRoof, penDrawables, postF, shadowRect, vFenceSeg, type Drawable } from './buildings';
+import { PX, fine } from '../gfx/screen';
 import { snowCap } from './seasonlook';
 import { AGILITY, SHED_LANE, type AgilityYard, type Dairy, type ShearingShed } from '../ranch/structures';
 import type { Game } from '../game';
@@ -24,44 +25,74 @@ export function shedDrawables(g: CanvasRenderingContext2D, s: ShearingShed, game
     {
       y: -1e9 + s.id,
       draw: () => {
-        const l = s.lane;
-        for (let y = l.y0; y < l.y1; y++)
-          for (let x = l.x0; x < l.x1; x++) {
-            const h = hash2(x, y, 611);
-            if (h < 0.18) px(g, x, y, C.moss);
-            else if (h < 0.22) px(g, x, y, C.butter);
+        // On the fine grid: a trodden lane edged by the rail's line, straw
+        // in wisps, tufts of fleece by the shearer's door in summer.
+        fine(g, (fg) => {
+          const l = s.lane;
+          const X0 = l.x0 * PX, X1 = l.x1 * PX, Y0 = l.y0 * PX, Y1 = l.y1 * PX;
+          rect(fg, X0, Y0 + 2, X1 - X0, Y1 - Y0 - 4, C.moss);
+          rect(fg, X0, Y1 - 3, X1 - X0, 1, C.sage);
+          for (let x = X0 + 3; x < X1 - 3; x += 7) {
+            const y = Y0 + 4 + Math.floor(hash2(x, s.id, 611) * (Y1 - Y0 - 10));
+            px(fg, x, y, C.butter);
+            px(fg, x + 1, y - 1, C.butter);
           }
-        if (summer) for (let i = 0; i < 14; i++) px(g, Math.round(s.shearX0 + hash2(i, s.id, 612) * (s.shearX1 - s.shearX0)), l.y0 + 2 + Math.floor(hash2(s.id, i, 613) * 8), C.wool);
+          if (summer)
+            for (let i = 0; i < 10; i++) {
+              const fx = Math.round((s.shearX0 + hash2(i, s.id, 612) * (s.shearX1 - s.shearX0)) * PX), fy = Y0 + 4 + Math.floor(hash2(s.id, i, 613) * 14);
+              rect(fg, fx, fy, 3, 2, C.wool);
+              px(fg, fx + 1, fy - 1, C.wool);
+            }
+        });
       },
     },
     {
       y: wallBase,
       draw: () => {
-        rect(g, x0, eave, w, 10, C.plum);
-        for (let x = x0 + 2; x < x1 - 1; x += 3) rect(g, x, eave + 1, 1, 8, C.teal);
-        rect(g, x0, eave, 1, 10, C.wool);
-        rect(g, x1 - 1, eave, 1, 10, C.wool);
-        // The shearer's door: open in summer, a fleece on the hook.
-        const dx = Math.round(s.cx) - 4;
-        rect(g, dx - 1, wallBase - 9, 10, 9, C.wool);
-        rect(g, dx, wallBase - 8, 8, 8, summer ? C.butter : C.plum);
-        if (summer) {
-          rect(g, dx + 2, wallBase - 6, 4, 3, C.wool);
-          px(g, dx + 3, wallBase - 7, C.plum);
-        } else line(g, dx, wallBase - 8, dx + 7, wallBase - 1, C.wool);
-        // Small windows either side.
-        for (const wx of [x0 + 8, x1 - 13]) {
-          rect(g, wx, eave + 3, 5, 4, C.wool);
-          rect(g, wx + 1, eave + 4, 3, 2, C.plum);
-        }
+        fine(g, (fg) => {
+          const X0 = x0 * PX, X1 = x1 * PX, E = eave * PX, WB = wallBase * PX;
+          // Plum boards and teal battens, wool corner boards.
+          rect(fg, X0, E, X1 - X0, 20, C.plum);
+          for (let x = X0 + 4; x < X1 - 2; x += 6) {
+            rect(fg, x, E + 2, 1, 16, C.teal);
+            if (hash2(x, s.id, 614) < 0.3) px(fg, x + 3, E + 5 + Math.floor(hash2(s.id, x, 615) * 10), C.sage);
+          }
+          rect(fg, X0, E, 2, 20, C.wool);
+          rect(fg, X1 - 2, E, 2, 20, C.wool);
+          rect(fg, X0, E + 20 - 2, X1 - X0, 2, C.sage);
+          // The shearer's door: open in summer, a fleece on the hook.
+          const DX = (Math.round(s.cx) - 4) * PX;
+          rect(fg, DX - 2, WB - 18, 20, 18, C.wool);
+          rect(fg, DX, WB - 16, 16, 16, summer ? C.butter : C.plum);
+          if (summer) {
+            rect(fg, DX + 4, WB - 12, 8, 6, C.wool);
+            rect(fg, DX + 5, WB - 13, 6, 1, C.wool);
+            px(fg, DX + 7, WB - 15, C.plum);
+            px(fg, DX + 7, WB - 14, C.plum);
+          } else {
+            line(fg, DX, WB - 16, DX + 15, WB - 1, C.wool);
+            rect(fg, DX, WB - 9, 16, 1, C.wool);
+          }
+          // Small windows either side.
+          for (const wx of [x0 + 8, x1 - 13]) {
+            const WX = wx * PX;
+            rect(fg, WX, E + 5, 10, 8, C.wool);
+            rect(fg, WX + 2, E + 7, 6, 4, C.plum);
+            rect(fg, WX + 4, E + 7, 1, 4, C.wool);
+            px(fg, WX + 7, E + 7, C.teal);
+          }
+          // Wool bales by the far end, in summer.
+          if (summer)
+            for (let i = 0; i < 3; i++) {
+              const by = WB - 8 - i * 8;
+              rect(fg, X1 + 2, by, 12, 8, C.wool);
+              rect(fg, X1 + 2, by + 6, 12, 2, C.sage);
+              rect(fg, X1 + 6, by, 1, 8, C.sage);
+              px(fg, X1 + 4, by + 2, C.sage);
+            }
+        });
         hipRoof(g, x0 - 2, x1 + 2, top, eave + 1, 4, C.teal, C.plum);
         snowCap(g, x0 + 2, top, w - 4, eave + 1);
-        // Wool bales by the far end, in summer.
-        if (summer)
-          for (let i = 0; i < 3; i++) {
-            rect(g, x1 + 1, wallBase - 4 - i * 4, 6, 4, C.wool);
-            rect(g, x1 + 1, wallBase - 1 - i * 4, 6, 1, C.sage);
-          }
       },
     },
     // The rail along the chute's south side, splaying into wings.
@@ -69,15 +100,20 @@ export function shedDrawables(g: CanvasRenderingContext2D, s: ShearingShed, game
     {
       y: s.y1,
       draw: () => {
-        for (const [ax, ay, bx, by] of s.wings()) {
-          line(g, ax, ay - 2, bx, by - 2, C.wool);
-          line(g, ax, ay, bx, by, C.wool);
-          for (let i = 0; i <= 4; i++) {
-            const x = Math.round(ax + ((bx - ax) * i) / 4), y = Math.round(ay + ((by - ay) * i) / 4);
-            rect(g, x, y - 4, 2, 5, C.plum);
-            px(g, x - 1, y + 1, C.sage);
+        fine(g, (fg) => {
+          for (const [ax, ay, bx, by] of s.wings()) {
+            const AX = ax * PX, AY = ay * PX + 1, BX = bx * PX, BY = by * PX + 1;
+            line(fg, AX, AY + 1, BX, BY + 1, C.sage);
+            for (const off of [5, 9]) {
+              line(fg, AX, AY - off, BX, BY - off, C.wool);
+              line(fg, AX, AY - off + 1, BX, BY - off + 1, C.sage);
+            }
+            for (let i = 0; i <= 4; i++) {
+              const x = Math.round(AX + ((BX - AX) * i) / 4), y = Math.round(AY + ((BY - AY) * i) / 4);
+              postF(fg, x, y, 6, C.moss, false);
+            }
           }
-        }
+        });
       },
     },
   ];
@@ -94,30 +130,50 @@ export function dairyDrawables(g: CanvasRenderingContext2D, d: Dairy, t: number,
   out.push({
     y: base,
     draw: () => {
-      rect(g, x0 + 1, eave, w - 2, 11, C.wool);
-      rect(g, x0 + 1, eave, 1, 11, C.sage);
-      rect(g, x0 + 1, base - 1, w - 2, 1, C.sage);
-      for (let x = x0 + 4; x < x1 - 3; x += 7) rect(g, x, eave + 1, 1, 9, C.sage);
-      // Door onto the yard and a round window.
       const cx = Math.round(d.cx);
-      rect(g, cx - 3, base - 8, 6, 8, night ? C.butter : C.plum);
-      rect(g, cx - 4, base - 9, 8, 1, C.plum);
-      rect(g, x0 + 6, eave + 3, 4, 3, C.plum);
-      px(g, x0 + 7, eave + 4, night ? C.butter : C.teal);
-      rect(g, x1 - 10, eave + 3, 4, 3, C.plum);
-      px(g, x1 - 9, eave + 4, night ? C.butter : C.teal);
+      fine(g, (fg) => {
+        const X0 = x0 * PX, X1 = x1 * PX, E = eave * PX, B = base * PX, CX = cx * PX;
+        // Whitewashed walls with pilasters, the left in shade, a footing.
+        rect(fg, X0 + 2, E, X1 - X0 - 4, 22, C.wool);
+        rect(fg, X0 + 2, E, 2, 22, C.sage);
+        rect(fg, X0 + 2, B - 2, X1 - X0 - 4, 2, C.sage);
+        for (let x = X0 + 8; x < X1 - 6; x += 14) rect(fg, x, E + 2, 1, 18, C.sage);
+        rect(fg, X0 + 2, E, X1 - X0 - 4, 1, C.sage);
+        // A door onto the yard (lit at night), round windows either side.
+        rect(fg, CX - 8, B - 18, 16, 18, C.plum);
+        rect(fg, CX - 6, B - 16, 12, 16, night ? C.butter : C.plum);
+        rect(fg, CX - 6, B - 16, 12, 1, C.teal);
+        rect(fg, CX, B - 16, 1, 16, C.sage);
+        px(fg, CX + 3, B - 8, C.butter);
+        for (const wx of [X0 + 12, X1 - 20]) {
+          rect(fg, wx + 1, E + 5, 6, 8, C.plum);
+          rect(fg, wx, E + 6, 8, 6, C.plum);
+          rect(fg, wx + 2, E + 7, 4, 4, night ? C.butter : C.teal);
+          rect(fg, wx + 3, E + 6, 2, 6, night ? C.butter : C.teal);
+          px(fg, wx + 5, E + 7, night ? C.wool : C.wool);
+        }
+        // Churns by the door.
+        for (const [i, ox] of [[0, x1 + 1], [1, x1 + 6]] as const) {
+          const OX = ox * PX, T = B - 14 + i * 2;
+          rect(fg, OX + 1, T, 6, B - T, C.wool);
+          rect(fg, OX, T + 3, 8, B - T - 4, C.wool);
+          rect(fg, OX + 6, T + 3, 2, B - T - 4, C.sage);
+          rect(fg, OX + 1, T, 6, 1, C.teal);
+          rect(fg, OX + 2, T - 2, 4, 2, C.plum);
+          rect(fg, OX, B - 4, 8, 1, C.sage);
+        }
+      });
       hipRoof(g, x0 - 1, x1 + 1, top, eave + 1, 5, C.teal, C.plum);
       snowCap(g, x0 + 4, top, w - 8, eave + 1);
-      // A bell-shaped vent on the ridge.
-      rect(g, cx - 2, top - 3, 5, 3, C.wool);
-      rect(g, cx - 3, top - 4, 7, 1, C.plum);
-      // Churns.
-      for (const [i, ox] of [[0, x1 + 1], [1, x1 + 6]] as const) {
-        rect(g, ox, base - 7 + i, 4, 7 - i, C.wool);
-        rect(g, ox, base - 7 + i, 4, 1, C.teal);
-        rect(g, ox + 1, base - 8 + i, 2, 1, C.plum);
-        px(g, ox + 3, base - 4, C.sage);
-      }
+      fine(g, (fg) => {
+        // A bell-shaped vent on the ridge.
+        const CX = cx * PX, T = top * PX;
+        rect(fg, CX - 4, T - 6, 9, 6, C.wool);
+        rect(fg, CX - 4, T - 6, 2, 6, C.sage);
+        rect(fg, CX - 2, T - 4, 5, 3, C.plum);
+        rect(fg, CX - 6, T - 8, 13, 2, C.plum);
+        rect(fg, CX - 3, T - 10, 7, 2, C.plum);
+      });
     },
   });
   return out;
@@ -125,11 +181,16 @@ export function dairyDrawables(g: CanvasRenderingContext2D, d: Dairy, t: number,
 
 // ---- Agility yard: a low fence round a course of striped jumps, weave
 // poles and a teal tunnel; the start post flies a pennant.
+// A striped pole on the fine grid: bands of buttercup and wool, a cap, a
+// little shadow at its foot.
 function pole(g: CanvasRenderingContext2D, x: number, y: number, h: number) {
-  for (let i = 0; i < h; i++) px(g, x, y - i, Math.floor(i / 2) % 2 ? C.wool : C.butter);
-  px(g, x, y - h, C.plum);
-  px(g, x - 1, y + 1, C.sage);
-  px(g, x + 1, y + 1, C.sage);
+  fine(g, (fg) => {
+    const X = x * PX, Y = y * PX + 1, Hh = h * PX;
+    for (let i = 0; i < Hh; i++) rect(fg, X, Y - i, 2, 1, Math.floor(i / 3) % 2 ? C.wool : C.butter);
+    rect(fg, X + 1, Y - Hh + 1, 1, Hh - 1, C.sage);
+    rect(fg, X, Y - Hh - 1, 2, 2, C.plum);
+    rect(fg, X - 1, Y + 1, 5, 1, C.sage);
+  });
 }
 
 export function agilityDrawables(g: CanvasRenderingContext2D, y: AgilityYard, t: number, game?: Game): Drawable[] {
@@ -140,8 +201,12 @@ export function agilityDrawables(g: CanvasRenderingContext2D, y: AgilityYard, t:
   out.push({
     y: -1e9 + y.id,
     draw: () => {
-      for (let yy = y0 + 4; yy < y1 - 4; yy++)
-        for (let xx = x0 + 4; xx < x1 - 4; xx++) if (((xx >> 2) + (yy >> 3)) % 2 === 0 && hash2(xx, yy, 621) < 0.35) px(g, xx, yy, C.moss);
+      // Mown in broad bands, the ring of the course worn in clean moss.
+      fine(g, (fg) => {
+        const X0 = (x0 + 4) * PX, X1 = (x1 - 4) * PX, Y0 = (y0 + 6) * PX, Y1 = (y1 - 4) * PX;
+        for (let y = Y0; y < Y1; y += 16) rect(fg, X0, y, X1 - X0, Math.min(8, Y1 - y), C.moss);
+        for (let y = Y0 + 8; y < Y1; y += 16) for (let x = X0 + 3; x < X1; x += 9) px(fg, x, y + 3, C.moss);
+      });
     },
   });
   out.push({ y: y0 + 3, draw: () => hFence(g, x0, x1 - 2, y0 + 3) });
@@ -156,8 +221,10 @@ export function agilityDrawables(g: CanvasRenderingContext2D, y: AgilityYard, t:
       draw: () => {
         pole(g, a.x, a.y, 6);
         pole(g, b.x, b.y, 6);
-        if (a.x === b.x) for (let yy = a.y; yy <= b.y; yy++) px(g, a.x + 1, yy - 3, (yy >> 1) % 2 ? C.wool : C.plum);
-        else for (let xx = a.x; xx <= b.x; xx++) px(g, xx, a.y - 4, (xx >> 1) % 2 ? C.wool : C.plum);
+        fine(g, (fg) => {
+          if (a.x === b.x) for (let yy = a.y * PX; yy <= b.y * PX; yy++) rect(fg, a.x * PX + 2, yy - 6, 1, 1, (yy >> 2) % 2 ? C.wool : C.plum);
+          else for (let xx = a.x * PX; xx <= b.x * PX + 1; xx++) rect(fg, xx, a.y * PX - 7, 1, 2, (xx >> 2) % 2 ? C.wool : C.plum);
+        });
       },
     });
   }
@@ -171,13 +238,18 @@ export function agilityDrawables(g: CanvasRenderingContext2D, y: AgilityYard, t:
     y: y0 + tun.y1 + 1,
     draw: () => {
       const tx0 = x0 + tun.x0, tx1 = x0 + tun.x1, ty0 = y0 + tun.y0, ty1 = y0 + tun.y1;
-      rect(g, tx0, ty0 - 3, tx1 - tx0, ty1 - ty0 + 3, C.teal);
-      rect(g, tx0, ty0 - 3, tx1 - tx0, 1, C.wool);
-      rect(g, tx0, ty1 - 1, tx1 - tx0, 1, C.sage);
-      for (let x = tx0 + 2; x < tx1; x += 4) rect(g, x, ty0 - 3, 1, ty1 - ty0 + 3, C.plum);
-      // The mouths.
-      rect(g, tx0, ty0, 2, ty1 - ty0 - 1, C.plum);
-      rect(g, tx1 - 2, ty0, 2, ty1 - ty0 - 1, C.plum);
+      fine(g, (fg) => {
+        const X0 = tx0 * PX, X1 = tx1 * PX, Y0 = ty0 * PX, Y1 = ty1 * PX;
+        // A teal tube, lit along its top, hoops round it, dark mouths.
+        rect(fg, X0, Y0 - 6, X1 - X0, Y1 - Y0 + 6, C.teal);
+        rect(fg, X0, Y0 - 6, X1 - X0, 1, C.wool);
+        rect(fg, X0, Y0 - 5, X1 - X0, 2, C.sage);
+        rect(fg, X0, Y1 - 2, X1 - X0, 2, C.plum);
+        rect(fg, X0, Y1, X1 - X0, 1, C.sage);
+        for (let x = X0 + 4; x < X1 - 2; x += 8) rect(fg, x, Y0 - 6, 1, Y1 - Y0 + 4, C.plum);
+        rect(fg, X0, Y0 - 3, 4, Y1 - Y0, C.plum);
+        rect(fg, X1 - 4, Y0 - 3, 4, Y1 - Y0, C.plum);
+      });
       snowCap(g, tx0, ty0 - 4, tx1 - tx0);
     },
   });
@@ -186,10 +258,14 @@ export function agilityDrawables(g: CanvasRenderingContext2D, y: AgilityYard, t:
   out.push({
     y: sp.y,
     draw: () => {
-      rect(g, sp.x, sp.y - 12, 1, 12, C.plum);
-      const flap = Math.floor(t * 3) % 2;
-      rect(g, sp.x + 1, sp.y - 12, 4 + flap, 2, C.butter);
-      rect(g, sp.x + 1, sp.y - 10, 2, 1, C.butter);
+      fine(g, (fg) => {
+        const X = sp.x * PX, Y = sp.y * PX + 1;
+        rect(fg, X, Y - 24, 2, 25, C.plum);
+        rect(fg, X + 1, Y - 24, 1, 25, C.sage);
+        const flap = Math.floor(t * 3) % 2;
+        for (let r = 0; r < 6; r++) rect(fg, X + 2, Y - 24 + r, 10 - r * 1.5 + flap, 1, C.butter);
+        rect(fg, X - 2, Y + 1, 6, 1, C.sage);
+      });
       if (!game) return;
       const r = game.farmwork.run;
       const res = game.farmwork.result;

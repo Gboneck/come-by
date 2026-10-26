@@ -1,6 +1,7 @@
-// The light at phone size: dusk, night, fog by day, a fog night and a
-// storm night on the built-up ranch (scripts/fixtures/tier5.json), the dog
-// by the farmhouse with lamps about. For before/after comparisons.
+// The light at phone size: the golden hour, the blue hour, dusk, night,
+// fog by day, a fog night, a storm night and a lightning strike, on the
+// built-up ranch (scripts/fixtures/tier5.json), the dog by the farmhouse
+// with lamps about. For before/after comparisons.
 //   node scripts/skyshots.mjs --tag=before [--size=390x844@3] [--only=night,fog]
 // Writes shots/sky/<scene>-<tag>.png (the middle of the screen).
 //   node scripts/skyshots.mjs --compare=before,after
@@ -27,11 +28,15 @@ const browser = await chromium.launch();
 mkdirSync('shots/sky', { recursive: true });
 
 const SCENES = [
+  { name: 'golden', weather: 'clear', setup: 'golden' },
+  { name: 'blue', weather: 'clear', setup: 'blue' },
   { name: 'dusk', weather: 'clear', setup: 'dusk' },
   { name: 'night', weather: 'clear', setup: 'night' },
   { name: 'fog', weather: 'fog', setup: 'day' },
   { name: 'fognight', weather: 'fog', setup: 'night' },
   { name: 'storm', weather: 'storm', setup: 'night' },
+  // The same storm night in a near lightning strike.
+  { name: 'flash', weather: 'storm', setup: 'night', flash: true },
 ];
 
 const compare = opt('compare', '');
@@ -82,13 +87,15 @@ for (const s of SCENES) {
   });
   await page.goto(`http://localhost:${PORT}/?debug&weather=${s.weather}&season=summer`);
   await page.waitForFunction(() => window.game);
-  await page.evaluate(async ({ save, setup }) => {
+  await page.evaluate(async ({ save, setup, flash }) => {
     const g = window.game;
     localStorage.setItem('comeby-save-v1', save);
     const { loadInto } = await import('/src/systems/save.ts');
     loadInto(g);
     g.tut = 99;
     g.day.t = 150;
+    if (setup === 'golden') g.day.t = 218; // the golden hour at its height
+    if (setup === 'blue') { g.day.t = 254; g.day.phase = 'dusk'; } // just after sunset
     if (setup === 'dusk') { g.day.t = 285; g.day.phase = 'dusk'; }
     if (setup === 'night') { g.startNight(); g.quietT = -1e9; for (const p of g.predators) p.waitT = Math.min(p.waitT, 0.5); }
     const f = g.ranch.farmhouse;
@@ -99,11 +106,12 @@ for (const s of SCENES) {
     const near = g.animals.filter((a) => !a.pen).slice(0, 6);
     near.forEach((a, i) => { a.x = g.dog.x - 40 + (i % 3) * 10; a.y = g.dog.y + 14 + Math.floor(i / 3) * 9; a.vx = a.vy = 0; });
     for (let i = 0; i < 240; i++) { g.update(1 / 60); g.input.clearQueue(); }
+    if (flash) { g.life.wx.strike(1); g.update(1 / 60); g.input.clearQueue(); }
     g.banner = null; g.tip = null; g.place = null; g.achievements.card = null;
     g.cam.x = g.dog.x; g.cam.y = g.dog.y + 10;
     g.render();
     g.screen.present();
-  }, { save: fixture, setup: s.setup });
+  }, { save: fixture, setup: s.setup, flash: !!s.flash });
   const clipH = Math.min(height, Math.round(height * 0.6));
   await page.screenshot({ path: `shots/sky/${s.name}-${tag}.png`, clip: { x: 0, y: Math.round((height - clipH) / 2), width, height: clipH } });
   console.log(`shots/sky/${s.name}-${tag}.png`);

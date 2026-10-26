@@ -1206,6 +1206,154 @@ double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
       buttons, build tabs and the build and decor bars grow by
       `touchScale()` in WIDE so they keep their size under a finger; uitour
       has `phonewide` and `deskwide`
+## M35 World and light, round five (double density, less noise)
+From a playtester: "step up the pixels by a factor of two: more detail and
+less noise". The world is now drawn at two fine pixels to a world pixel
+(Platform's PX = 2 pipeline). Before → after, in plain words:
+- [x] Ground: it was speckled all over with random dots of darker grass and
+      single-pixel flowers. Now it's clean meadow with:
+      - grass marks in drifts (little clusters of blades)
+      - broad soft patches of darker grass edged by a short fade
+      - drawn clover, stones and molehills
+      - worn patches that fade out
+      - ferns and mushrooms in the trees' shade
+      - logs and boulders at the forest edge
+- [x] Paths: smooth outlines instead of a ragged pixel jitter, two wheel
+      ruts, a shaded lip, and the grass edge darker on the shady side. In
+      rain the ruts hold water; in snow only the edges stay white.
+- [x] Water:
+      - Shallows are rippled lines instead of a checkerboard.
+      - The north bank shows a dark lip.
+      - Still water mirrors the trees in banded reflections.
+      - The river's highlights are fine dashes, glints and rings drawn each
+        frame (the 16 stored frames are gone).
+      - Lily pads and stepping stones are finer.
+- [x] Trees:
+      - The forest was teal speckled with plum marks. It's now heaped leaf
+        clumps, each lit on its upper right with a dark rim on its lower
+        left, so the edge scallops.
+      - Edge trees are rosettes of clumps.
+      - Pines are crisp tiered cones with boughs catching the light.
+      - Willows trail strands.
+      - Autumn turns whole clumps gold or late green, snow caps their tops,
+        and spring sets little blossoms on them.
+- [x] Rock: faceted tops with cracks, taller faces with strata, scree as
+      drawn pebbles.
+- [x] Seasons and weather are part of the ground's paint now, not a
+      speckle pass:
+      - snow with grass tufts poking through, and ice creeping from banks
+      - fallen leaves gathered under the trees
+      - flowers in drifts in spring
+      - grass tips catching the golden light
+      Rain is thin streaks, snow falls as small stars, puddles have rings.
+- [x] Swaying grass is fine blades with a lighter one beside them, bending
+      at the tip. Flowers are five-pixel heads; reeds are slim with cattails.
+- [x] Buildings, redrawn on the fine grid:
+      - the farmhouse: clapboard, shuttered windows with sills, a panelled
+        door, slate courses, a brick chimney, flower boxes, the porch
+      - barn, kennel, market, windmill, haystack
+      - shearing shed, dairy, agility yard
+      - the whole village
+      - the Show Ground and the buyers' yards
+- [x] Fences and paddocks: slim lit posts, round rails with a shadowed
+      underside, gates, and floors with clean trodden lanes and straw in
+      wisps. Trough, hay rack and shelter are finer.
+- [x] Props: all the ranch decor, the fields' scrub (bramble clumps and
+      thistles instead of noise), the bridge, logs, signs, the title's
+      landscape.
+- [x] Round four's morning mist is gone: at double density its dither laid
+      a grid of dots over every morning.
+- [x] The rest of the valley on the fine grid:
+      - the hidden places: stones rounded by Scale2x, cairns of shaded
+        pebbles, fruit trees and the willow as clump crowns, drystone walls
+        with ragged ruined tops, the hut floor, the wagon, the falls,
+        keepsakes and glints, the woven hurdle
+      - the valley projects: reeds with bulrushes, brambles and scrub, the
+        hayrick, the mended hut, the fold gate, slates, the mill pool and
+        its waterwheel, signboards, loads, the midsummer bonfire
+      - the trophy board, the buyers' yard dressing and gifts, the
+        placeable decor, build mode's road edges and gate arrow
+- [x] Wildlife and small life as fine sprites:
+      - rabbits, deer, crows, frogs, butterflies and birds
+      - smoke as round puffs, breath, falling leaves edge-on then flat,
+        drops, feathers, a fish with a flashing belly, rings, footprints,
+        fireflies with a glow
+- [x] Checks:
+      - typecheck, build and shot: clean
+      - picturetest: ok by day and night (and Platform's chunk test)
+      - regions in every season, weather and time of day
+      - tune --seed=7 identical to base, for sheep and for cattle in a
+        winter storm (the world data keeps its old outlines, see Decisions)
+      - perftest, back to back with platform-r5 (best batch, phone size):
+        | scene | 4x mine | 4x base | 6x mine | 6x base |
+        |---|---|---|---|---|
+        | title | 5.5 ms | 9.5 ms | 10.2 ms | 14.2 ms |
+        | day | 11.3 ms | 13.6 ms | 18.3 ms | 21.5 ms |
+        | worst | 18.4 ms | 18.7 ms | 25.6 ms | 28.8 ms |
+        Faster than base: the per-frame ground-shade and season pixel
+        passes are gone, and the chunks are painted once per moment.
+- [x] Evening, night and fog at double density (from the user: "make sure
+      the graphic density update makes the evening / night and fog
+      improved"):
+      - Golden hour: the low sun is in the west. Tree and building shadows
+        stretch out long to the east, and the trees' and roofs' west sides
+        warm to buttercup.
+      - Blue hour: the dark comes in teal first (Platform's ramp), calm,
+        with no extra marks.
+      - The farmhouse is lit from within. Its front is graded from the
+        windows out to the corners, the lit panes are drawn above the dark
+        with a soft halo each, and light spills from the ground floor onto
+        the yard. Lanterns have graded halos too. The barn's lit door
+        throws a long pool onto the yard.
+      - Moonlight catches the treetops, the roof ridges and the fence
+        rails. It is drawn above the dark, so they read as edges at night.
+      - Fireflies follow the season: all of them on a summer night, two in
+        five as the leaves turn, none in snow. It is chosen when they are
+        drawn, so the random numbers (and the seeded runs) don't change.
+      - Fog lies by place (world/fog.ts):
+        - thick over the river and ponds and along their banks
+        - pooled in the Rolling Hills' hollows
+        - in a band at the forest's feet
+        - thin on the rock tops and in the High Range
+        At night a bank stands in for some of the dark, so fog nights show
+        pale drifting banks instead of looking like any other night (a
+        small change in render/night.ts, Platform's file, sent to them).
+      - Lightning shows the land for a beat: the dark lifts and the moonlit
+        edges go bright under a thin veil. It used to put a sheet of wool
+        dots over everything.
+      - Dig spots for the loot session (art/dig.ts `digSpot`):
+        - turned earth with clods, and a glint when the dog is close
+        - an open hole with a lit far wall, a lip of soil and a heap
+          beside it (white in snow)
+        - a mound with a bone end showing
+        - stones laid in an X
+      - Before/after shots: `node scripts/skyshots.mjs --tag=...`, then
+        `--compare=before,after` (golden, blue, dusk, night, fog, fog
+        night, storm and a lightning strike, on the tier-5 ranch at phone
+        size).
+      - Checks:
+        - typecheck, build and shot: clean
+        - picturetest: ok
+        - tune --seed=7 identical to before, for sheep and for cows in a
+          winter storm
+        - nighttest and weathertest: the same kind of results as before
+          (both unseeded)
+        - perftest against the commit before (best batch; the machine was
+          busy, so numbers moved about 1 ms run to run):
+          | scene | 4x now | 4x before | 6x now | 6x before |
+          |---|---|---|---|---|
+          | title | 5.7 ms | 5.3 ms | 10.1 ms | 9.5 ms |
+          | day | 10.9 ms | 10.5 ms | 17.1 ms | 17.7 ms |
+          | worst | 18.1 ms | 17.0 ms | 27.2 ms | 26.1 ms |
+          | fog night | | | 29.4 ms (median 30.9) | 26.8 ms (median 31.0) |
+          Drawing one night frame over and over costs the same as before
+          (17.45 vs 17.53 ms at 4x). Three costs found on the way were cut:
+          - Moon edges went from a fill per pixel to slices of a
+            pre-dithered strip, with runs merged and only rails and ridges
+            kept.
+          - The lantern halo is a cached picture.
+          - The farmhouse lost its per-pane light holes and the faint glows.
+
 ## M34 Double density: fine pixels and a readable font (platform, round five)
 - [x] Two grids: world pixels (the sim, the map, layout, the old art) and
       fine pixels, PX = 2 to a world pixel. The screen canvas is fine pixels
@@ -2457,6 +2605,50 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
   buttons, tabs, signs over the world and short status words stay capitals.
 - Pad prompts match case-insensitively and answer in the case they find,
   so a sentence-case hint still turns "Hold Q" into "Hold (X)".
+- Round five's world is painted at double density in 128-fine-pixel chunks
+  round the camera (render/light.ts `FineWorld`): ground, canopy and a lit
+  ground with the sun's tree shadows. Each frame paints within 3ms, nearest
+  the middle first; until a chunk is painted the old world-pixel ground
+  shows there. The 160 most recently seen chunks are kept (about 40MB). The
+  painters (world/fineground.ts, world/finecanopy.ts) take any rectangle,
+  and their detail is decided per grid cell in world space, so chunks
+  agree.
+- Outlines (paths, water, rock, forest) are one smooth function
+  (terrain.ts `edgeAt`) used by both the world data and the fine painter.
+  The per-pixel jitter that made them ragged is gone. The 1x data (soil,
+  masks, canopy kind) stays for the sim and footprints.
+- Seasons, wet ground and the golden hour are part of the paint key (in
+  small steps), so the old per-frame pixel passes (weather.ts ground shade,
+  render/seasons.ts) no longer run. The cloud shadows went with them for
+  now.
+- Chunks paint once per game moment (`now`), so drawing a moment twice
+  gives the same picture (picturetest).
+- `art/fine.ts` `grid()` draws palette-letter pictures on the fine grid,
+  compiled into runs once, because cached art is recorded every frame.
+- Moonlit edges (art/moon.ts) are collected as the art draws (roof ridges,
+  rails; the canopy's rims come baked with each chunk) and drawn
+  just above the night overlay. Drawn under it, they would be dithered
+  away like everything else.
+- In the golden hour the sun is taken to be in the west (the shadows fall
+  east), so the warm highlights go on the west side of trees and roofs,
+  not the usual upper right. Long shadows are the shadow silhouette laid
+  again along the sun's line. They are baked into each chunk's lit ground,
+  so they cost nothing per frame.
+- The farmhouse at night is a few lights, not one big disc: a graded
+  pool over the front, spills under the ground-floor windows, the door's
+  pool. The lit panes are drawn above the dark (windowGlow), so they stay
+  clear without a light each. With only the windows' own pools, the front
+  was left in the dither and read as noise at dusk.
+- Moonlit edges are kept to long runs (rails, ridges): post caps and
+  one-pixel roof-slope steps were hundreds of tiny draws a frame, the
+  costliest part of the night work, for glints too small to see.
+- Lightning at night lowers the dark for its beat (by 85%, then 50%, 20%)
+  and keeps only a 3-step veil, rather than a 10-step sheet of wool and
+  buttercup: the scene shows, which is what a flash is for. By day (no
+  dark to lift) it flashes as before.
+- Fog at night lifts some of the dark where it lies (0.45 of its level), so
+  banks show as paler mist. Before, the night's ~2/3 cap left no room for
+  fog at full dark.
 - The screen aims for 432 fine pixels on the short side, not 480: the scale
   must be a whole number of device pixels per fine pixel, and on an upright
   iPhone (1170 device px) that is 3 (195 world px wide) or 2 (292 wide with

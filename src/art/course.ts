@@ -1,5 +1,7 @@
 import { C } from '../palette';
 import { line, rect, px, ring } from '../gfx/draw';
+import { PX, fine } from '../gfx/screen';
+import { grid } from './fine';
 import { text, textWidth } from '../gfx/font';
 import { hash2 } from '../rng';
 import type { Drawable } from './buildings';
@@ -26,21 +28,32 @@ export const SHOW = {
   standing: [{ x: 742, y: 1290, c: C.sage }, { x: 826, y: 1290, c: C.teal }, { x: 1022, y: 1272, c: C.plum }],
 };
 
-// Little people: a hat, a wool face, a coat; `wave` raises an arm.
+// Everything here is drawn on the fine grid (two fine pixels to a world
+// pixel); positions come in world pixels.
+
+// Little people: a hat with a brim, a wool face, a coat with its arms,
+// legs; `wave` raises an arm.
 function person(g: CanvasRenderingContext2D, x: number, y: number, coat: string, hat: string, wave: boolean, seated = false) {
-  if (!seated) {
-    px(g, x - 1, y, C.plum);
-    px(g, x + 1, y, C.plum);
-  }
-  const top = seated ? y - 5 : y - 6;
-  rect(g, x - 1, top + 2, 3, seated ? 3 : 4, coat);
-  px(g, x, top + 1, C.wool);
-  rect(g, x - 1, top, 3, 1, hat);
-  px(g, x, top - 1, hat);
-  if (wave) {
-    px(g, x + 2, top + 1, coat);
-    px(g, x + 2, top, C.wool);
-  } else px(g, x + (seated ? 0 : 2), top + 3, seated ? coat : C.wool);
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    if (!seated) {
+      rect(fg, X - 2, B - 3, 2, 4, C.plum);
+      rect(fg, X + 1, B - 3, 2, 4, C.plum);
+    }
+    const T = seated ? B - 10 : B - 12;
+    rect(fg, X - 2, T + 4, 5, seated ? 6 : 6, coat);
+    px(fg, X + 2, T + 5, coat === C.wool ? C.sage : C.plum);
+    rect(fg, X - 1, T + 2, 3, 2, C.wool);
+    rect(fg, X - 2, T + 1, 5, 1, hat);
+    rect(fg, X - 1, T - 1, 3, 2, hat);
+    if (wave) {
+      rect(fg, X + 3, T + 1, 1, 4, coat);
+      px(fg, X + 3, T, C.wool);
+    } else {
+      rect(fg, X + 3, T + 5, 1, 3, coat);
+      px(fg, X + 3, T + 8, C.wool);
+    }
+  });
 }
 
 const HATS = [C.plum, C.butter, C.teal, C.wool, C.plum];
@@ -50,168 +63,198 @@ const COATS = [C.teal, C.plum, C.sage, C.butter, C.wool];
 // buttercup flags snapping in the wind), 2 judged (flag lowered, sage).
 function coursePost(g: CanvasRenderingContext2D, x: number, y: number, state: number, side: number, t: number) {
   const s = side > 0 ? 1 : -1;
-  rect(g, x - 2, y + 1, 5, 1, C.sage);
-  rect(g, x - 1, y - 11, 2, 12, C.wool);
-  rect(g, x - 1, y - 11, 1, 12, C.plum);
-  px(g, x, y - 12, C.plum);
-  for (let k = y - 8; k <= y; k += 3) px(g, x, k, C.plum);
-  if (state === 2) {
-    // Lowered and furled.
-    rect(g, x + (s > 0 ? 1 : -2), y - 5, 2, 3, C.sage);
-    return;
-  }
-  const big = state === 1;
-  const w = big ? 6 : 4, h = big ? 4 : 3;
-  const fy = y - 11;
-  const snap = gust(x, y, t) > 0.4 || (big && Math.floor(t * 5 + x) % 2 === 0);
-  const col = big ? C.butter : C.wool;
-  for (let i = 0; i < w; i++) {
-    const dx = s > 0 ? x + 1 + i : x - 2 - i;
-    // A pennant tapers; snapping in a gust it ripples by a pixel.
-    const hh = Math.max(1, h - Math.floor((i * h) / (w + 1)));
-    const dy = snap && i % 3 === 1 ? 1 : 0;
-    rect(g, dx, fy + dy, 1, hh, col);
-    if (big) px(g, dx, fy + dy + hh, C.plum);
-  }
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    rect(fg, X - 4, B + 1, 9, 1, C.sage);
+    rect(fg, X - 2, B - 22, 3, 23, C.wool);
+    rect(fg, X - 2, B - 22, 1, 23, C.plum);
+    rect(fg, X - 2, B - 24, 3, 2, C.plum);
+    for (let k = B - 16; k <= B; k += 6) rect(fg, X - 1, k, 2, 2, C.plum);
+    if (state === 2) {
+      // Lowered and furled.
+      rect(fg, X + (s > 0 ? 1 : -4), B - 10, 3, 6, C.sage);
+      return;
+    }
+    const big = state === 1;
+    const w = big ? 12 : 8, h = big ? 8 : 6;
+    const FY = B - 22;
+    const snap = gust(x, y, t) > 0.4 || (big && Math.floor(t * 5 + x) % 2 === 0);
+    const col = big ? C.butter : C.wool;
+    for (let i = 0; i < w; i++) {
+      const dx = s > 0 ? X + 1 + i : X - 3 - i;
+      const hh = Math.max(1, h - Math.floor((i * h) / (w + 1)));
+      const dy = snap ? Math.round(Math.sin(i * 0.9 + t * 9) * 1) : 0;
+      rect(fg, dx, FY + dy, 1, hh, col);
+      if (big) px(fg, dx, FY + dy + hh, C.plum);
+    }
+  });
 }
 
 // Dotted line on the ground between a gate's posts; chevrons point the way
 // through the next gate.
 function gateLine(g: CanvasRenderingContext2D, gt: CourseGate, hot: boolean, t: number) {
   const [a, b] = gt.posts;
-  const n = Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 3);
-  const shift = hot ? Math.floor(t * 4) % 2 : 0;
-  for (let i = 1; i < n; i++) {
-    if (hot && (i + shift) % 2) continue;
-    px(g, a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n, hot ? C.butter : C.moss);
-  }
-  if (!hot) return;
-  // Two chevrons on the ground, walking through in the direction of travel.
-  const k = (t * 6) % 6;
-  for (const d of [-4 + k, 2 + k]) {
-    const cx = Math.round(gt.x + gt.dx * d), cy = Math.round(gt.y + gt.dy * d);
-    const nx = -gt.dy, ny = gt.dx;
-    for (let j = -2; j <= 2; j++) {
-      const back = Math.abs(j);
-      px(g, Math.round(cx + nx * j - gt.dx * back), Math.round(cy + ny * j - gt.dy * back), C.wool);
+  fine(g, (fg) => {
+    const n = Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 2);
+    const shift = hot ? Math.floor(t * 4) % 2 : 0;
+    for (let i = 1; i < n; i++) {
+      if ((i + shift) % 2) continue;
+      const X = Math.round((a.x + ((b.x - a.x) * i) / n) * PX), Y = Math.round((a.y + ((b.y - a.y) * i) / n) * PX);
+      rect(fg, X, Y, 2, 1, hot ? C.butter : C.moss);
     }
-  }
+    if (!hot) return;
+    const k = (t * 6) % 6;
+    for (const d of [-4 + k, 2 + k]) {
+      const cx = (gt.x + gt.dx * d) * PX, cy = (gt.y + gt.dy * d) * PX;
+      const nx = -gt.dy, ny = gt.dx;
+      for (let j = -4; j <= 4; j++) {
+        const back = Math.abs(j);
+        px(fg, Math.round(cx + nx * j - gt.dx * back), Math.round(cy + ny * j - gt.dy * back), C.wool);
+      }
+    }
+  });
 }
 
 // A bobbing marker over the next gate, outlined so it reads on a phone.
+const MARKER = ['ppppppppppp', 'pyyyyyyyyyp', 'pywyyyyyyyp', '.pyyyyyyyp.', '..pyyyyyp..', '...pyyyp...', '....pyp....', '.....p.....'];
 function gateMarker(g: CanvasRenderingContext2D, gt: CourseGate, t: number) {
-  const x = Math.round(gt.x), y = Math.round(gt.y - 20 + Math.round(Math.sin(t * 4) * 1.5));
-  const rows = ['ppppppp', 'pyyyyyp', '.pyyyp.', '..pyp..', '...p...'];
-  rows.forEach((r, j) => [...r].forEach((ch, i) => ch !== '.' && px(g, x - 3 + i, y + j, ch === 'p' ? C.plum : C.butter)));
+  fine(g, (fg) => grid(fg, MARKER, Math.round(gt.x * PX) - 5, Math.round((gt.y - 20) * PX + Math.round(Math.sin(t * 4) * 3))));
 }
 
 // The handler's post: a shepherd's crook planted in the ground.
+const CROOK = ['..ppp.', '.p...p', '.y...p', '.....p', '....p.', '.p....', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', '.ps...', 'ppps..'];
 function crook(g: CanvasRenderingContext2D, x: number, y: number) {
-  rect(g, x - 1, y + 1, 5, 1, C.sage);
-  rect(g, x, y - 12, 1, 13, C.plum);
-  rect(g, x + 1, y - 14, 2, 1, C.plum);
-  px(g, x + 3, y - 13, C.plum);
-  px(g, x + 3, y - 12, C.plum);
-  px(g, x + 2, y - 11, C.plum);
-  px(g, x, y - 13, C.plum);
-  px(g, x + 1, y - 14, C.butter);
+  fine(g, (fg) => {
+    rect(fg, x * PX - 2, y * PX + 2, 9, 1, C.sage);
+    grid(fg, CROOK, x * PX - 1, y * PX + 2 - CROOK.length);
+  });
 }
 
 // Bunting strung between two poles; the pennants lift in a gust.
 function bunting(g: CanvasRenderingContext2D, xa: number, xb: number, y: number, t: number) {
-  rect(g, xa, y - 14, 1, 15, C.plum);
-  rect(g, xb, y - 14, 1, 15, C.plum);
-  px(g, xa, y - 15, C.butter);
-  px(g, xb, y - 15, C.butter);
-  rect(g, xa - 1, y + 1, 3, 1, C.sage);
-  rect(g, xb - 1, y + 1, 3, 1, C.sage);
-  const cols = [C.butter, C.wool, C.teal];
-  const w = xb - xa;
-  for (let x = xa + 1; x < xb; x++) {
-    const u = (x - xa) / w;
-    const sag = Math.round(4 * 4 * u * (1 - u));
-    px(g, x, y - 13 + sag, C.plum);
-    const k = x - xa - 2;
-    if (k >= 0 && k % 6 < 3) {
-      const col = cols[Math.floor(k / 6) % 3];
-      const lift = gust(x, y, t) > 0.5 && k % 6 === 2 ? -1 : 0;
-      const h = k % 6 === 1 ? 3 : 2;
-      rect(g, x + (lift ? 1 : 0), y - 12 + sag, 1, h + lift, col);
+  fine(g, (fg) => {
+    const XA = xa * PX, XB = xb * PX, B = y * PX + 1;
+    for (const X of [XA, XB]) {
+      rect(fg, X, B - 28, 2, 29, C.plum);
+      px(fg, X + 1, B - 26, C.sage);
+      rect(fg, X - 1, B - 30, 3, 2, C.butter);
+      rect(fg, X - 2, B + 1, 6, 1, C.sage);
     }
-  }
+    const cols = [C.butter, C.wool, C.teal];
+    const w = XB - XA;
+    for (let X = XA + 2; X < XB; X++) {
+      const u = (X - XA) / w;
+      const sag = Math.round(8 * 4 * u * (1 - u));
+      px(fg, X, B - 26 + sag, C.plum);
+      const k = X - XA - 4;
+      if (k >= 0 && k % 12 < 6) {
+        const col = cols[Math.floor(k / 12) % 3];
+        const lift = gust(X >> 1, y, t) > 0.5 ? 1 : 0;
+        const kk = k % 12;
+        const h = kk < 3 ? 2 + kk * 2 : 2 + (5 - kk) * 2;
+        rect(fg, X + lift, B - 25 + sag, 1, Math.max(1, h), col);
+      }
+    }
+  });
 }
 
 // A tall flag on a pole, streaming downwind; stronger gusts stretch it out.
 function flagPole(g: CanvasRenderingContext2D, x: number, y: number, col: string, t: number) {
-  rect(g, x - 1, y + 1, 3, 1, C.sage);
-  rect(g, x, y - 18, 1, 19, C.plum);
-  px(g, x, y - 19, C.butter);
-  const gs = gust(x, y, t);
-  const len = gs > 0.6 ? 7 : gs > 0.25 ? 6 : 5;
-  const droop = gs > 0.25 ? 0 : 1;
-  for (let i = 0; i < len; i++) {
-    const wave = Math.round(Math.sin(t * 7 + i * 0.9 + x) * (gs > 0.25 ? 0.6 : 0.3));
-    rect(g, x + 1 + i, y - 18 + wave + (i > len - 3 ? droop : 0), 1, 3 - (i === len - 1 ? 1 : 0), col);
-  }
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    rect(fg, X - 2, B + 1, 6, 1, C.sage);
+    rect(fg, X, B - 37, 2, 38, C.plum);
+    px(fg, X + 1, B - 35, C.sage);
+    rect(fg, X - 1, B - 39, 4, 2, C.butter);
+    const gs = gust(x, y, t);
+    const len = gs > 0.6 ? 14 : gs > 0.25 ? 12 : 10;
+    const droop = gs > 0.25 ? 0 : 2;
+    for (let i = 0; i < len; i++) {
+      const wave = Math.round(Math.sin(t * 7 + i * 0.6 + x) * (gs > 0.25 ? 1.2 : 0.6));
+      const h = 6 - (i > len - 4 ? i - (len - 4) : 0);
+      rect(fg, X + 2 + i, B - 36 + wave + (i > len - 5 ? droop : 0), 1, Math.max(1, h), col);
+      if (i % 4 === 1) px(fg, X + 2 + i, B - 36 + wave + h - 1, col === C.wool ? C.sage : C.plum);
+    }
+  });
 }
 
 // The judge's tent: a peaked, striped marquee open at the front, a table
 // with a cloth and the judge behind it, a pennant on the king pole.
 function judgeTent(g: CanvasRenderingContext2D, x: number, y: number, t: number, nod: boolean) {
-  rect(g, x - 15, y + 1, 27, 2, C.sage);
-  // Dark inside, back wall.
-  rect(g, x - 11, y - 11, 22, 11, C.plum);
-  // Table with a cloth, a bell and the score book; the judge behind it.
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    rect(fg, X - 30, B + 1, 54, 3, C.sage);
+    rect(fg, X - 22, B - 22, 44, 22, C.plum);
+  });
   person(g, x - 1, y - 5, C.teal, C.plum, nod, true);
-  rect(g, x - 8, y - 5, 16, 3, C.wool);
-  rect(g, x - 8, y - 2, 16, 1, C.sage);
-  rect(g, x - 7, y - 1, 1, 2, C.wool);
-  rect(g, x + 6, y - 1, 1, 2, C.wool);
-  px(g, x + 4, y - 6, C.butter);
-  rect(g, x - 6, y - 6, 3, 1, C.teal);
-  // Peaked roof in stripes, shaded on its left slope, with a valance.
-  for (let r = 0; r < 9; r++) {
-    const hw = 2 + Math.round((r * 11) / 8);
-    for (let dx = -hw; dx <= hw; dx++) {
-      const stripe = Math.floor((dx + 30) / 3) % 2 === 0;
-      let col: string = stripe ? C.wool : C.teal;
-      if (dx < -hw * 0.4 && stripe && (dx + r) % 2 === 0) col = C.sage;
-      px(g, x + dx, y - 20 + r, col);
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    // Table with a cloth, a bell and the score book.
+    rect(fg, X - 16, B - 10, 32, 6, C.wool);
+    rect(fg, X - 16, B - 5, 32, 1, C.sage);
+    for (let x2 = X - 14; x2 < X + 16; x2 += 6) px(fg, x2, B - 6, C.sage);
+    rect(fg, X - 14, B - 4, 2, 4, C.wool);
+    rect(fg, X + 12, B - 4, 2, 4, C.wool);
+    rect(fg, X + 7, B - 13, 3, 3, C.butter);
+    px(fg, X + 8, B - 14, C.plum);
+    rect(fg, X - 12, B - 12, 6, 2, C.teal);
+    rect(fg, X - 12, B - 12, 6, 1, C.wool);
+    // Peaked roof in stripes, the left slope in shade, a scalloped valance.
+    for (let r = 0; r < 18; r++) {
+      const hw = 4 + Math.round((r * 22) / 17);
+      for (let dx = -hw; dx <= hw; dx++) {
+        const stripe = Math.floor((dx + 60) / 6) % 2 === 0;
+        let col: string = stripe ? C.wool : C.teal;
+        if (dx < -hw * 0.4) col = stripe ? C.sage : C.teal;
+        px(fg, X + dx, B - 40 + r, col);
+      }
+      px(fg, X - hw - 1, B - 40 + r, C.plum);
+      px(fg, X + hw + 1, B - 40 + r, C.plum);
     }
-    px(g, x - hw - 1, y - 20 + r, C.plum);
-    px(g, x + hw + 1, y - 20 + r, C.plum);
-  }
-  if (seasonLook.snow > 0.3) for (let r = 0; r < 5; r++) for (let dx = -2 - r; dx <= 2 + r; dx++) px(g, x + dx, y - 20 + r, C.wool);
-  for (let dx = -13; dx <= 13; dx++) if ((dx + 13) % 3 !== 2) px(g, x + dx, y - 11, Math.floor((dx + 30) / 3) % 2 === 0 ? C.wool : C.teal);
-  // Corner poles and guy ropes.
-  for (const sx of [-12, 12]) {
-    rect(g, x + sx, y - 11, 1, 12, C.plum);
-    line(g, x + sx, y - 10, x + sx * 1.35, y, C.wool);
-  }
-  // Pennant on the king pole.
-  rect(g, x, y - 26, 1, 6, C.plum);
-  const f = gust(x, y, t) > 0.4 ? 1 : 0;
-  rect(g, x + 1, y - 26, 4 + f, 1, C.butter);
-  rect(g, x + 1, y - 25, 3, 1, C.butter);
+    if (seasonLook.snow > 0.3) for (let r = 0; r < 9; r++) rect(fg, X - 4 - r, B - 40 + r, 9 + r * 2, 1, C.wool);
+    for (let dx = -26; dx <= 26; dx++) {
+      const col = Math.floor((dx + 60) / 6) % 2 === 0 ? C.wool : C.teal;
+      px(fg, X + dx, B - 22, col);
+      if ((dx + 60) % 6 > 0 && (dx + 60) % 6 < 5) px(fg, X + dx, B - 21, col);
+      if ((dx + 60) % 6 === 2 || (dx + 60) % 6 === 3) px(fg, X + dx, B - 20, col);
+    }
+    // Corner poles and guy ropes.
+    for (const sx of [-24, 24]) {
+      rect(fg, X + sx, B - 22, 2, 23, C.plum);
+      line(fg, X + sx, B - 20, X + sx * 1.35, B, C.wool);
+    }
+    // Pennant on the king pole.
+    rect(fg, X, B - 52, 2, 12, C.plum);
+    const f = gust(x, y, t) > 0.4 ? 2 : 0;
+    for (let r = 0; r < 4; r++) rect(fg, X + 2, B - 52 + r, 8 + f - r * 2, 1, C.butter);
+  });
 }
 
 function bench(g: CanvasRenderingContext2D, x0: number, x1: number, y: number) {
-  rect(g, x0 - 1, y + 1, x1 - x0 + 2, 1, C.sage);
-  rect(g, x0, y - 3, x1 - x0, 2, C.plum);
-  rect(g, x0, y - 3, x1 - x0, 1, C.moss);
-  for (const lx of [x0 + 1, x1 - 2]) rect(g, lx, y - 1, 1, 2, C.plum);
+  fine(g, (fg) => {
+    const X0 = x0 * PX, X1 = x1 * PX, B = y * PX + 1;
+    rect(fg, X0 - 2, B + 1, X1 - X0 + 4, 1, C.sage);
+    rect(fg, X0, B - 6, X1 - X0, 3, C.plum);
+    rect(fg, X0, B - 6, X1 - X0, 1, C.moss);
+    rect(fg, X0, B - 4, X1 - X0, 1, C.sage);
+    for (const lx of [X0 + 2, X1 - 4]) rect(fg, lx, B - 3, 2, 4, C.plum);
+  });
 }
 
 // A rope on low stakes keeping the onlookers off the course.
 function rope(g: CanvasRenderingContext2D, x0: number, x1: number, y: number) {
-  for (let x = x0; x <= x1; x += 10) {
-    rect(g, x, y - 4, 1, 5, C.plum);
-    px(g, x, y - 5, C.wool);
-  }
-  for (let x = x0; x < x1; x++) {
-    const u = ((x - x0) % 10) / 10;
-    px(g, x, y - 4 + Math.round(2 * 4 * u * (1 - u) * 0.5), C.wool);
-  }
+  fine(g, (fg) => {
+    const X0 = x0 * PX, X1 = x1 * PX, B = y * PX + 1;
+    for (let X = X0; X <= X1; X += 20) {
+      rect(fg, X, B - 9, 2, 10, C.plum);
+      rect(fg, X, B - 10, 2, 1, C.wool);
+      px(fg, X + 2, B, C.sage);
+    }
+    for (let X = X0; X < X1; X++) {
+      const u = ((X - X0) % 20) / 20;
+      px(fg, X, B - 8 + Math.round(4 * 4 * u * (1 - u) * 0.5), C.wool);
+    }
+  });
 }
 
 // ---- Buyers' yards ----
@@ -220,39 +263,41 @@ function rope(g: CanvasRenderingContext2D, x0: number, x1: number, y: number) {
 // (it stands within the cells its yard marks solid).
 function cart(g: CanvasRenderingContext2D, x: number, y: number, flag: boolean, t: number) {
   const b = y + 14;
-  rect(g, x - 3, b + 1, 18, 1, C.sage);
-  line(g, x + 2, b - 6, x - 4, b - 2, C.plum);
-  line(g, x + 2, b - 5, x - 4, b - 1, C.plum);
-  rect(g, x - 5, b - 1, 2, 2, C.plum);
-  // Canvas cover on hoops, shaded on its left, a dark opening at the back.
-  rect(g, x + 4, b - 16, 8, 1, C.wool);
-  rect(g, x + 3, b - 15, 10, 1, C.wool);
-  rect(g, x + 2, b - 14, 12, 6, C.wool);
+  fine(g, (fg) => {
+    const X = x * PX, B = b * PX + 1;
+    rect(fg, X - 6, B + 1, 36, 1, C.sage);
+    line(fg, X + 4, B - 12, X - 8, B - 4, C.plum);
+    line(fg, X + 4, B - 10, X - 8, B - 2, C.plum);
+    rect(fg, X - 10, B - 2, 4, 3, C.plum);
+    // Canvas cover on hoops, shaded on its left, a dark opening at the back.
+    rect(fg, X + 8, B - 32, 16, 2, C.wool);
+    rect(fg, X + 6, B - 30, 20, 2, C.wool);
+    rect(fg, X + 4, B - 28, 24, 12, C.wool);
+    rect(fg, X + 4, B - 28, 2, 12, C.sage);
+    for (const hx of [X + 10, X + 16, X + 22]) rect(fg, hx, B - 30, 1, 14, C.sage);
+    rect(fg, X + 24, B - 26, 4, 8, C.plum);
+    px(fg, X + 24, B - 20, C.butter);
+    px(fg, X + 26, B - 20, C.wool);
+    // Bed and wheels with spokes.
+    rect(fg, X + 2, B - 16, 28, 8, C.plum);
+    rect(fg, X + 2, B - 16, 28, 1, C.moss);
+    for (let i = X + 6; i < X + 30; i += 8) rect(fg, i, B - 14, 1, 5, C.teal);
+    for (const wx of [X + 8, X + 24]) {
+      ring(fg, wx, B - 4, 4, C.plum);
+      ring(fg, wx, B - 4, 3, C.plum);
+      for (const [dx, dy] of [[0, -3], [0, 3], [-3, 0], [3, 0], [-2, -2], [2, 2], [2, -2], [-2, 2]]) px(fg, wx + dx, B - 4 + dy, C.wool);
+      px(fg, wx, B - 4, C.butter);
+    }
+  });
   snowCap(g, x + 1, b - 9, 15, b - 4);
-  rect(g, x + 2, b - 14, 1, 6, C.sage);
-  for (const hx of [x + 5, x + 8, x + 11]) rect(g, hx, b - 14, 1, 6, C.sage);
-  rect(g, x + 12, b - 13, 2, 4, C.plum);
-  px(g, x + 12, b - 10, C.butter);
-  px(g, x + 13, b - 10, C.wool);
-  // Bed and wheels.
-  rect(g, x + 1, b - 8, 14, 4, C.plum);
-  rect(g, x + 1, b - 8, 14, 1, C.moss);
-  for (let i = x + 3; i < x + 15; i += 4) px(g, i, b - 6, C.teal);
-  for (const wx of [x + 4, x + 12]) {
-    ring(g, wx, b - 2, 2, C.plum);
-    px(g, wx, b - 2, C.wool);
-    px(g, wx - 1, b - 3, C.sage);
-    px(g, wx + 1, b - 1, C.sage);
-  }
-  if (flag) {
-    // A pennant on the cart: this buyer is waiting for stock.
-    rect(g, x + 14, b - 23, 1, 9, C.plum);
-    const f = gust(x, y, t) > 0.4 || Math.floor(t * 4) % 2 === 0;
-    rect(g, x + 15, b - 23, 5, 1, C.butter);
-    rect(g, x + 15, b - 22, f ? 5 : 4, 1, C.butter);
-    rect(g, x + 15, b - 21, 3, 1, C.butter);
-    px(g, x + 15, b - 20, C.plum);
-  }
+  if (flag)
+    fine(g, (fg) => {
+      // A pennant on the cart: this buyer is waiting for stock.
+      const X = (x + 14) * PX, T = (b - 23) * PX;
+      rect(fg, X, T, 2, 18, C.plum);
+      const f = gust(x, y, t) > 0.4 || Math.floor(t * 4) % 2 === 0;
+      for (let r = 0; r < 6; r++) rect(fg, X + 2, T + r, (f ? 10 : 8) - r * 1.5, 1, C.butter);
+    });
 }
 
 // What each buyer keeps by the cart: the miller's flour sacks, the drover's
@@ -261,60 +306,67 @@ export function yardFire(site: YardSite): { x: number; y: number } {
   return { x: site.cart.tx * 8 + 7, y: (site.cart.ty + 2) * 8 + 4 };
 }
 
+const SACK = ['..ww..', '.wppw.', 'wwwwww', 'wwwwws', 'wwwwss', '.ssss.'];
 function yardProps(g: CanvasRenderingContext2D, site: YardSite, t: number, night: boolean) {
   const x = site.cart.tx * 8, y = (site.cart.ty + 2) * 8 + 5;
-  switch (site.id) {
-    case 'mill':
-      rect(g, x - 1, y + 1, 14, 1, C.sage);
-      for (const [sx, sy] of [[0, 0], [4, 0], [8, 0], [2, -3], [6, -3]] as const) {
-        rect(g, x + sx, y + sy - 3, 4, 4, C.wool);
-        px(g, x + sx, y + sy, C.sage);
-        px(g, x + sx + 1, y + sy - 3, C.sage);
-        px(g, x + sx + 2, y + sy - 4, C.wool);
+  fine(g, (fg) => {
+    const X = x * PX, B = y * PX + 1;
+    switch (site.id) {
+      case 'mill':
+        rect(fg, X - 2, B + 1, 28, 1, C.sage);
+        for (const [sx, sy] of [[0, 0], [8, 0], [16, 0], [4, -6], [12, -6]] as const) grid(fg, SACK, X + sx, B + sy - 5);
+        break;
+      case 'drover': {
+        // Camp fire: a ring of stones, crossed sticks, flames.
+        const f = yardFire(site);
+        const FX = f.x * PX, FY = f.y * PX;
+        for (const [dx, dy] of [[-6, 0], [6, 0], [-4, 2], [4, 2], [0, 4], [-5, -2], [5, -2]] as const) { rect(fg, FX + dx, FY + dy, 2, 2, C.wool); px(fg, FX + dx + 1, FY + dy + 1, C.sage); }
+        line(fg, FX - 4, FY + 2, FX + 4, FY - 2, C.plum);
+        line(fg, FX - 4, FY - 2, FX + 4, FY + 2, C.plum);
+        const k = Math.floor(t * 8);
+        rect(fg, FX - 2, FY - 3, 4, 3, C.butter);
+        px(fg, FX - 1 + (k % 3), FY - 5, C.butter);
+        px(fg, FX + (k % 2), FY - 7, night || k % 4 === 0 ? C.butter : C.wool);
+        px(fg, FX, FY - 2, C.wool);
+        // Bedroll.
+        rect(fg, X + 20, B - 5, 12, 6, C.teal);
+        rect(fg, X + 20, B - 5, 4, 6, C.wool);
+        rect(fg, X + 21, B - 4, 2, 4, C.sage);
+        rect(fg, X + 28, B - 5, 1, 6, C.plum);
+        break;
       }
-      break;
-    case 'drover': {
-      // Camp fire: stones, crossed sticks, a flicker of buttercup.
-      const f = yardFire(site);
-      for (const [dx, dy] of [[-3, 0], [3, 0], [-2, 1], [2, 1], [0, 2]] as const) px(g, f.x + dx, f.y + dy, C.wool);
-      line(g, f.x - 2, f.y + 1, f.x + 2, f.y - 1, C.plum);
-      line(g, f.x - 2, f.y - 1, f.x + 2, f.y + 1, C.plum);
-      const k = Math.floor(t * 8);
-      px(g, f.x + (k % 3) - 1, f.y - 1, C.butter);
-      px(g, f.x, f.y - 2 - (k % 2), C.butter);
-      if (night || k % 4 === 0) px(g, f.x + 1, f.y - 2, C.butter);
-      // Bedroll.
-      rect(g, x + 10, y - 2, 6, 3, C.teal);
-      rect(g, x + 10, y - 2, 2, 3, C.wool);
-      px(g, x + 15, y - 2, C.plum);
-      break;
+      case 'sale': {
+        // Auction stand: a box to stand on, a rail, the bell on a post.
+        rect(fg, X - 2, B + 1, 24, 1, C.sage);
+        rect(fg, X, B - 9, 16, 10, C.plum);
+        rect(fg, X, B - 9, 16, 1, C.moss);
+        rect(fg, X + 4, B - 5, 8, 2, C.teal);
+        rect(fg, X + 20, B - 18, 2, 19, C.plum);
+        rect(fg, X + 18, B - 18, 6, 2, C.plum);
+        rect(fg, X + 18, B - 16, 6, 4, C.butter);
+        rect(fg, X + 17, B - 12, 8, 1, C.butter);
+        px(fg, X + 21, B - 11, C.plum);
+        px(fg, X + 22, B - 15, C.wool);
+        break;
+      }
     }
-    case 'sale': {
-      // Auction stand: a box to stand on, a rail, the bell on a post.
-      rect(g, x - 1, y + 1, 12, 1, C.sage);
-      rect(g, x, y - 4, 8, 5, C.plum);
-      rect(g, x, y - 4, 8, 1, C.moss);
-      rect(g, x + 2, y - 2, 4, 1, C.teal);
-      rect(g, x + 10, y - 9, 1, 10, C.plum);
-      rect(g, x + 9, y - 9, 3, 1, C.plum);
-      rect(g, x + 9, y - 8, 3, 2, C.butter);
-      px(g, x + 10, y - 6, C.plum);
-      break;
-    }
-  }
+  });
 }
 
 // Name board under a little roof, on two posts.
 function board(g: CanvasRenderingContext2D, x: number, y: number, label: string, hot: boolean) {
   const w = textWidth(label) + 4;
   const l = x - Math.floor(w / 2) - 1;
-  rect(g, l + 1, y - 4, 1, 5, C.plum);
-  rect(g, l + w, y - 4, 1, 5, C.plum);
-  rect(g, l - 1, y - 14, w + 4, 2, C.teal);
-  rect(g, l - 1, y - 14, w + 4, 1, C.sage);
-  rect(g, l, y - 12, w + 2, 9, C.plum);
-  rect(g, l + 1, y - 11, w, 7, hot ? C.butter : C.wool);
-  rect(g, l + 1, y - 5, w, 1, hot ? C.moss : C.sage);
+  fine(g, (fg) => {
+    const L = l * PX, B = y * PX + 1, Wd = w * PX;
+    for (const px0 of [L + 2, L + Wd]) { rect(fg, px0, B - 9, 2, 10, C.plum); px(fg, px0 + 1, B - 8, C.sage); }
+    rect(fg, L - 2, B - 29, Wd + 8, 4, C.teal);
+    for (let x2 = L; x2 < L + Wd + 6; x2 += 4) px(fg, x2, B - 27, C.sage);
+    rect(fg, L - 2, B - 29, Wd + 8, 1, C.sage);
+    rect(fg, L, B - 25, Wd + 4, 18, C.plum);
+    rect(fg, L + 2, B - 23, Wd, 14, hot ? C.butter : C.wool);
+    rect(fg, L + 2, B - 11, Wd, 1, hot ? C.moss : C.sage);
+  });
   text(g, label, x, y - 10, C.plum, { align: 'center' });
 }
 

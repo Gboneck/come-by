@@ -8,6 +8,7 @@ import type { Game } from '../game';
 import type { Drawable } from './buildings';
 import type { Piece } from '../ui/decorbuild';
 import { HOARD_AT, lootById, type Rarity } from '../systems/loot';
+import { digSpot } from './dig';
 
 // Digging, drawn in code: scent wisps drifting from a buried find to the
 // dog's nose, the earth flying while it digs, the hole it leaves until the
@@ -66,23 +67,6 @@ export const RARITY_INK: Record<Rarity, string> = { common: C.sage, uncommon: C.
 
 // ---- In the world ----
 
-function hole(g: CanvasRenderingContext2D, x: number, y: number, snow: boolean) {
-  ellipse(g, x, y, 4, 2, C.plum);
-  rect(g, x - 3, y - 2, 6, 1, C.sage);
-  px(g, x + 4, y - 1, C.sage);
-  px(g, x - 4, y - 1, C.sage);
-  // The heap of earth thrown out beside it.
-  const heap = snow ? C.wool : C.sage;
-  ellipse(g, x + 7, y + 1, 3, 1.5, heap);
-  rect(g, x + 6, y - 1, 3, 1, heap);
-  px(g, x + 6, y, C.plum);
-  px(g, x + 8, y + 1, C.plum);
-  px(g, x + 9, y, C.plum);
-  px(g, x + 7, y - 1, snow ? C.sage : C.moss);
-  px(g, x - 6, y + 1, C.plum);
-  px(g, x - 5, y + 2, C.sage);
-}
-
 // Scent: curls of it lifting off a buried find and drifting to the dog's
 // nose, faint (sage) on the move, bright (wool) when the dog stands to sniff.
 function wisps(g: CanvasRenderingContext2D, dx: number, dy: number, sx: number, sy: number, k: number, sniff: number, t: number, seed: number) {
@@ -109,21 +93,6 @@ function wisps(g: CanvasRenderingContext2D, dx: number, dy: number, sx: number, 
     const x = Math.round(sx + Math.sin((t + j) * 3) * 2), y = Math.round(sy - 2 - ph * 9);
     px(g, x, y, ph < 0.5 && bright ? C.wool : C.sage);
     if (ph < 0.6) px(g, x + 1, y - 1, C.sage);
-  }
-}
-
-// Where it is buried, once the dog is nearly on it: turned earth, a glint.
-function tuft(g: CanvasRenderingContext2D, x: number, y: number, close: boolean, t: number) {
-  px(g, x - 2, y, C.moss);
-  px(g, x + 1, y + 1, C.plum);
-  px(g, x + 2, y - 1, C.moss);
-  px(g, x - 1, y + 1, C.sage);
-  if (close && Math.floor(t * 4) % 3 === 0) {
-    px(g, x, y - 3, C.butter);
-    px(g, x - 1, y - 3, C.wool);
-    px(g, x + 1, y - 3, C.wool);
-    px(g, x, y - 4, C.wool);
-    px(g, x, y - 2, C.wool);
   }
 }
 
@@ -157,21 +126,6 @@ function pop(g: CanvasRenderingContext2D, id: string, x: number, y: number, t: n
   if (t < 0.25) for (let k = 0; k < 6; k++) px(g, Math.round(x + Math.cos(k) * t * 40), Math.round(y - 2 - Math.abs(Math.sin(k)) * t * 30), C.wool);
 }
 
-// X marks the spot: stones laid in a cross where the hoard is buried.
-function crossStones(g: CanvasRenderingContext2D, x: number, y: number) {
-  for (const [dx, dy] of [[-4, -3], [-2, -1], [2, 1], [4, 3], [4, -3], [2, -1], [-2, 1], [-4, 3]]) {
-    px(g, x + dx, y + dy, C.wool);
-    px(g, x + dx, y + dy + 1, C.sage);
-  }
-}
-
-function mound(g: CanvasRenderingContext2D, x: number, y: number, ready: boolean) {
-  ellipse(g, x, y, 3, 1.5, C.moss);
-  px(g, x - 1, y - 1, C.plum);
-  px(g, x + 2, y, C.plum);
-  if (ready) px(g, x + 1, y - 2, C.wool); // a knob of bone showing
-}
-
 export function lootDrawables(game: Game, g: CanvasRenderingContext2D): Drawable[] {
   const { ox, oy, W, H } = game.view();
   const seen = (x: number, y: number, m = 30) => x > ox - m && x < ox + W + m && y > oy - m && y < oy + H + m;
@@ -180,10 +134,10 @@ export function lootDrawables(game: Game, g: CanvasRenderingContext2D): Drawable
   const t = game.t;
   const snow = game.season.snow > 0.5;
   const out: Drawable[] = [];
-  for (const h of L.holes(game)) if (seen(h.x, h.y)) out.push(ground(() => hole(g, h.x, h.y, snow), 3));
+  for (const h of L.holes(game)) if (seen(h.x, h.y)) out.push(ground(() => digSpot(g, h.x, h.y, 'dug', t, { snow }), 3));
   if (L.digging) {
     const dg = L.digging;
-    out.push(ground(() => hole(g, Math.round(dg.x), Math.round(dg.y + 2), snow), 3));
+    out.push(ground(() => digSpot(g, Math.round(dg.x), Math.round(dg.y + 2), 'dug', t, { snow }), 3));
     out.push({ y: d.y + 0.5, draw: () => earth(g, Math.round(d.x), Math.round(d.y), d.face, t, snow) });
   }
   // Friends' dogs digging (co-op): the earth flies for them too.
@@ -191,10 +145,10 @@ export function lootDrawables(game: Game, g: CanvasRenderingContext2D): Drawable
   for (const [k, s] of L.scent.entries()) {
     out.push({ y: 1e8 - 1, draw: () => wisps(g, Math.round(d.x), Math.round(d.y - 4), s.x, s.y, s.k, L.sniffing, t, k * 13 + (s.x | 0)) });
     const dd = Math.hypot(s.x - d.x, s.y - d.y);
-    if (dd < 22) out.push(ground(() => tuft(g, s.x, s.y, dd < 8, t), 4));
+    if (dd < 22) out.push(ground(() => digSpot(g, s.x, s.y, 'near', t, { close: dd < 8 }), 4));
   }
-  for (const b of L.buried) if (seen(b.x, b.y)) out.push(ground(() => mound(g, b.x, b.y, b.day < game.day.day), 2));
-  if (L.pages === 4 && !L.has('hoard') && seen(HOARD_AT[0], HOARD_AT[1])) out.push(ground(() => crossStones(g, HOARD_AT[0], HOARD_AT[1]), 2));
+  for (const b of L.buried) if (seen(b.x, b.y)) out.push(ground(() => digSpot(g, b.x, b.y, 'buried', t, { ready: b.day < game.day.day }), 2));
+  if (L.pages === 4 && !L.has('hoard') && seen(HOARD_AT[0], HOARD_AT[1])) out.push(ground(() => digSpot(g, HOARD_AT[0], HOARD_AT[1], 'x', t), 2));
   for (const p of L.pops) out.push({ y: 1e8, draw: () => pop(g, p.id, Math.round(p.x), Math.round(p.y), p.t) });
   // On a scent the dog can dig: say so (on a phone the NIP button says DIG).
   if (!game.input.touchMode && game.mode === 'play' && L.canDig(game))
