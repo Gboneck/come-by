@@ -1,6 +1,6 @@
 import { C } from '../palette';
 import { line, px, rect } from '../gfx/draw';
-import { PX, fine } from '../gfx/screen';
+import { PX, fine, makeCanvas } from '../gfx/screen';
 import { grid } from './fine';
 import { text, textWidth } from '../gfx/font';
 import { hash2 } from '../rng';
@@ -10,7 +10,7 @@ import type { Game } from '../game';
 import type { Light } from '../render/night';
 import { MW, TS } from '../world/map';
 import { skyDarkness } from '../render/sky';
-import { BRIDGE_LOGS, bridgeLanding, woodpile } from '../systems/valley';
+import { BRIDGE_LOGS, bridgeLanding, woodpile, type FieldState } from '../systems/valley';
 import { villageDrawables, villageLights } from './village';
 import { fixtureDrawables } from './farm2';
 
@@ -128,6 +128,35 @@ function bridge(g: CanvasRenderingContext2D, game: Game, t: number) {
   });
 }
 
+// A field's scrub (or its flowers once cleared) as one picture on the fine
+// grid, redone only when how overgrown it is changes by a step or the
+// season turns, rather than drawing every bramble every frame.
+const fieldPics = new Map<number, { key: string; c: HTMLCanvasElement; x: number; y: number; w: number; h: number }>();
+function fieldPicture(p: FieldState, id: number) {
+  let key = `${p.cleared}|${seasonLook.bloom > 0.5}|${seasonLook.leaves > 0.3}|`;
+  if (!p.cleared) for (let j = 0; j < p.scrub.length; j++) key += Math.round(p.scrub[j] * 6).toString(36);
+  const old = fieldPics.get(id);
+  if (old && old.key === key) return old;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const i of p.tiles) {
+    const tx = i % MW, ty = Math.floor(i / MW);
+    x0 = Math.min(x0, tx); y0 = Math.min(y0, ty); x1 = Math.max(x1, tx + 1); y1 = Math.max(y1, ty + 1);
+  }
+  const x = x0 * TS - 4, y = y0 * TS - 6, w = (x1 - x0) * TS + 8, h = (y1 - y0) * TS + 10;
+  // A new canvas each time: the picture cache knows images by their object.
+  const [c, cg] = makeCanvas(w * PX, h * PX);
+  cg.translate(-x * PX, -y * PX);
+  p.tiles.forEach((i, j) => {
+    const tx = i % MW, ty = Math.floor(i / MW);
+    const sc = Math.round(p.scrub[j] * 6) / 6;
+    if (p.cleared) flowers(cg, tx, ty);
+    else if (sc > 0.02) scrub(cg, tx, ty, sc);
+  });
+  const e = { key, c, x, y, w, h };
+  fieldPics.set(id, e);
+  return e;
+}
+
 // Graphics' paddock art (art/paddock.ts, from world-r4) draws the fixtures
 // itself; until it is merged in, they are drawn here. (A lazy glob: it only
 // asks whether the file is there.)
@@ -141,21 +170,10 @@ export function valleyDrawables(game: Game, g: CanvasRenderingContext2D): Drawab
   if (!PADDOCK_ART) out.push(...fixtureDrawables(game, g, (x, y) => inView(x - 8, y - 8, x + 8, y + 8)));
   const v = game.valley, t = game.t;
   // Paddocks: scrub on the ground (or flowers once cleared), and a sign.
-  for (const p of v.fields) {
+  for (const [j, p] of v.fields.entries()) {
     const s = p.site;
     if (!inView((s.cx - s.rx - 2) * TS, (s.cy - s.ry - 2) * TS, (s.cx + s.rx + 2) * TS, (s.cy + s.ry + 2) * TS)) continue;
-    out.push({
-      y: -1e9 + 5,
-      draw: () => {
-        fine(g, (fg) => {
-          p.tiles.forEach((i, j) => {
-            const tx = i % MW, ty = Math.floor(i / MW);
-            if (p.cleared) flowers(fg, tx, ty);
-            else if (p.scrub[j] > 0.02) scrub(fg, tx, ty, p.scrub[j]);
-          });
-        });
-      },
-    });
+    out.push({ y: -1e9 + 5, draw: () => { const pic = fieldPicture(p, j); g.drawImage(pic.c, pic.x, pic.y, pic.w, pic.h); } });
     if (!p.owned) out.push({ y: p.mouth.y, draw: () => sign(g, p.mouth.x, p.mouth.y, `FOR SALE ${p.site.price}$`, true) });
     else if (!p.cleared) out.push({ y: p.mouth.y, draw: () => sign(g, p.mouth.x, p.mouth.y, `OVERGROWN ${Math.round((1 - v.left(p)) * 100)}%`, false) });
   }

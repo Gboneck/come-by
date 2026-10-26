@@ -1029,6 +1029,64 @@ Before → after, in plain words:
       guest badges and shared favour; savetest, ordertest, daytest pass;
       `tune.mjs --seed=7` is identical to main for all five species
 
+## M34 World and light, round five (double density, less noise)
+From a playtester: "step up the pixels by a factor of two: more detail and
+less noise". The world is now drawn at two fine pixels to a world pixel
+(Platform's PX = 2 pipeline). Before → after, in plain words:
+- [x] Ground: it was speckled all over with random dots of darker grass and
+      single-pixel flowers. Now it's clean meadow with:
+      - grass marks in drifts (little clusters of blades)
+      - broad soft patches of darker grass edged by a short fade
+      - drawn clover, stones and molehills
+      - worn patches that fade out
+      - ferns and mushrooms in the trees' shade
+      - logs and boulders at the forest edge
+- [x] Paths: smooth outlines instead of a ragged pixel jitter, two wheel
+      ruts, a shaded lip, and the grass edge darker on the shady side. In
+      rain the ruts hold water; in snow only the edges stay white.
+- [x] Water:
+      - Shallows are rippled lines instead of a checkerboard.
+      - The north bank shows a dark lip.
+      - Still water mirrors the trees in banded reflections.
+      - The river's highlights are fine dashes, glints and rings drawn each
+        frame (the 16 stored frames are gone).
+      - Lily pads and stepping stones are finer.
+- [x] Trees:
+      - The forest was teal speckled with plum marks. It's now heaped leaf
+        clumps, each lit on its upper right with a dark rim on its lower
+        left, so the edge scallops.
+      - Edge trees are rosettes of clumps.
+      - Pines are crisp tiered cones with boughs catching the light.
+      - Willows trail strands.
+      - Autumn turns whole clumps gold or late green, snow caps their tops,
+        and spring sets little blossoms on them.
+- [x] Rock: faceted tops with cracks, taller faces with strata, scree as
+      drawn pebbles.
+- [x] Seasons and weather are part of the ground's paint now, not a
+      speckle pass:
+      - snow with grass tufts poking through, and ice creeping from banks
+      - fallen leaves gathered under the trees
+      - flowers in drifts in spring
+      - grass tips catching the golden light
+      Rain is thin streaks, snow falls as small stars, puddles have rings.
+- [x] Swaying grass is fine blades with a lighter one beside them, bending
+      at the tip. Flowers are five-pixel heads; reeds are slim with cattails.
+- [x] Buildings, redrawn on the fine grid:
+      - the farmhouse: clapboard, shuttered windows with sills, a panelled
+        door, slate courses, a brick chimney, flower boxes, the porch
+      - barn, kennel, market, windmill, haystack
+      - shearing shed, dairy, agility yard
+      - the whole village
+      - the Show Ground and the buyers' yards
+- [x] Fences and paddocks: slim lit posts, round rails with a shadowed
+      underside, gates, and floors with clean trodden lanes and straw in
+      wisps. Trough, hay rack and shelter are finer.
+- [x] Props: all the ranch decor, the fields' scrub (bramble clumps and
+      thistles instead of noise), the bridge, logs, signs, the title's
+      landscape.
+- [x] Round four's morning mist is gone: at double density its dither laid
+      a grid of dots over every morning.
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -2102,3 +2160,23 @@ Before → after, in plain words:
   the tier card's slot and waits behind banners; the ribbon board stands
   just past the farmhouse's front right corner (World and light). The
   merge steps are in the session notes (favour-achievements.md).
+- Round five's world is painted at double density in 128-fine-pixel chunks
+  round the camera (render/light.ts `FineWorld`): ground, canopy and a lit
+  ground with the sun's tree shadows. Each frame paints within 3ms, nearest
+  the middle first; until a chunk is painted the old world-pixel ground
+  shows there. The 160 most recently seen chunks are kept (about 40MB). The
+  painters (world/fineground.ts, world/finecanopy.ts) take any rectangle,
+  and their detail is decided per grid cell in world space, so chunks
+  agree.
+- Outlines (paths, water, rock, forest) are one smooth function
+  (terrain.ts `edgeAt`) used by both the world data and the fine painter.
+  The per-pixel jitter that made them ragged is gone. The 1x data (soil,
+  masks, canopy kind) stays for the sim and footprints.
+- Seasons, wet ground and the golden hour are part of the paint key (in
+  small steps), so the old per-frame pixel passes (weather.ts ground shade,
+  render/seasons.ts) no longer run. The cloud shadows went with them for
+  now.
+- Chunks paint once per game moment (`now`), so drawing a moment twice
+  gives the same picture (picturetest).
+- `art/fine.ts` `grid()` draws palette-letter pictures on the fine grid,
+  compiled into runs once, because cached art is recorded every frame.

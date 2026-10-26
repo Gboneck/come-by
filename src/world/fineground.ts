@@ -192,7 +192,7 @@ function base(j: Job) {
         if (ice && dw <= ice && !lip) c = dw === ice ? sage : (fy % 5 === 0 && hash2(fx >> 2, fy, 605) < 0.5) ? sage : wool;
       } else if (k === K.Path) {
         const dp = inPath[i];
-        const wet = j.look.wet >= 2;
+        const wet = j.look.wet >= 1;
         c = wet ? sage : moss;
         // Two wheel ruts a little in from each side, and the worn lip of
         // the track where it dips on its shady (lower, left) edges.

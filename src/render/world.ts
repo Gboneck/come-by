@@ -53,7 +53,8 @@ function groundLook(game: Game): Look {
     snow: q(game.season.snow),
     leaves: q(game.season.leaves),
     bloom: q(game.season.bloom),
-    wet: quality.shade ? Math.round(Math.min(1, game.life.wx.wet) * 3) : 0,
+    // Under snow the wet doesn't show, so it never repaints the ground.
+    wet: quality.shade && game.season.snow < 0.4 ? Math.round(Math.min(1, game.life.wx.wet) * 2) : 0,
     golden: quality.shade ? Math.round(lightLook.golden * fair * 3) : 0,
   };
 }
