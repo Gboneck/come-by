@@ -54,6 +54,33 @@ export interface Baked {
   // The canopy's silhouette in sage: the trees' shadow, drawn offset by the
   // sun each frame (render/light.ts).
   canopyShadow: HTMLCanvasElement;
+  // What the fine (2x) painters draw from (world/fineground.ts).
+  fine: FineData;
+}
+
+export interface Crown { x: number; y: number; r: number; light: boolean; willow: boolean }
+export interface Pine { x: number; y: number; h: number }
+export interface Mound { x: number; y: number; rx: number; ry: number }
+export interface FineData {
+  fields: Record<keyof typeof EDGES, Float32Array>;
+  forest: Uint8Array;
+  rock: Uint8Array;
+  water: Uint8Array;
+  deep: Uint8Array;
+  path: Uint8Array;
+  cm: Uint8Array; // canopy cover (1x)
+  pz: Uint8Array; // the pine zone of the forest mass
+  rh: Float32Array; // soft rock height
+  near: Float32Array; // rock nearby, for scree
+  shade: Uint8Array; // where the trees' shade usually lies
+  crowns: Crown[];
+  pines: Pine[];
+  trunks: { x: number; y: number }[];
+  hills: { x0: number; y0: number; w: number; h: number; owner: Int16Array; mounds: Mound[] };
+  worn: { x: number; y: number; rx: number; ry: number }[]; // the Show Ground's bare spots
+  showBox: [number, number, number];
+  stones: { x: number; y: number }[]; // stepping stones at the ford
+  map: WorldMap;
 }
 
 function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32Array {
@@ -63,7 +90,7 @@ function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32
 }
 
 // Bilinear sample of a tile field at a pixel position.
-function sample(f: Float32Array, x: number, y: number): number {
+export function sample(f: Float32Array, x: number, y: number): number {
   const fx = x / TS - 0.5, fy = y / TS - 0.5;
   let x0 = Math.floor(fx), y0 = Math.floor(fy);
   const tx = fx - x0, ty = fy - y0;
@@ -74,18 +101,29 @@ function sample(f: Float32Array, x: number, y: number): number {
   return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
 }
 
-function edgeMask(field: Float32Array, threshold: number, seed: number, scale: number, amp: number, jitter: number): Uint8Array {
+// The soft outline of a kind of ground: a tile field, blurred by sampling
+// and roughened by smooth noise, cut at a threshold. A function of position,
+// so the fine (2x) painter draws the very same outline at its own density.
+export type Edge = [threshold: number, seed: number, scale: number, amp: number];
+export const EDGES: Record<'forest' | 'rock' | 'water' | 'deep' | 'path', Edge> = {
+  forest: [0.36, 5, 0.11, 0.75],
+  rock: [0.45, 21, 0.2, 0.5],
+  water: [0.5, 31, 0.15, 0.35],
+  deep: [0.55, 37, 0.15, 0.3],
+  path: [0.42, 41, 0.1, 0.3],
+};
+
+export function edgeAt(field: Float32Array, e: Edge, x: number, y: number): boolean {
+  const f = sample(field, x, y);
+  if (f <= 0.001) return false;
+  if (f >= 0.999) return true;
+  return f + (fbm(x * e[2], y * e[2], e[1], 2) - 0.5) * e[3] > e[0];
+}
+
+function edgeMask(field: Float32Array, ...e: Edge): Uint8Array {
   const W = WORLD_W, H = WORLD_H;
   const m = new Uint8Array(W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const f = sample(field, x, y);
-      if (f <= 0.001) continue;
-      if (f >= 0.999) { m[y * W + x] = 1; continue; }
-      const n = (fbm(x * scale, y * scale, seed, 2) - 0.5) * amp + (hash2(x, y, seed + 3) - 0.5) * jitter;
-      if (f + n > threshold) m[y * W + x] = 1;
-    }
-  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (edgeAt(field, e, x, y)) m[y * W + x] = 1;
   return m;
 }
 
@@ -206,11 +244,18 @@ function bakeWorld(map: WorldMap): Baked {
   const at = (m: Uint8Array, x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? 1 : m[y * W + x]);
   const atw = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : water[y * W + x]);
 
-  const forest = edgeMask(tileField(map, (t) => t === Ter.Forest), 0.36, 5, 0.11, 0.75, 0.18);
-  const rock = edgeMask(tileField(map, (t) => t === Ter.Rock), 0.45, 21, 0.2, 0.5, 0.1);
-  const water = edgeMask(tileField(map, (t) => t === Ter.Water || t === Ter.Shallow), 0.5, 31, 0.15, 0.35, 0.05);
-  const deep = edgeMask(tileField(map, (t) => t === Ter.Water), 0.55, 37, 0.15, 0.3, 0.05);
-  const path = edgeMask(tileField(map, (_t, i) => map.path[i] === 1), 0.42, 41, 0.25, 0.45, 0.22);
+  const fields = {
+    forest: tileField(map, (t) => t === Ter.Forest),
+    rock: tileField(map, (t) => t === Ter.Rock),
+    water: tileField(map, (t) => t === Ter.Water || t === Ter.Shallow),
+    deep: tileField(map, (t) => t === Ter.Water),
+    path: tileField(map, (_t, i) => map.path[i] === 1),
+  };
+  const forest = edgeMask(fields.forest, ...EDGES.forest);
+  const rock = edgeMask(fields.rock, ...EDGES.rock);
+  const water = edgeMask(fields.water, ...EDGES.water);
+  const deep = edgeMask(fields.deep, ...EDGES.deep);
+  const path = edgeMask(fields.path, ...EDGES.path);
 
   // ---- Canopy ----
   const cb = bakeCanopy(map, forest, water);
@@ -233,8 +278,9 @@ function bakeWorld(map: WorldMap): Baked {
   const hx0 = (hills.cx - hills.rx - 6) * TS, hy0 = (hills.cy - hills.ry - 6) * TS;
   const hw = (hills.rx + 6) * 2 * TS, hh = (hills.ry + 6) * 2 * TS;
   const hm = new Uint8Array(hw * hh); // 0 flat, 1 dithered shade, 2 shade
+  const owner = new Int16Array(hw * hh).fill(-1);
+  const mounds: Mound[] = [];
   {
-    const mounds: { x: number; y: number; rx: number; ry: number }[] = [];
     const S = 44;
     for (let gy = 0; gy * S < hh; gy++)
       for (let gx = 0; gx * S < hw; gx++) {
@@ -245,7 +291,7 @@ function bakeWorld(map: WorldMap): Baked {
         mounds.push({ x, y, rx, ry: rx * (0.5 + hash2(gx, gy, 504) * 0.2) });
       }
     mounds.sort((p, q) => p.y + p.ry - (q.y + q.ry));
-    for (const m of mounds) {
+    mounds.forEach((m, mi) => {
       for (let y = Math.floor(m.y - m.ry); y <= m.y + m.ry; y++)
         for (let x = Math.floor(m.x - m.rx); x <= m.x + m.rx; x++) {
           const lx = x - hx0, ly = y - hy0;
@@ -258,8 +304,9 @@ function bakeWorld(map: WorldMap): Baked {
           if (d > 0.84 && side > 0.25) v = d > 0.92 && side > 0.5 ? 2 : 1;
           else if (d > 0.74 && side > 0.75) v = 1;
           hm[ly * hw + lx] = v;
+          owner[ly * hw + lx] = mi;
         }
-    }
+    });
   }
   const hillAt = (x: number, y: number) => {
     const lx = x - hx0, ly = y - hy0;
@@ -805,7 +852,11 @@ function bakeWorld(map: WorldMap): Baked {
   const csi = csg.createImageData(W, H), csp = new Uint32Array(csi.data.buffer);
   for (let i = 0; i < W * H; i++) if (cm[i]) csp[i] = U32.sage;
   csg.putImageData(csi, 0, 0);
-  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist, waterMask: { c: wmc, x: wx0, y: wy0 }, canopyShadow: csc };
+  const fine: FineData = {
+    fields, forest, rock, water, deep, path, cm, pz: cb.pz, rh, near, shade: shadow, crowns: cb.crowns, pines: cb.pines, trunks: cb.trunks,
+    hills: { x0: hx0, y0: hy0, w: hw, h: hh, owner, mounds }, worn, showBox: [sx0, sx1, sy0], stones, map,
+  };
+  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist, waterMask: { c: wmc, x: wx0, y: wy0 }, canopyShadow: csc, fine };
 }
 
 function makeSwayGrid(W: number, H: number): SwayGrid {
@@ -820,7 +871,7 @@ function makeSwayGrid(W: number, H: number): SwayGrid {
 // and specks, getting denser on the shaded lower-left side of each mass.
 // Round crowns bulge from its edges and make up the small groves; towards
 // the High Range it turns to pines.
-function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): CanopyBuf & { canvas: HTMLCanvasElement; trunks: { x: number; y: number }[] } {
+function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): CanopyBuf & { canvas: HTMLCanvasElement; trunks: { x: number; y: number }[]; crowns: Crown[]; pines: Pine[]; pz: Uint8Array } {
   const W = WORLD_W, H = WORLD_H;
   const [canvas, cg] = makeCanvas(W, H);
   const cimg = cg.createImageData(W, H);
@@ -843,7 +894,7 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): Canop
 
   // Broadleaf crowns on the forest edges, and whole small groves of them.
   const comps = components(map, (t) => t === Ter.Forest);
-  const crowns: { x: number; y: number; r: number; light: boolean }[] = [];
+  const crowns: Crown[] = [];
   for (let ty = 1; ty < MH - 1; ty++) {
     for (let tx = 1; tx < MW - 1; tx++) {
       if (map.t(tx, ty) !== Ter.Forest) continue;
@@ -857,8 +908,8 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): Canop
       }
       const jx = Math.round((hash2(tx, ty, 201) - 0.5) * 4), jy = Math.round((hash2(tx, ty, 202) - 0.5) * 4);
       const light = hash2(tx, ty, 203) < 0.18;
-      if (small) crowns.push({ x: px + jx, y: py + jy, r: 4.5 + h * 2.5, light });
-      else if (edge && h < 0.6) crowns.push({ x: px + nx * 2 + jx, y: py + ny * 2 + jy, r: 4 + h * 3, light });
+      if (small) crowns.push({ x: px + jx, y: py + jy, r: 4.5 + h * 2.5, light, willow: false });
+      else if (edge && h < 0.6) crowns.push({ x: px + nx * 2 + jx, y: py + ny * 2 + jy, r: 4 + h * 3, light, willow: false });
     }
   }
   crowns.sort((p, q) => p.y - q.y);
@@ -872,14 +923,15 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): Canop
   };
   const trunks: { x: number; y: number }[] = [];
   for (const c of crowns) {
-    if (nearWater(c.x, c.y)) stampWillow(b, c.x, c.y, c.r + 0.5, 240 + (c.x & 15));
+    c.willow = nearWater(c.x, c.y);
+    if (c.willow) stampWillow(b, c.x, c.y, c.r + 0.5, 240 + (c.x & 15));
     else stampCrown(b, c.x, c.y, c.r, 210 + (c.x & 15), c.light);
     trunks.push({ x: c.x, y: c.y + Math.round(c.r * 0.85) });
   }
 
   // Pines packed in rows over the northern forest, back to front; any gap
   // left gets a pine of its own.
-  const pines: { x: number; y: number; h: number }[] = [];
+  const pines: Pine[] = [];
   const cov = new Uint8Array(W * H);
   const SX = 6, SY = 5;
   for (let gy = 0; gy * SY < 47 * TS; gy++) {
@@ -954,5 +1006,5 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): Canop
     }
   }
   cg.putImageData(cimg, 0, 0);
-  return { ...b, canvas, trunks };
+  return { ...b, canvas, trunks, crowns, pines, pz };
 }
