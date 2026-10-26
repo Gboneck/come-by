@@ -281,11 +281,18 @@ needs a line there.
   dog. Not lockstep: the sim is not deterministic, and must not need to be.
 - **Red is you.** On every screen your own dog wears the red bandana;
   everyone else's wears buttercup with a name tag, in their own markings.
-- **The ranch is the host's.** Pay, building, the Ledger's goals and the
-  save are the host's; a guest's own save is never written. When the host
-  is at the summary, building, or at the judge's card, guests wait on a
-  read-only card. Menus (pause, Ledger, looks, invite) do not stop the
-  world while friends are there; resting needs every dog lying down at home.
+- **One ranch, one purse, everyone does everything.** The host's browser
+  still runs the world and keeps the save; a guest's actions are commands
+  the host plays with the same rules: build mode (`BuildMode.remote` on the
+  guest, `BuildMode.apply` on the host; one builder at a time), E (the
+  post, pen gates, breeds for sale, the agility course, fields: played
+  with the guest's dog as `game.dog` and `game.actor` set, so runs a guest
+  starts follow their dog through `game.dogOf(slot)`), helper commands,
+  closing the judge's card. The day's end is the same card on both
+  screens; tomorrow starts when everyone is ready or on the host's second
+  press. No screen stops the world for friends (build mode, menus, the
+  judge's card); resting needs every dog lying down at home. A guest's
+  own save is never written (their finds go to their travels).
 - New shared-world features: JSON ranch state goes in `src/net/shared.ts`
   (one line each), a byte of per-animal state in `animalExtra` /
   `applyAnimalExtra` (snapshot.ts); keep anything that only the host's dog

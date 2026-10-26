@@ -719,9 +719,11 @@ export class HostNet implements PingNet {
     return '';
   }
 
-  // At the day's end: where each friend has got to.
+  // At the day's end: where each friend has got to (and we, once we pressed).
   readyLines(): string[] {
-    return [...this.seats.values()].filter((s) => s.dog && s.leaving <= 0).map((s) => `${s.name}: ${this.builder === s.slot ? 'BUILDING' : s.ready ? 'READY' : s.bg || s.away > 0 ? 'AWAY' : 'NOT READY YET'}`);
+    const out = [...this.seats.values()].filter((s) => s.dog && s.leaving <= 0).map((s) => `${s.name}: ${this.builder === s.slot ? 'BUILDING' : s.ready ? 'READY' : s.bg || s.away > 0 ? 'AWAY' : 'NOT READY YET'}`);
+    if (this.hostReady && out.length) out.push(this.game.input.touchMode ? 'YOU ARE READY. TAP NEXT DAY AGAIN TO GO NOW' : 'YOU ARE READY. PRESS AGAIN TO GO NOW');
+    return out;
   }
 
   // Is this friend's dog napping (their screen off) or waiting on a dropped line?
