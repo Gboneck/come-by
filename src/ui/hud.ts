@@ -3,6 +3,8 @@ import { rect } from '../gfx/draw';
 import { panel } from './frame';
 import { drawGoodsTally } from './goods';
 import { drawObjective, objective } from './objective';
+import { drawWhatsThis } from './whatsthis';
+import { FIRST_STEPS, drawWelcome, firstDayStep } from './firstday';
 import { heading, headingWidth, text, textWidth } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
 import { animalSprites } from '../art/animals';
@@ -121,6 +123,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   // its words on the goal card below.
   const ob = objective(game);
   drawObjective(game, g, ob, T + 12, viewBottom);
+  drawWhatsThis(game, g, T + 34, viewBottom);
 
   // ---- Stamina: a bone by the dog that empties as it runs ----
   {
@@ -286,9 +289,18 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   if (hint) {
     const hw = Math.max(...hl.map((l) => textWidth(l))) + 10;
     const hx = Math.round(hcx - hw / 2);
-    panel(g, hx, hy, hw, hh);
+    // The first day's steps are gilt and carry their number.
+    const step = firstDayStep(game);
+    panel(g, hx, hy, hw, hh, C.plum, step ? C.butter : C.sage);
+    if (step) {
+      const tag = `FIRST DAY ${step}/${FIRST_STEPS}`;
+      const tw = textWidth(tag) + 6;
+      panel(g, hx + 3, hy - 8, tw, 9, C.teal, C.butter);
+      text(g, tag, hx + 6, hy - 6, C.wool);
+    }
     hl.forEach((l, i) => text(g, l, hx + hw / 2, hy + 3 + i * 7, C.wool, { align: 'center', iconColor: C.butter }));
   }
+  drawWelcome(game, g, W, H);
 
   // ---- Place name and banners ----
   if (game.place) {

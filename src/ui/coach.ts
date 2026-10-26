@@ -6,6 +6,7 @@ import type { Game } from '../game';
 import type { Group } from '../entities/animal';
 import { arrow } from './hud';
 import { updateEmotes } from './emotes';
+import { updateWhatsThis } from './whatsthis';
 import { buzz } from './settings';
 import { orderFor, penGateAt, yardOf } from '../systems/orders';
 import { PARTS, atPost, currentClass } from '../systems/trials';
@@ -110,6 +111,7 @@ function watchJobs(game: Game) {
 export function updateCoach(game: Game, dt: number) {
   if (game.demo) return;
   updateEmotes(game, dt);
+  updateWhatsThis(game, dt);
   watchJobs(game);
   if (game.tip) return;
   const seen = game.tipsSeen;
