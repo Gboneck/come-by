@@ -58,6 +58,7 @@ export const STEPS: StepDef[] = [
 export interface PaddockState {
   site: PaddockSite;
   tiles: number[]; // ty * MW + tx
+  index: Map<number, number>; // tile -> its place in `tiles`
   scrub: Float32Array; // per tile, 1 = overgrown .. 0 = grazed
   cleared: boolean;
   shown: number; // last quarter announced
@@ -76,7 +77,7 @@ export class Valley {
   side = new Map<Animal, number>(); // which side of the arch
 
   constructor(map: WorldMap) {
-    this.mask = new Uint8Array(MW * map.region.length / MW);
+    this.mask = new Uint8Array(map.region.length);
     const ranch = regionById('ranch');
     for (const site of PADDOCKS) {
       const tiles: number[] = [];
@@ -94,7 +95,7 @@ export class Valley {
           const near = 1 / (1 + Math.hypot(tx - ranch.cx, ty - ranch.cy));
           if (near > md) { md = near; mx = tx; my = ty; }
         }
-      this.paddocks.push({ site, tiles, scrub: new Float32Array(tiles.length).fill(1), cleared: false, shown: 0, mouth: { x: mx * TS + 4, y: my * TS + 4 } });
+      this.paddocks.push({ site, tiles, index: new Map(tiles.map((t, j) => [t, j])), scrub: new Float32Array(tiles.length).fill(1), cleared: false, shown: 0, mouth: { x: mx * TS + 4, y: my * TS + 4 } });
     }
   }
 
@@ -110,8 +111,8 @@ export class Valley {
     if (!k) return 0;
     const p = this.paddocks[k - 1];
     if (p.cleared) return 0;
-    const j = p.tiles.indexOf(ty * MW + tx);
-    return j < 0 ? 0 : p.scrub[j];
+    const j = p.index.get(ty * MW + tx);
+    return j === undefined ? 0 : p.scrub[j];
   }
 
   left(p: PaddockState) {
@@ -204,12 +205,12 @@ function grazePaddocks(g: Game, dt: number) {
     let best = -1, bs = 0.001;
     for (let dy = -2; dy <= 2; dy++)
       for (let dx = -2; dx <= 2; dx++) {
-        const j = p.tiles.indexOf((ty + dy) * MW + tx + dx);
-        if (j >= 0 && p.scrub[j] > bs) { bs = p.scrub[j]; best = j; }
+        const j = p.index.get((ty + dy) * MW + tx + dx);
+        if (j !== undefined && p.scrub[j] > bs) { bs = p.scrub[j]; best = j; }
       }
     if (best >= 0) p.scrub[best] = Math.max(0, p.scrub[best] - rate * dt);
-    const own = p.tiles.indexOf(ty * MW + tx);
-    if (own >= 0) p.scrub[own] = Math.max(0, p.scrub[own] - rate * dt * 0.25);
+    const own = p.index.get(ty * MW + tx);
+    if (own !== undefined) p.scrub[own] = Math.max(0, p.scrub[own] - rate * dt * 0.25);
   }
   for (const p of v.paddocks) {
     if (p.cleared) continue;

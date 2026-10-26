@@ -651,6 +651,44 @@ another origin are never answered from the cache.
 - [x] `scripts/daytest.mjs`: calm, rough, late and frantic-at-dusk first
       drives all afford the kennel by the end of day one
 
+## M28 The valley grows (gameplay, round four)
+- [x] A village at the crossroads (`src/ranch/village.ts`,
+      `src/systems/valley.ts`) on a new green south-west of the junction:
+      a well at first, then a cottage (fill an order), the market square
+      (4 orders), a second cottage (graze a paddock clear), the smithy
+      (pen 4 cattle), the hall (a trial or fair ribbon) and a third cottage
+      (40 penned). One step a morning, each the morning after the deed, in
+      order; a banner says what came and the Ledger what is next
+- [x] Market day, the third of each season once the square stands: the
+      drover always has an order and pays half again; goods sell for a
+      quarter more. Festivals, the last day of each season once the hall
+      stands: the season's decorations on the green, and five of a kind
+      driven through the arch make a parade (20$ and more for calm ones)
+- [x] Two overgrown paddocks off the ranch's south side, carved from the
+      forest: ranch ground under scrub that a flock grazing there eats down
+      tile by tile (goats fastest, cattle, then sheep and ponies; ducks and
+      a frightened flock not at all). Grazed clear they are land to build
+      on, with wildflowers in them
+- [x] The old bridge at the ford: once the smith can forge an ox yoke, a
+      cow driven through the woodpile in the ford meadow picks up a log
+      (and walks a little slower), and six logs at the bridge mend it.
+      Under it the ford is dry going: cattle no longer balk there
+- [x] New ranch buildings (`src/systems/farmwork.ts`): the shearing shed
+      (summer: sheep walked along its chute, funnelled in by its wings,
+      are shorn for a wool bonus), the dairy (mornings till noon: cows
+      walked into its yard are milked, paid by how calm they came, and let
+      back out) and the agility yard (nip at the post and run the course;
+      a clean run under par counts once a day, three to a free level of
+      speed or stamina)
+- [x] First-pass art for all of it (`src/art/village.ts`, `valley.ts`,
+      `farm2.ts`), village lights at night; legacy goals for the valley;
+      saves and old saves; co-op shared state; the Ledger's valley lines
+- [x] The pace bot grazes a paddock with its own flock once land runs
+      short, hauls timber with wild cattle, and uses the shed, dairy and
+      agility yard; `scripts/valleytest.mjs`
+
+VALLEY_TABLES
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it

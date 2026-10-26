@@ -68,6 +68,9 @@ original and drawn in code. No external art files, ever.
   `scripts/seasontest.mjs` checks the calendar, winter hay, lambing, the
   shearer, the fair, rare breeds and seasons in the save (old saves load),
   `scripts/lambtest.mjs` drives ewes with lambs calm against barking,
+  `scripts/valleytest.mjs` checks the valley growing: the village's steps,
+  market day, the festival parade, grazing a paddock clear, timber for the
+  old bridge, the shearing shed, the dairy, the agility course, saves,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
   include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
@@ -181,6 +184,10 @@ needs a line there.
   Snow (winter) slows everyone a little. The calendar is in
   `src/systems/season.ts`, what each season brings in
   `src/systems/seasonal.ts`.
+- Grazing: a calm flock left on an overgrown paddock eats its scrub down
+  (goats fastest); a cow driven through the woodpile drags a log, a little
+  slower. The valley's projects are in `src/systems/valley.ts`, the ranch
+  buildings with work of their own in `src/systems/farmwork.ts`.
 
 ## Code map
 
@@ -199,7 +206,11 @@ needs a line there.
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
   weather state everything else reads: `game.weather`), `season.ts` (the
   season state everything else reads: `game.season`), `discovery.ts`
-  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`).
+  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`),
+  `valley.ts` (the village's steps, the paddocks, the old bridge, market
+  day and festivals: `game.valley`, the village itself in
+  `game.ranch.village`), `farmwork.ts` (the shearing shed, the dairy, the
+  agility yard: `game.farmwork`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
   pieces, `textfield.ts` typed names.

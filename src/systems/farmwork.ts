@@ -278,6 +278,11 @@ export function farmworkHint(g: Game): string | null {
     const mark = f.trainedDay === g.day.day ? 'TRAINED TODAY' : `${key.toUpperCase()} ${f.marks[key] ?? 0}/${AGILITY_MARKS}`;
     return `${E}: RUN THE AGILITY COURSE (PAR ${AGILITY_PAR}S, ${mark}${f.best ? `, BEST ${f.best}S` : ''})`;
   }
+  return null;
+}
+
+// Near the shed or the dairy: what they do (after the pen gates' hints).
+export function farmworkNearHint(g: Game): string | null {
   const d = g.dog;
   for (const s of shed(g))
     if (Math.hypot(d.x - s.cx, d.y - s.cy) < 44) return g.season.season === 'summer' ? 'SHEARING TIME: WALK SHEEP ALONG THE CHUTE, PAST THE DOOR.' : 'THE SHEARING SHED. IN SUMMER, SHEEP WALKED ALONG ITS CHUTE ARE SHORN.';

@@ -7,7 +7,7 @@ import { SKY_LINE, SKY_TIP } from './weather';
 import { Predator } from '../entities/predator';
 import { breedNear, buyBreed, isFairDay, seasonalMorning, seasonalOrders, seasonalUpdate, type MorningBanner } from './seasonal';
 import { valleyHint, valleyMorning, valleyUpdate } from './valley';
-import { farmworkHint, farmworkUpdate, startAgility } from './farmwork';
+import { farmworkHint, farmworkNearHint, farmworkUpdate, startAgility } from './farmwork';
 
 // The jobs around the herding: buyers' orders and the Show Ground trials.
 // Game calls in here at a handful of points; this keeps those hooks short.
@@ -124,5 +124,5 @@ export function jobsHint(game: Game): string | null {
     if (p.letOut) return `WALK IN BEHIND THEM TO DRIVE THEM OUT. ${E}: SHUT THE GATE`;
     if (p.animals.length && p.species && orderFor(game, p.species)) return `${E}: OPEN THE GATE AND LET THEM OUT FOR THE BUYER`;
   }
-  return valleyHint(game);
+  return farmworkNearHint(game) ?? valleyHint(game);
 }
