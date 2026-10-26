@@ -255,7 +255,7 @@ export class Pacer {
   private extendFor(sp: SpeciesId, n: number): boolean {
     const g = this.g;
     const pens = g.ranch.pens.filter((p) => !p.letOut && p.canHold(sp)).sort((a, b) => (b.species === sp ? 1 : 0) - (a.species === sp ? 1 : 0) || b.animals.length - a.animals.length);
-    const perTile = 16 / 56; // capacity a tile (8x7 holds 16)
+    const perTile = 16 / 56; // capacity a tile (8x7 holds 16; big ones more)
     for (const p of pens) {
       const need = n * SPECIES[sp].space - Math.max(0, p.capacity - p.used);
       if (need <= 0) continue;
@@ -542,6 +542,8 @@ export class Pacer {
     for (const m of this.groupsOut()) {
       const sp = m[0].sp.id;
       if (this.roomFor(sp) === 0 && (g.coins < defOf('pen').cost || (g.ranch.pens.some((p) => p.species === sp) && !goalSp.has(sp) && g.tier < 3))) continue;
+      // A drove far bigger than the room there is: leave it for another day.
+      if (!goalSp.has(sp) && m.length > this.roomFor(sp) + SPECIES[sp].spawnGroup[1] * 1.5) continue;
       const d = dist(centroid(m), home);
       // A big drove is worth only what there is room for (plus a flock's
       // worth of paddock to be made).
