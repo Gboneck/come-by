@@ -1063,6 +1063,13 @@ Before → after, in plain words:
       to tap; dense sprites sized in world pixels (sprW/sprH); the goods
       icons in fine pixels with a plum outline
 - [x] Pad prompts match whatever the case and answer in the case they find
+- [x] Both views (VIEW: CLOSE and WIDE, platform): every layout spaces its
+      lines by `lineHeight()` and sizes one-line boxes to their text
+      (`src/ui/metrics.ts`: `pitch`, `boxH`, `textIn`), so WIDE's stepped-up
+      text fits and CLOSE is unchanged pixel for pixel; touch buttons, HUD
+      buttons, build tabs and the build and decor bars grow by
+      `touchScale()` in WIDE so they keep their size under a finger; uitour
+      has `phonewide` and `deskwide`
 ## M34 Double density: fine pixels and a readable font (platform, round five)
 - [x] Two grids: world pixels (the sim, the map, layout, the old art) and
       fine pixels, PX = 2 to a world pixel. The screen canvas is fine pixels
@@ -2241,4 +2248,7 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
   in the 64-step ramp.
 - Animals get a faint halo at night (power 0.4, radius 11) so the flock
   reads in the dark; predators' eyes are drawn above the dark as before.
-
+- Touch targets are sized in CSS pixels, not world pixels: `touchScale()`
+  is 1 / `screen.cssPerFine` (1 in the close view on an upright phone, about
+  1.5 in WIDE), so BARK is the same size under a thumb in both views. The
+  virtual stick's radii live in input.ts (platform's).
