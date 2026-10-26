@@ -205,5 +205,6 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   const k = Math.floor(t * 5);
   g.fillStyle = C.wool;
   const wl = top + keep;
-  for (let i = 0; i < s.w; i++) if ((i + k) % 3 !== 0 && s.w - i > 1) g.fillRect(left + i, wl, 1, 1);
+  // Round the legs only (the sprite is wider than the dog's feet).
+  for (let i = 2; i < s.w - 2; i++) if ((i + k) % 3 !== 0) g.fillRect(left + i, wl, 1, 1);
 }
