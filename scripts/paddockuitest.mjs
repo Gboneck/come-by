@@ -38,6 +38,7 @@ const spot = await page.evaluate(async () => {
   return null;
 });
 check('found open land', !!spot, spot);
+await page.evaluate((s) => { window.__spot = s; }, spot);
 await page.evaluate(([x, y]) => { game.build.cx = x + 5; game.build.cy = y + 3; }, [spot.tx, spot.ty]);
 await page.waitForTimeout(1200);
 const toScreen = (wx, wy) => page.evaluate(([wx, wy]) => { const v = game.view(); return [wx - v.ox, wy - v.oy]; }, [wx, wy]);
@@ -73,14 +74,15 @@ let gate = await page.evaluate(() => ({ ...game.build.paddock.draft.gate }));
 check('the gate drags round onto the east side', gate.side === 3, gate);
 // 4. Steppers and the gate walk (as the buttons call them).
 await page.evaluate(async () => { const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const ed = game.build.paddock; ed.step(R, 'h', 1); ed.step(R, 'h', -1); ed.step(R, 'h', -1); ed.gateStep(R, -1); });
-d = await page.evaluate(() => ({ ...game.build.paddock.draft.r, gate: game.build.paddock.draft.gate }));
-check('H- shrinks the south side, the gate walks back along the east side', d.h === 5 && d.gate.side === 3 && d.gate.at === 1, d);
+d = await page.evaluate(async () => { const p = await import('/src/ui/paddockbuild.ts'); return { ...game.build.paddock.draft.r, gate: game.build.paddock.draft.gate, minH: p.paddockRules().size.minH }; });
+check('H- shrinks the south side (to its least), the gate walks back along the east side', d.h === Math.max(d.minH, 5) && d.gate.side === 3 && d.gate.at === 1, d);
+const H = d.h;
 await page.screenshot({ path: `${root}/shots/paddock/draft.png` });
 // 5. Build it.
 const coins0 = await page.evaluate(() => game.coins);
 await page.keyboard.press('Space'); await page.waitForTimeout(150);
-const built = await page.evaluate(async () => { const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const b = game.ranch.buildings.filter((b) => R.is(b)); return { n: b.length, r: b[0] && { tx: b[0].tx, ty: b[0].ty, w: b[0].w, h: b[0].h, gate: b[0].gate }, coins: game.coins, draft: !!game.build.paddock.draft, msg: game.build.msg?.text }; });
-check('SPACE builds it and pays', built.n === 1 && built.r.w === 12 && built.r.h === 5 && built.coins < coins0 && !built.draft, { ...built, coins0 });
+const built = await page.evaluate(async () => { const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const b = game.ranch.buildings.filter((b) => R.is(b) && b.tx === window.__spot.tx); return { n: b.length, r: b[0] && { tx: b[0].tx, ty: b[0].ty, w: b[0].w, h: b[0].h, gate: { ...b[0].gate } }, coins: game.coins, draft: !!game.build.paddock.draft, msg: game.build.msg?.text }; });
+check('SPACE builds it and pays', built.n === 1 && built.r.w === 12 && built.r.h === H && built.coins < coins0 && !built.draft, { ...built, coins0 });
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${root}/shots/paddock/built.png` });
 // 6. Tap the paddock: the inspect card; U opens it to extend.
@@ -94,7 +96,7 @@ check('U on the paddock opens it to extend', ext && ext.base, ext);
 [ax, ay] = await knob('n');
 await drag(ax, ay, ax, ay - 16);
 const q = await page.evaluate(async () => { const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const ed = game.build.paddock; const land = (x, y) => game.build.buildable(game, x, y); return { r: { ...ed.draft.r }, q: ed.quote(game, R, land), full: R.price(ed.draft.r) }; });
-check('dragging the north handle up grows it, priced at the difference', q.r.h === 7 && q.r.ty === built.r.ty - 2 && q.q.cost > 0 && q.q.cost < q.full, q);
+check('dragging the north handle up grows it, priced at the difference', q.r.h === H + 2 && q.r.ty === built.r.ty - 2 && q.q.cost > 0 && q.q.cost < q.full, q);
 // 8. Pulling a side inward stops at the old fence.
 [ax, ay] = await knob('e');
 await drag(ax, ay, ax - 40, ay);
@@ -103,13 +105,13 @@ check('a side cannot come in past the old fence', d.w === 12 && d.tx === built.r
 await page.screenshot({ path: `${root}/shots/paddock/extend.png` });
 const c1 = await page.evaluate(() => game.coins);
 await page.keyboard.press('Space'); await page.waitForTimeout(150);
-const after = await page.evaluate(async () => { const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const b = game.ranch.buildings.find((b) => R.is(b)); return { r: { tx: b.tx, ty: b.ty, w: b.w, h: b.h }, gate: b.gate, coins: game.coins, msg: game.build.msg?.text }; });
-check('SPACE extends it and pays the difference', after.r.h === 7 && c1 - after.coins === q.q.cost, { ...after, paid: c1 - after.coins });
+const after = await page.evaluate(async () => { const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const b = game.ranch.buildings.find((b) => R.is(b) && b.tx === window.__spot.tx); return { r: { tx: b.tx, ty: b.ty, w: b.w, h: b.h }, gate: { ...b.gate }, coins: game.coins, msg: game.build.msg?.text }; });
+check('SPACE extends it and pays the difference', after.r.h === H + 2 && c1 - after.coins === q.q.cost, { ...after, paid: c1 - after.coins });
 check('the gate stayed on the same fence post after the north side moved', after.gate.side === 3 && after.gate.at === built.r.gate.at + 2, { before: built.r.gate, after: after.gate });
 // 8b. A trough dropped inside the paddock.
 const fx = await page.evaluate(async () => {
   const c = await import('/src/ranch/catalog.ts'); const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules();
-  const b = game.build, pd = game.ranch.buildings.find((x) => R.is(x));
+  const b = game.build, pd = game.ranch.buildings.find((x) => R.is(x) && x.tx === window.__spot.tx);
   b.item = c.CATALOG.findIndex((d) => d.id === 'trough');
   b.cx = pd.tx - 3; b.cy = pd.ty + 2;
   const outside = b.ghost(game).reason;
@@ -121,7 +123,7 @@ check('a trough outside is refused, inside is fine', fx.outside === 'PLACE IT IN
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${root}/shots/paddock/trough.png` });
 await page.keyboard.press('Space'); await page.waitForTimeout(150);
-const fx2 = await page.evaluate(async () => { const c = await import('/src/ranch/catalog.ts'); const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const pd = game.ranch.buildings.find((x) => R.is(x)); game.build.item = c.CATALOG.findIndex((d) => d.id === p.paddockRules().tool); game.build.cx = pd.tx + 4; game.build.cy = pd.ty + 3; return R.fixtureNames(pd).length; });
+const fx2 = await page.evaluate(async () => { const c = await import('/src/ranch/catalog.ts'); const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const pd = game.ranch.buildings.find((x) => R.is(x) && x.tx === window.__spot.tx); game.build.item = c.CATALOG.findIndex((d) => d.id === p.paddockRules().tool); game.build.cx = pd.tx + 4; game.build.cy = pd.ty + 3; return R.fixtureNames(pd).length; });
 check('SPACE puts the trough in the paddock', fx2 === 1, fx2);
 // 9. Esc on a draft cancels the draft, not build mode.
 await page.keyboard.press('Space'); await page.waitForTimeout(80); // cursor is on the paddock: opens it again
