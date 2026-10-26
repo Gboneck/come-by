@@ -1086,6 +1086,35 @@ less noise". The world is now drawn at two fine pixels to a world pixel
       landscape.
 - [x] Round four's morning mist is gone: at double density its dither laid
       a grid of dots over every morning.
+- [x] The rest of the valley on the fine grid:
+      - the hidden places: stones rounded by Scale2x, cairns of shaded
+        pebbles, fruit trees and the willow as clump crowns, drystone walls
+        with ragged ruined tops, the hut floor, the wagon, the falls,
+        keepsakes and glints, the woven hurdle
+      - the valley projects: reeds with bulrushes, brambles and scrub, the
+        hayrick, the mended hut, the fold gate, slates, the mill pool and
+        its waterwheel, signboards, loads, the midsummer bonfire
+      - the trophy board, the buyers' yard dressing and gifts, the
+        placeable decor, build mode's road edges and gate arrow
+- [x] Wildlife and small life as fine sprites:
+      - rabbits, deer, crows, frogs, butterflies and birds
+      - smoke as round puffs, breath, falling leaves edge-on then flat,
+        drops, feathers, a fish with a flashing belly, rings, footprints,
+        fireflies with a glow
+- [x] Checks:
+      - typecheck, build and shot: clean
+      - picturetest: ok by day and night (and Platform's chunk test)
+      - regions in every season, weather and time of day
+      - tune --seed=7 identical to base, for sheep and for cattle in a
+        winter storm (the world data keeps its old outlines, see Decisions)
+      - perftest, back to back with platform-r5 (best batch, phone size):
+        | scene | 4x mine | 4x base | 6x mine | 6x base |
+        |---|---|---|---|---|
+        | title | 5.5 ms | 9.5 ms | 10.2 ms | 14.2 ms |
+        | day | 11.3 ms | 13.6 ms | 18.3 ms | 21.5 ms |
+        | worst | 18.4 ms | 18.7 ms | 25.6 ms | 28.8 ms |
+        Faster than base: the per-frame ground-shade and season pixel
+        passes are gone, and the chunks are painted once per moment.
 
 ## M34 Double density: fine pixels and a readable font (platform, round five)
 - [x] Two grids: world pixels (the sim, the map, layout, the old art) and
