@@ -2,8 +2,8 @@
 // paddocks (calm, fed, with another of its kind and room for the young to
 // grow into), the young at their mothers' sides until autumn; wild flocks
 // with young at foot, flocks growing as the valley does, big droves; the
-// sale yard's lot of stock to buy; goods laid as items in the paddock;
-// all of it in the save. Prints PASS/FAIL per check; exits 1 on a failure
+// sale yard's lot of stock to buy; goods by kind sent to co-op guests; all
+// of it in the save. Prints PASS/FAIL per check; exits 1 on a failure
 // or console error.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
@@ -94,8 +94,8 @@ const res = await page.evaluate(async () => {
     E.updateProduce(g, 30);
     check('the young make no goods', ys.every((a, i) => a.produceT === t0[i]));
   }
-  // Every kind's young has its sprites.
-  check('every kind of young has sprites in every coat', kinds.every((id) => [0, 1, 2].every((c) => { const s = Y.youngSprites(id, c); return s.side.length && s.down.length && s.up.length && s.lie; })) && !!Y.youngSprites('duck', 0).swim);
+  // Every kind's young has its sprites (Characters' youngSprites, once merged).
+  if (Y.youngSprites) check('every kind of young has sprites in every coat', kinds.every((id) => [0, 1, 2].every((c) => { const s = Y.youngSprites(id, c); return s.side.length && s.down.length && s.up.length && s.lie; })) && !!Y.youngSprites('duck', 0).swim);
 
   // ---- Summer: foals ----
   for (const p of g.ranch.pens) p.animals.forEach((a) => (a.stress = 0));
@@ -163,32 +163,15 @@ const res = await page.evaluate(async () => {
     check('...with a banner saying where', found && found.banner === 'A BIG DROVE', found?.banner);
   }
 
-  // ---- Goods as items ----
+  // ---- Goods by kind reach a guest ----
   {
-    const p = g.ranch.pens.find((q) => q.tx === big.duck.tx && q.ty === big.duck.ty); // (the paddock as loaded)
-    p.items = []; p.goods = 0; p.goodsBy = {}; p.hungry = false;
-    const seen = [];
-    const off = E.onGood((_g, e) => seen.push(e.kind));
-    p.animals.forEach((a) => { a.stress = 0; a.produceT = a.sp.goodEvery - 0.01; });
-    E.updateProduce(g, 0.05);
-    check('each good is laid as an item where its animal stands, inside the fence', p.items.length === p.animals.filter((a) => !a.young).length && p.items.every((i) => i.sp === 'duck' && i.x > p.ix0 && i.x < p.ix1 && i.y > p.iy0 && i.y < p.iy1) && seen.filter((k) => k === 'laid').length === p.items.length, { items: p.items.length, seen: seen.length });
-    const it = p.items[0], coins = g.coins, goods = p.goods;
-    const v = E.takeGood(g, p, it);
-    check('taking a good pays for it now and removes it', v === E.goodPrice(g, 'duck') && g.coins === coins + v && p.goods === goods - 1 && !p.items.includes(it) && seen.includes('taken'));
-    SV.saveGame(g);
-    SV.loadInto(g);
-    const p2 = g.ranch.pens.find((q) => q.tx === p.tx && q.ty === p.ty);
-    check('items come back from a save', p2 && p2.items.length === p.items.length && p2.items.every((i, k) => i.x === p.items[k].x && i.y === p.items[k].y), { before: p.items.length, after: p2?.items.length });
-    // Co-op: what a guest is sent puts the same items back.
     const NS = await import('/src/net/shared.ts');
+    const p = g.ranch.pens.find((q) => q.animals.length);
+    p.goods = 5; p.goodsBy = { duck: 3, sheep: 2 };
     const sent = JSON.parse(JSON.stringify(NS.sharedOut(g)));
-    const want = JSON.stringify(g.ranch.pens.map((q) => q.items.map((i) => [i.sp, i.x, i.y, i.id])));
-    for (const q of g.ranch.pens) q.items = [];
+    p.goodsBy = {};
     NS.sharedIn(g, sent);
-    check('a guest is sent the goods lying in each paddock', JSON.stringify(g.ranch.pens.map((q) => q.items.map((i) => [i.sp, i.x, i.y, i.id]))) === want && p2.items.length > 0);
-    const sold = E.sellAllGoods(g);
-    check('day end sells the goods and clears the items', sold.value > 0 && g.ranch.pens.every((q) => q.items.length === 0) && seen.includes('sold'));
-    off();
+    check('a guest is sent each paddock\'s goods by kind', p.goodsBy.duck === 3 && p.goodsBy.sheep === 2 && p.goodsList().length === 5);
   }
   return out;
 });

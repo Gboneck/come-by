@@ -79,7 +79,8 @@ original and drawn in code. No external art files, ever.
   old bridge, the shearing shed, the dairy, the agility course, saves,
   `scripts/breedtest.mjs` checks herds that grow: breeding by kind and
   season (calm, fed, pairs, room), the young at their mothers, wild young,
-  bigger flocks, big droves, the sale yard's lot, goods as items, saves,
+  bigger flocks, big droves, the sale yard's lot, goods by kind to guests,
+  saves,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
   include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
@@ -238,7 +239,7 @@ needs a line there.
   `game.ranch.village`), `farmwork.ts` (the shearing shed, the dairy, the
   agility yard: `game.farmwork`), `herds.ts` (the sale yard's daily lot
   of stock, big droves: `game.herds`; breeding is in `seasonal.ts`, flock
-  sizes in `spawner.ts`, goods as items with events in `economy.ts`),
+  sizes in `spawner.ts`),
   `projects.ts` (valley projects: herding work in the hidden places that
   changes them for good: `game.projects`; art in `src/art/projects.ts`),
   `favour.ts` (each buyer's favour and what it brings: `game.favour`),

@@ -1040,9 +1040,10 @@ Before → after, in plain words:
       came; the young grow up in autumn and the herd is that much bigger
 - [x] Ducklings, kids, calves and foals at their mothers' sides, as lambs
       are (the same bond: a mother turns back for her young, both fret
-      apart), with their own sprites (`youngSprites` in `src/art/young.ts`;
-      ducklings swim) and their own calls (the audio's young-and-mother
-      calls now key on the young, in each kind's voice, pitched up)
+      apart), with their own calls (the audio's young-and-mother calls now
+      key on the young, in each kind's voice, pitched up). Characters draws
+      them at 2x (`youngSprites`, characters-r5); on this branch alone they
+      draw as lambs
 - [x] Wild flocks grow as the valley does: a sixth bigger for each tier a
       region has been open (up to two-thirds again), a fourth flock after
       three tiers, and wild young at foot in each kind's season (from tier
@@ -1055,15 +1056,16 @@ Before → after, in plain words:
       kind in turn, a few head at four times what one pays delivered):
       stand by one and NIP at the fence, then walk it home. The fair sets
       out pairs of the smaller rare breeds (a pair breeds rare young)
-- [x] Goods as items (`src/systems/economy.ts`, for UI to show): each good
-      is laid where its animal stands and lies in the paddock until sold at
-      day's end or taken (`takeGood` pays now); `onGood` events for laid,
-      taken and sold; saved, and shared with co-op guests
+- [x] Goods that can be seen are UI's (piles per kind along the back fence,
+      a "+1" particle, the sale's cart, ui-r5); for them each paddock's
+      `goodsBy` now reaches co-op guests (shared.ts 'goodsBy'), so a mixed
+      paddock's piles show on a guest's screen too
 - [x] Paddock density: big paddocks now pack up to three-quarters again a
       tile at four times the old pen's area (was half again); an 8x7 still
       holds 16. A 16x12 holds 44 sheep and looks like a herd with room to
       move. More land in use was what slowed the bot most
-- [x] `scripts/breedtest.mjs` (29 checks); seasontest updated (room for
+- [x] `scripts/breedtest.mjs` (27 checks, 28 once the young's sprites are
+      merged); seasontest updated (room for
       lambs, the new flock sizes, the fair's pairs); the pace bot buys the
       lot when it has coin and room, and pacetest's year table counts the
       young, stock bought and the herd
@@ -2026,9 +2028,9 @@ alone rather than risk changing how they herd.
 - The sale yard's lot: one kind a day in turn (of the kinds whose region is
   open), at four times its delivered value (duck 8$, sheep 20$, goat 32$,
   cow 56$, pony 120$). The lot makes way for the fair's breeders.
-- Goods items: at most 48 shown a paddock (the count goes on); laid under
-  the animal, nudged inside the fence and off fixtures. Drawing them is
-  UI's.
+- Goods as items lying where they were laid were built and then dropped:
+  UI shows each paddock's goods as piles by kind, which read better (a
+  churn of milk where a cow stood would look odd) and need no save change.
 - The audio's mother-and-young calls keyed on the mother's `lamb` link, so
   ewes called as if lost; they now key on `young`.
 - The unseeded ordertest is flaky on this branch and on the base (the bot

@@ -93,12 +93,6 @@ export function paddockCapacity(w: number, h: number, level = 1) {
 // ring) and a hay rack (less hay wasted in winter).
 export type FixtureKind = 'trough' | 'shelter' | 'rack';
 export interface PenFixture { kind: FixtureKind; tx: number; ty: number }
-
-// A good lying in a paddock where it was laid (an egg, a fleece, a cheese, a
-// pail of milk), world px, until it is sold at day's end or taken
-// (systems/economy.ts). `id` is unique in the game; `t` when it was laid.
-export interface GoodItem { id: number; sp: SpeciesId; x: number; y: number; t: number }
-export const ITEMS_MAX = 48; // a paddock shows at most this many (its goods count on)
 export const FIXTURE_SIZE: Record<FixtureKind, { w: number; h: number }> = { trough: { w: 2, h: 1 }, shelter: { w: 3, h: 2 }, rack: { w: 2, h: 1 } };
 
 // A paddock: any size (src/ranch/paddock.ts has the rules), its gate on
@@ -115,7 +109,6 @@ export class Pen extends Building implements Enclosure {
   goods = 0; // produce waiting to be collected (whole units)
   goodsBy: Partial<Record<SpeciesId, number>> = {}; // ... by the kind that made it
   goodsFrac = 0;
-  items: GoodItem[] = []; // the goods you can see, where they lie
   fixtures: PenFixture[] = [];
   sheltered = false; // within a barn's protection
   hungry = false; // went without hay last winter night: no goods today

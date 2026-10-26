@@ -3,7 +3,7 @@ import { ellipse, rect } from '../gfx/draw';
 import { drawSpr, tint, type Sprite } from '../gfx/sprite';
 import { seasonLook } from '../art/seasonlook';
 import { animalSprites, type AnimalSprites } from '../art/animals';
-import { youngSprites } from '../art/young';
+import { lambSprites } from '../art/young';
 import { hash2 } from '../rng';
 import { gust } from './wind';
 import type { Animal } from '../entities/animal';
@@ -88,7 +88,7 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, ni
   // eyes wide, whatever it is doing.
   const wary = a.stress > 0.4 || a.pressure > 0.2 || a.panicT > 0;
   const scared = a.stress > 0.7 || a.panicT > 0;
-  const S: AnimalSprites = a.young ? youngSprites(a.sp.id, a.coat, scared) : animalSprites(a.sp.id, a.coat, scared);
+  const S: AnimalSprites = a.young ? lambSprites(a.coat, scared) : animalSprites(a.sp.id, a.coat, scared);
   const p = poseOf(a, t, night);
   const id = a.sp.id;
   let hop = a.hop > 0 ? -Math.round(Math.sin(a.hop * Math.PI) * 2) : 0;
