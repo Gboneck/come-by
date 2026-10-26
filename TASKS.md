@@ -1540,3 +1540,11 @@ another origin are never answered from the cache.
 - Valley projects and the village (other sessions this round) are read
   through an optional view (`projects.done`, `ranch.village.built`), so
   this branch builds without them and the badges light up once merged.
+- Agreed with the other sessions this round: favour owns the village's
+  market square (its deed is the drover's trust, favour 2; the first
+  cottage stays "fill an order"), and a friend's name goes up over their
+  stall there; the Ledger's extra pages use Feel and UI's page shape
+  (`LEDGER_PAGES`, drawn in the ink they are given); the badge card takes
+  the tier card's slot and waits behind banners; the ribbon board stands
+  just past the farmhouse's front right corner (World and light). The
+  merge steps are in the session notes (favour-achievements.md).
