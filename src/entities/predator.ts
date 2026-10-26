@@ -1,5 +1,6 @@
 import { C } from '../palette';
-import { ellipse, px } from '../gfx/draw';
+import { fine } from '../gfx/screen';
+import { fineShadow, toFinePx } from '../art/hd';
 import { drawSpr } from '../gfx/sprite';
 import { predatorSprites, type PFrame } from '../art/predators';
 import { BLOCK_ANIMAL, CS, SOLID, type WorldMap } from '../world/map';
@@ -329,9 +330,10 @@ export class Predator {
     const wolf = this.kind === 'wolf';
     const side = this.face === 'l' || this.face === 'r';
     const sitting = this.state === 'dig' && this.digT < this.howlFor;
-    const rx = !side ? (wolf ? 4 : 3) : sitting ? (wolf ? 5 : 4) : wolf ? 8 : 6;
+    // Radii in fine pixels, under the body (not the head).
+    const rx = !side ? (wolf ? 8 : 6) : sitting ? (wolf ? 10 : 8) : wolf ? 15 : 12;
     const dx = this.face === 'r' ? -1 : this.face === 'l' ? 1 : 0;
-    ellipse(g, this.x + dx * (sitting ? 2 : 1), this.y + 1, rx, 1, C.sage);
+    fineShadow(g, this.x + dx * (sitting ? 2 : 1), this.y + 1, rx, 2, C.sage);
   }
 
   draw(g: CanvasRenderingContext2D) {
@@ -340,7 +342,9 @@ export class Predator {
   }
 
   // Eyes catch the light above the dark: a pair of glints that ride with
-  // the head, blink now and then, and flash when it looks your way.
+  // the head, blink now and then, and catch a highlight when it looks your
+  // way. PFrame.eyes are fine pixels from the sprite's anchor, which lands
+  // where drawSpr puts it.
   drawEyes(g: CanvasRenderingContext2D, t: number) {
     if (!this.active) return;
     const e = this.pose().eyes;
@@ -350,15 +354,24 @@ export class Predator {
     const c = (t + seed * 9) % per;
     if (c < 0.12 || (seed > 0.5 && c > 0.3 && c < 0.4)) return; // a blink, some a double
     const flip = this.face === 'l';
-    const flare = this.face === 'd' && (t * 1.3 + seed * 5) % 3.1 < 0.14;
-    const x = Math.round(this.x), y = Math.round(this.y + 1);
-    // Dark sockets either side first, so the pair stands out of the dither
-    // (and from the buttercups in the grass).
-    for (let i = 0; i < e.length; i += 2) {
-      const ex = x + (flip ? -e[i] : e[i]), ey = y + e[i + 1];
-      px(g, ex - 1, ey, C.plum);
-      px(g, ex + 1, ey, C.plum);
-    }
-    for (let i = 0; i < e.length; i += 2) px(g, x + (flip ? -e[i] : e[i]), y + e[i + 1], flare ? C.wool : C.butter);
+    const toYou = this.face === 'd';
+    const flare = toYou && (t * 1.3 + seed * 5) % 3.1 < 0.14;
+    const ax = toFinePx(this.x), ay = toFinePx(this.y + 1);
+    fine(g, (fg) => {
+      for (let i = 0; i < e.length; i += 2) {
+        const gx = ax + (flip ? -e[i] - 1 : e[i]), gy = ay + e[i + 1];
+        // Dark sockets either side, so the pair stands out of the dither
+        // (and from the buttercups in the grass), then the 2x2 glint.
+        fg.fillStyle = C.plum;
+        fg.fillRect(gx - 1, gy, 1, 2);
+        fg.fillRect(gx + 2, gy, 1, 2);
+        fg.fillStyle = flare ? C.wool : C.butter;
+        fg.fillRect(gx, gy, 2, 2);
+        if (toYou) {
+          fg.fillStyle = C.wool;
+          fg.fillRect(gx + (i ? 1 : 0), gy, 1, 1);
+        }
+      }
+    });
   }
 }

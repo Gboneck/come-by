@@ -1,917 +1,769 @@
-import { spr, type Sprite } from '../gfx/sprite';
+import type { Sprite } from '../gfx/sprite';
+import { spr2 } from './hd';
 
-// Coyotes: lean, sage, outlined in plum so the shape reads, big ears, a long
-// snout and a bushy tail with a dark tip. Wolves: bigger and heavier,
-// wool-grey with a plum saddle, a blocky muzzle and a ruff.
+// Coyotes and wolves at double density: every grid here is in fine pixels
+// (two per world pixel), built through spr2.
 //
-// Side grids face right (drawn mirrored for left), down grids face the
-// camera, up grids face away. Each pose is put together once from parts
-// (body, head, legs) and cached. 'e' marks an eye: buttercup by day, and
-// where a glint goes above the night dither (in a side view the far eye
-// glints two pixels behind the near one). The red bandana colour is never
+// Coyote: lean and leggy, sage with a plum outline, tall ears with a wool
+// inner ear, a long narrow muzzle, a wool bib and belly, a brush tail with
+// a dark tip. Wolf: bigger and heavier, wool-grey with a plum saddle whose
+// edge breaks into tufts, a ruff at the throat, a blocky muzzle, sage
+// inner ears and underside.
+//
+// Side views face right (drawn mirrored for left); bodies and heads are
+// hand-drawn per pose, legs are drawn per frame along hip-joint-paw lines
+// from small gait tables, so every gait keeps its joints. 'e' marks an eye:
+// buttercup by day and where a night glint goes. The bandana red is never
 // used here: it belongs to the player.
 
 export interface PFrame {
   s: Sprite;
-  eyes: number[]; // glints as dx, dy pairs from the anchor, facing right
+  // Night eye glints, in FINE pixels from the anchor (facing right): the
+  // top-left of each 2x2 glint, as dx, dy pairs. Facing left, a glint's
+  // left edge is at -(dx + 1).
+  eyes: number[];
 }
 
 export interface FacingSet {
   stand: PFrame;
-  creep: PFrame[]; // stalking, low
-  run: PFrame[]; // the rush
+  creep: PFrame[];
+  run: PFrame[];
   flee: PFrame[];
   carry: PFrame[];
 }
 
 export interface PredatorSprites {
   stand: PFrame;
-  creep: PFrame[];
-  rush: PFrame[];
+  creep: PFrame[]; // stalking, six frames
+  rush: PFrame[]; // flat gallop, four frames
   flee: PFrame[];
   carry: PFrame[];
   dig: PFrame[];
-  howl: PFrame[]; // sitting, head level; head thrown back; mouth open
+  howl: PFrame[]; // sitting with the head level; thrown back; mouth open
   down: FacingSet;
   up: FacingSet;
 }
 
 type Grid = string[];
-type Stroke = [number, number, string?];
+type M = string[][];
+type Pt = [number, number];
 
-function put(m: string[], x: number, y: number, c: string) {
-  if (y < 0 || y >= m.length || x < 0) return;
-  const r = m[y].padEnd(x + 1, '.');
-  m[y] = r.slice(0, x) + c + r.slice(x + 1);
+const blank = (w: number, h: number): M => Array.from({ length: h }, () => Array<string>(w).fill('.'));
+function set(m: M, x: number, y: number, c: string) {
+  if (y >= 0 && y < m.length && x >= 0 && x < m[0].length) m[y][x] = c;
+}
+function lay(m: M, rows: Grid, ox: number, oy: number) {
+  rows.forEach((r, y) => {
+    for (let x = 0; x < r.length; x++) if (r[x] !== '.') set(m, x + ox, y + oy, r[x]);
+  });
+}
+// Symmetric rows from their left halves (front and back views).
+const mir = (halves: Grid): Grid => halves.map((h) => h + [...h].reverse().join(''));
+
+// Coat pixels on the silhouette's edge become plum.
+function outline(m: M): M {
+  const H = m.length, W = m[0].length;
+  const at = (x: number, y: number) => (y < 0 || y >= H || x < 0 || x >= W ? '.' : m[y][x]);
+  return m.map((r, y) =>
+    r.map((c, x) => (c === '.' || c === 'p' || c === 'e' ? c : [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)].includes('.') ? 'p' : c)),
+  );
 }
 
-// Lay parts over each other ('.' is clear), then single pixels on top.
-function frame(h: number, parts: [Grid, number, number][], strokes: Stroke[] = []): Grid {
-  const m: string[] = Array.from({ length: h }, () => '');
-  for (const [rows, ox, oy] of parts)
-    rows.forEach((r, y) => {
-      for (let x = 0; x < r.length; x++) if (r[x] !== '.') put(m, x + ox, y + oy, r[x]);
-    });
-  for (const [x, y, c] of strokes) put(m, x, y, c ?? 'p');
-  return m;
+// A leg along hip-joint-paw. Near legs are a plum|coat|plum ribbon whose
+// coat runs up into the body; far legs a plum pair behind it. The paw
+// points along `dir` (+1 forward).
+function limb(m: M, pts: Pt[], near: boolean, dir: number, core: string) {
+  const put = (x: number, y: number, c: string, over: boolean) => {
+    if (y < 0 || y >= m.length || x < 0 || x >= m[0].length) return;
+    if (over || m[y][x] === '.') m[y][x] = c;
+  };
+  for (let i = 0; i + 1 < pts.length; i++) {
+    let [x0, y0] = pts[i];
+    const [x1, y1] = pts[i + 1];
+    const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (;;) {
+      if (near) {
+        put(x0 - 1, y0, 'p', false);
+        put(x0, y0, core, true);
+        put(x0 + 1, y0, 'p', false);
+      } else {
+        put(x0, y0, 'p', false);
+        put(x0 + 1, y0, 'p', false);
+      }
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  }
+  const [X, Y] = pts[pts.length - 1];
+  for (let i = -1; i <= 1; i++) put(X + i + dir, Y, 'p', true);
+  put(X, Y, 'p', true);
 }
 
-const at = (dx: number, dy: number, pts: [number, number][]): Stroke[] => pts.map(([x, y]) => [x + dx, y + dy, 'p']);
-
-// A stalking leg in three rows (thigh, shin, paw), six phases: planted
-// forward, under, back, lifting, carried, reaching. Paw null = lifted.
-const CREEP_STEP: [number, number, number | null][] = [[0, 1, 1], [0, 0, 0], [0, -1, -1], [-1, -1, null], [0, 0, null], [1, 1, null]];
-function creepLeg(L: Stroke[], bx: number, y0: number, k: number, near: boolean) {
-  const [a, b, c] = CREEP_STEP[((k % 6) + 6) % 6];
-  L.push([bx + a, y0, near ? 's' : 'p'], [bx + b, y0 + 1, 'p']);
-  if (c !== null) L.push([bx + c, y0 + 2, 'p']);
+// The stalking walk, six phases: paw dx, paw lift, joint dx, joint dy (from
+// the hip). Hocks fold back, wrists forward.
+type Step = [number, number, number, number];
+const HIND_WALK: Step[] = [[2, 0, -1, 3], [0, 0, -2, 3], [-3, 0, -3, 3], [-4, 1, -3, 2], [-1, 2, -2, 2], [2, 1, 0, 3]];
+const FORE_WALK: Step[] = [[2, 0, 1, 3], [0, 0, 0, 3], [-2, 0, -1, 3], [-3, 1, -1, 3], [0, 2, 1, 2], [3, 1, 2, 3]];
+function walkLeg(T: Step[], [rx, ry]: Pt, gy: number, ph: number): Pt[] {
+  const [pdx, lift, jx, jy] = T[((ph % 6) + 6) % 6];
+  return [[rx, ry], [rx + jx, ry + jy], [rx + pdx, gy - lift]];
 }
 
-// A short dragging step in two rows, four phases.
-const DRAG_STEP: [number, number, boolean][] = [[0, 1, false], [0, 0, false], [0, -1, false], [0, 0, true]];
-function dragLeg(L: Stroke[], bx: number, y0: number, k: number, near: boolean) {
-  const [kd, fd, up] = DRAG_STEP[((k % 4) + 4) % 4];
-  L.push([bx + kd, y0, near ? 's' : 'p'], [bx + fd, up ? y0 : y0 + 1, 'p']);
-}
-
-// The gallop, four frames of leg strokes from the hip / the shoulder:
-// stretched out, fore strike, gathered under, hind push.
-const GALLOP_HIND: [number, number][][] = [
-  [[0, 0], [-1, 1], [-2, 2], [1, 0], [0, 1]],
-  [[1, 0], [2, 1], [0, 0], [1, 1]],
-  [[1, 0], [2, 1], [3, 2], [0, 0], [1, 1]],
-  [[0, 0], [0, 1], [-1, 2], [1, 0], [1, 1], [1, 2]],
+// The gallop, four frames (stretched out and airborne, fore strike,
+// gathered under, hind push), each [far hind, far fore, near hind, near
+// fore] as joints from the hip / shoulder.
+const GALLOP: Pt[][][] = [
+  [[[0, 0], [-3, 3], [-6, 4]], [[0, 0], [4, 2], [7, 3]], [[0, 0], [-3, 3], [-6, 5]], [[0, 0], [4, 3], [7, 4]]],
+  [[[0, 0], [2, 3], [1, 5]], [[0, 0], [-2, 3], [-3, 5]], [[0, 0], [3, 3], [3, 4]], [[0, 0], [0, 3], [0, 6]]],
+  [[[0, 0], [3, 3], [5, 6]], [[0, 0], [-3, 3], [-5, 5]], [[0, 0], [4, 4], [7, 7]], [[0, 0], [-3, 3], [-5, 5]]],
+  [[[0, 0], [-2, 3], [-4, 7]], [[0, 0], [3, 2], [4, 2]], [[0, 0], [-1, 4], [-2, 7]], [[0, 0], [3, 2], [4, 3]]],
 ];
-const GALLOP_FORE: [number, number][][] = [
-  [[0, 0], [1, 1], [2, 2], [-1, 0], [0, 1]],
-  [[0, 0], [0, 1], [0, 2], [-1, 0], [-1, 1], [-2, 2]],
-  [[-1, 0], [-2, 1], [-3, 2], [0, 0], [-1, 1]],
-  [[0, 0], [1, 1], [-1, 0], [0, 1]],
-];
+
+interface Side {
+  stand: Grid;
+  creep: Grid; // body and head, legs added per frame
+  carry: Grid;
+  run: Grid;
+  gather: Grid;
+  flee: Grid;
+  dig: Grid;
+  digPaws: Grid[];
+  howlBody: Grid;
+  howlHeads: Grid[];
+}
 
 interface Rig {
-  stand: Grid;
-  creepTop: Grid;
-  creepH: number;
-  creepLegs: [number, number, number, number, number]; // far hind, far fore, near hind, near fore x; leg top y
-  carryTop: Grid;
-  carryH: number;
-  carryLegs: [number, number, number, number, number];
-  runBody: Grid;
-  archBody: Grid;
-  fleeBody: Grid;
-  pinHead: Grid;
-  run: { h: number; head: number; hind: number; fore: number; belly: number }; // head x, legs x, rows to the legs
-  flee: { h: number; head: number; hind: number; fore: number; foreY: number; hindY: number };
-  digBody: Grid;
-  digPaws: [number, number][][];
-  howl: Grid[];
+  side: Side;
+  core: string; // near legs' coat
+  creep: { w: number; h: number; hips: Pt[] }; // far hind, far fore, near hind, near fore
+  carry: { w: number; h: number; hips: Pt[] };
+  rush: { w: number; h: number; hips: Pt[]; legY: number }; // legY stretches the gallop
+  flee: { w: number; h: number; hips: Pt[]; legY: number };
+  dig: { w: number; h: number; paws: Pt };
+  howl: { w: number; h: number; body: number; heads: Pt[] };
   anchor: { stand: number; creep: number; run: number; flee: number; carry: number; dig: number; howl: number; front: number };
-  down: { stand: Grid; creep: Grid[]; run: Grid[]; flee: Grid[] };
-  up: { stand: Grid; creep: Grid[]; run: Grid[]; flee: Grid[] };
+  down: { stand: M; creep: M[]; run: M[]; flee: M[] };
+  up: { stand: M; creep: M[]; run: M[]; flee: M[] };
 }
 
 // ---- Coyote ----
 
-const COYOTE: Rig = {
+const COYOTE_SIDE: Side = {
   stand: [
-    '..........p.p....',
-    '.........pspsp...',
-    '.........pssesp..',
-    '........psssssswp',
-    '..pppppppswwwppp.',
-    '.pssssssssswp....',
-    'psspsswwsssp.....',
-    'pss.sp..ps.p.....',
-    'psp.s.p.p..p.....',
-    '.p..p.p.p..p.....',
+    '......................p...p.......',
+    '.....................psp.pwp......',
+    '.....................psspswwp.....',
+    '....................psssswwsp.....',
+    '....................psssssssp.....',
+    '...................pssssspesspp...',
+    '...................pssssssssssspp.',
+    '.................pssssssssssswwwpp',
+    '......pppppppppppssssswwwppppppp..',
+    '....ppsssssssssssssssswwwwwwp.....',
+    '...psssssssssssssssssssswwwpp.....',
+    '..psssssssssssssssssssssswwp......',
+    '.pssp.pssssssssssssssssssswp......',
+    'psssp.psssswwwwwwwwssssssswp......',
+    'psssp.psssspppppppppppssssp.......',
+    'pssp..ppsssp........psp.psp.......',
+    'psp..pp.pssp........psp.psp.......',
+    'ppp..pp.psp.........psp.psp.......',
+    '.p...pp.psp.........psp.psp.......',
+    '.....pp.psp.........pp..psp.......',
+    '.....pp.pssp........pp..psp.......',
+    '....ppp.pppp........ppp.pppp......',
   ],
-  creepTop: [
-    '............p.p..',
-    '.......pp..pspsp.',
-    '..pppppsspppssesp',
-    'ppsssssssssssssswp',
-    'psppsswwsswwppppp',
-    'ps',
-    '.p',
+  creep: [
+    '..........................p...p.....',
+    '.........................psp.pwp....',
+    '............pppppp.......psspswwp...',
+    '..........ppssssssp.....psssswwsp...',
+    '....ppppppssssssssspp..pssssssssp...',
+    '...pssssssssssssssssspppsssssspespp.',
+    '..psssssssssssssssssssssssssssssssspp',
+    '.pssssssssssssssssssssssssssssswwwwpp',
+    '.pssssssssssssssssssssssssswwwppppp..',
+    'psssssssswwwwwwwwssssswwwwwwp.......',
+    'psssp.pssppppppppppppsswwwp.........',
+    'pssp................................',
+    'psp.................................',
+    'pp..................................',
   ],
-  creepH: 8,
-  creepLegs: [5, 10, 3, 9, 5],
-  carryTop: [
-    '...........p.p..',
-    '..........pspsp.',
-    '..........pssesp',
-    '.........psssssswp',
-    '.........pswwppp.',
-    '......ppppsswp...',
-    '..ppppssssssp....',
-    '.psssswwwsssp....',
-    'ps.p',
-    'p..',
+  carry: [
+    '.......................p...p......',
+    '......................psp.pwp.....',
+    '......................psspswwp....',
+    '.....................psssswwsp....',
+    '.....................psssssssp....',
+    '....................pssssspesspp..',
+    '....................pssssssssssspp',
+    '...................psssssssssswwwp',
+    '...................pssssswwwppppp.',
+    '..................pssssswwwwp.....',
+    '.............ppppsssssswwwwp......',
+    '.......pppppppssssssssswwwp.......',
+    '....ppssssssssssssssssssswp.......',
+    '...pssssssssssssssssssssswp.......',
+    '..pssssssssswwwwwwwwsssssp........',
+    '.pssp.psssppppppppppppssp.........',
+    'pssp..............................',
+    'psp...............................',
+    'pp................................',
   ],
-  carryH: 10,
-  carryLegs: [5, 10, 4, 9, 8],
-  runBody: [
-    '...pppppppppp',
-    'pssssssssssss',
-    '.ppsswwwwssss',
+  run: [
+    '..........................ppp........',
+    '.........................pswwp.......',
+    '.pppp.pppppppppppppppppppssssppp.....',
+    'ppssssssssssssssssssssssssssspessppp.',
+    'ppssssssssssssssssssssssssssssssssspp',
+    '.pppssssssssssssssssssssssssswpwpwpp.',
+    '....psssswwwwwwwssssssssswwwwppppp...',
+    '.....psssspppppppsssssswwwwwp........',
+    '......pssp.......psssssssp...........',
+    '.......pp.........ppppppp............',
   ],
-  archBody: [
-    '.....ppp.....',
-    '...ppsssppppp',
-    'pssssssssssss',
-    '.ppsswwwwssss',
+  gather: [
+    '..........pppppp...........ppp.......',
+    '........ppssssssppppp.....pswwp......',
+    '......ppssssssssssssspppppssssppp....',
+    '....ppsssssssssssssssssssssssspessppp',
+    '.pppssssssssssssssssssssssssssssssssp',
+    'ppssssssssssssssssssssssssssswpwpwpp.',
+    'ppppsssswwwwwwwssssssssswwwwppppp....',
+    '....psssspppppppsssssswwwwwp.........',
+    '.....pssp.......psssssssp............',
+    '......pp.........ppppppp.............',
   ],
-  fleeBody: [
-    '.......pppppp',
-    '....pppssssss',
-    '..ppsssssssss',
-    '..psssswwwsss',
-    '...ps........',
-    '...pp........',
+  flee: [
+    '...........................ppp......',
+    '..........pppppppp........pswwp.....',
+    '.......pppssssssssppppppppssssppp...',
+    '....pppssssssssssssssssssssspessppp.',
+    '...psssssssssssssssssssssssssssssspp',
+    '..psssssssssssssssssssssssssswwwwwpp',
+    '..psssssssswwwwwwwsssssssswwwppppp..',
+    '..pspssspppppppppsssssswwwwwp.......',
+    '...pssp.........psssssssp...........',
+    '....pp...........ppppppp............',
   ],
-  pinHead: [
-    '.ppp....',
-    'psssep..',
-    'ssssswwp',
-    'pwwpppp.',
-  ],
-  run: { h: 8, head: 12, hind: 4, fore: 11, belly: 3 },
-  flee: { h: 8, head: 12, hind: 4, fore: 11, foreY: 4, hindY: 5 },
-  digBody: [
-    'pp.................',
-    'pssp...............',
-    '.pssppp............',
-    '..psssspppp........',
-    '..pssssssssp.......',
-    '..pssswwssssp.p.p..',
-    '..ps.p..psssppspsp.',
-    '..ps.p..pssssssesp.',
-    '..ps.p..pspsssssswp',
-    '..p..p..p.p.pwwppp.',
-    '..p..p..p..........',
+  dig: [
+    '.pp.....................................',
+    'psspp...................................',
+    'psssspp.................................',
+    '.pssssspppppp...........................',
+    '..psssssssssspppp.......................',
+    '...pssssssssssssspppp...................',
+    '...psssssssssssssssssppp................',
+    '...pssssswwwwsssssssssssp...............',
+    '...psssp.pppppwwssssssssspp.p...p.......',
+    '...pssp......ppsssssssssssppsp.pwp......',
+    '...psp.........psssssssssspsspswwp......',
+    '...psp..........pssssssssssssswwsp......',
+    '...psp..........pssssssssssssssssp......',
+    '...psp..........psswwwssssssspesspp.....',
+    '...psp..........pswwwwssssssssssssspp...',
+    '...psp..........psp.pwwsssssssssswwwpp..',
+    '...pssp.........psp..pwwwwwwwppppppp....',
+    '...psp..........psp...pppppppp..........',
   ],
   digPaws: [
-    [[11, 10], [12, 10], [13, 10]],
-    [[10, 10]],
-    [[9, 10], [10, 10]],
-  ],
-  howl: [
     [
-      '.........p.p..',
-      '........pspsp.',
-      '........pssesp',
-      '.......psssssswp',
-      '.......pswwppp.',
-      '.......psswp...',
-      '......pssswp...',
-      '....ppssssp....',
-      '..ppsssssp.....',
-      '.pssssspsp.p...',
-      'pppppppsp.pp...',
+      '..psp.',
+      '..psp.',
+      '.psp..',
+      '.pppp.',
     ],
     [
-      '..........p..',
-      '.........psp.',
-      '.........pswp',
-      '........psswp',
-      '.......pseswp',
-      '......ppsswp.',
-      '.......psswp.',
-      '......psssswp',
-      '....ppsssssp.',
-      '..ppsssssp.p.',
-      '.pssssspsp.p.',
-      'pppppppsp.pp.',
+      '..psp.',
+      '..psp.',
+      '..psp.',
+      '..pppp',
     ],
     [
-      '.........pp..',
-      '........ps.p.',
-      '........psp.p',
-      '........pswwp',
-      '.......pseswp',
-      '......ppsswp.',
-      '.......psswp.',
-      '......psssswp',
-      '....ppsssssp.',
-      '..ppsssssp.p.',
-      '.pssssspsp.p.',
-      'pppppppsp.pp.',
+      '..psp..',
+      '...psp.',
+      '....psp',
+      '....ppp',
     ],
   ],
-  anchor: { stand: 7, creep: 7, run: 8, flee: 8, carry: 7, dig: 8, howl: 7, front: 3 },
+  howlBody: [
+    '..............psssswwp....',
+    '.............psssssswwp...',
+    '............pssssssswwp...',
+    '..........ppsssssssswwp...',
+    '........ppssssssssssswp...',
+    '......ppssssssssssssswp...',
+    '....ppssssssssssssssswp...',
+    '...psssssssssssspssppsp...',
+    '..psssssssssssssp.psp.psp.',
+    '.pssssssssssssp...psp.psp.',
+    'ppppppppppppppp..pppp.pppp',
+  ],
+  howlHeads: [
+    [
+      '....p...p.......',
+      '...psp.pwp......',
+      '...psspswwp.....',
+      '..psssswwsp.....',
+      '..psssssssp.....',
+      '.pssssspesspp...',
+      '.pssssssssssspp.',
+      'psssssssssswwwpp',
+      'psssswwwpppppp..',
+      '.psswwwwp.......',
+    ],
+    [
+      '...........pp...',
+      '..........pssp..',
+      '.........psswp..',
+      '........psssswp.',
+      '.......psssswwp.',
+      '..pp..psspesswp.',
+      '.psspppssssswwp.',
+      '.psssssssssswp..',
+      '..pssssssswwwp..',
+      '...pssssswwwp...',
+    ],
+    [
+      '..........pp....',
+      '.........pssp...',
+      '........psswp.p.',
+      '.......pssswppwp',
+      '.......psssspwwp',
+      '..pp..psspespwp.',
+      '.psspppssssswwp.',
+      '.psssssssssswp..',
+      '..pssssssswwwp..',
+      '...pssssswwwp...',
+    ],
+  ],
+};
+
+// Front: the face with its ears, a hump of shoulders over a lowered head,
+// the bib, then the legs.
+const C_FACE = {
+  alert: mir(['.pp.....', '.psp....', '.pwsp...', '.pwwsp..', '.pwwsspp', 'psssssss', 'psssssss', 'psspesss', 'psssssss', '.psswsss', '.pswwwss', '..pswwsp', '...pwwpp', '....ppww']),
+  pinned: mir(['........', '........', '........', 'pp......', 'pwpp.ppp', 'psssssss', 'psssssss', 'psspesss', 'psssssss', '.psswsss', '.pswwwss', '..pswwpp', '...pwppw', '....pwpw']),
+  flat: mir(['........', '........', '........', '........', '..pppppp', '.pssssss', 'psssssss', 'psspesss', 'psssssss', '.psswsss', '.pswwwss', '..pswwsp', '...pwwpp', '....ppww']),
+};
+const C_BIB = mir(['...pswww', '..psswww', '.psssssw', '.pspssss']);
+const C_HUMP = mir(['....pppp', '..ppssss', '.pssssss', '..ssssss', '...sssss', '....ssss']);
+function cFront(face: keyof typeof C_FACE, lift: [number, number], low = 0, hump = false): M {
+  const m = blank(16, 23 - low);
+  const y = hump ? 2 : 0;
+  if (hump) lay(m, C_HUMP, 0, 0);
+  lay(m, C_FACE[face], 0, y);
+  lay(m, C_BIB, 0, y + 14);
+  const ly = y + 18 - low;
+  for (let j = 0; j < 3; j++) for (const x of [1, 2, 13, 14]) set(m, x, ly + j, 'p'); // the hind legs, behind
+  for (const [x, up] of [[5, lift[0]], [10, lift[1]]] as Pt[]) {
+    for (let j = 0; j < 5 - up; j++) { set(m, x - 1, ly + j, 'p'); set(m, x, ly + j, 's'); set(m, x + 1, ly + j, 'p'); }
+    for (let i = -1; i <= 2; i++) set(m, x + i, ly + 4 - up, 'p');
+  }
+  return m;
+}
+// Back: head and ears, the neck, shoulders, waist, haunches; the tail over
+// them and the hind legs either side.
+const C_BACK = mir(['.pp.....', '.psp....', '.pssp...', '.psssppp', '.pssssss', '..psssss', '...pssss', '..psssss', '.psssssp', 'pssssssp', 'pssssssp', '.psssssp', '.psssssp', 'pssssssp', 'pswsssss', 'pswwssss', '.pswwsps']);
+const C_BACK_PIN = [...mir(['........', '........', '........', 'pp......', 'pspp.ppp']), ...C_BACK.slice(5)];
+const C_BACK_FLAT = [...mir(['........', '........', '........', '........', '..pppppp']), ...C_BACK.slice(5)];
+const C_TAIL = {
+  hang: ['.pssp.', 'pssssp', 'pssssp', 'pssssp', 'pssssp', '.pssp.', '.pppp.', '..pp..'],
+  lift: ['.pppp.', 'pssssp', 'pssssp', 'pssssp', '.pppp.', '..pp..'],
+  tuck: ['.pp.', 'pssp', '.pp.'],
+};
+function cBack(body: Grid, lift: [number, number], tail: keyof typeof C_TAIL, sway = 0, low = 0): M {
+  const m = blank(16, 24 - low);
+  lay(m, body, 0, 0);
+  const o = outline(m);
+  for (const [x, up] of [[3, lift[0]], [12, lift[1]]] as Pt[]) {
+    for (let j = 0; j < 7 - low - up; j++) { set(o, x - 1, 16 + j, 'p'); set(o, x, 16 + j, 's'); set(o, x + 1, 16 + j, 'p'); }
+    for (let i = -1; i <= 1; i++) set(o, x + i, 22 - low - up, 'p');
+  }
+  const tuck = tail === 'tuck';
+  C_TAIL[tail].forEach((r, j) => {
+    for (let i = 0; i < r.length; i++) if (r[i] !== '.') set(o, (tuck ? 6 : 5) + i + (j > 3 ? sway : 0), (tuck ? 16 : 13) + j, r[i]);
+  });
+  return o;
+}
+
+const COYOTE: Rig = {
+  side: COYOTE_SIDE,
+  core: 's',
+  creep: { w: 37, h: 17, hips: [[6, 10], [21, 10], [8, 10], [23, 10]] },
+  carry: { w: 34, h: 22, hips: [[6, 15], [21, 15], [8, 15], [23, 15]] },
+  rush: { w: 40, h: 17, hips: [[8, 8], [22, 9], [7, 8], [24, 9]], legY: 1 },
+  flee: { w: 40, h: 17, hips: [[8, 8], [22, 9], [7, 8], [24, 9]], legY: 1 },
+  dig: { w: 40, h: 22, paws: [16, 18] },
+  howl: { w: 30, h: 21, body: 10, heads: [[12, 0], [10, 1], [10, 1]] },
+  anchor: { stand: 15, creep: 15, run: 16, flee: 16, carry: 14, dig: 12, howl: 13, front: 8 },
   down: {
-    stand: [
-      '.p...p.',
-      'psp.psp',
-      'psspssp',
-      'psssssp',
-      'sessses',
-      'pswwwsp',
-      '.pwpwp.',
-      '.pswsp.',
-      'psswssp',
-      '.p.s.p.',
-      '.p...p.',
-    ],
-    creep: [
-      [
-        '..ppp..',
-        'p.psp.p',
-        'ps.s.sp',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        'ppwpwpp',
-        'ps...sp',
-        'p.....p',
-      ],
-      [
-        '..ppp..',
-        'p.psp.p',
-        'ps.s.sp',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        'ppwpwpp',
-        'ps...pp',
-        'p......',
-      ],
-      [
-        '..ppp..',
-        'p.psp.p',
-        'ps.s.sp',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        'ppwpwpp',
-        'ps...sp',
-        'p.....p',
-      ],
-      [
-        '..ppp..',
-        'p.psp.p',
-        'ps.s.sp',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        'ppwpwpp',
-        'pp...sp',
-        '......p',
-      ],
-    ],
-    run: [
-      [
-        '.......',
-        'pp...pp',
-        '.psssp.',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        '.pwpwp.',
-        '.pswsp.',
-        'ps.s.p.',
-        'p......',
-      ],
-      [
-        '.......',
-        'pp...pp',
-        '.psssp.',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        '.pwpwp.',
-        '.pswsp.',
-        '.p.s.sp',
-        '......p',
-      ],
-    ],
-    flee: [
-      [
-        '.......',
-        '.ppppp.',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        '.pwpwp.',
-        '.pswsp.',
-        'ps.s.p.',
-        'p......',
-      ],
-      [
-        '.......',
-        '.ppppp.',
-        'psssssp',
-        'sessses',
-        'pswwwsp',
-        '.pwpwp.',
-        '.pswsp.',
-        '.p.s.sp',
-        '......p',
-      ],
-    ],
+    stand: cFront('alert', [0, 0]),
+    creep: [cFront('alert', [0, 0], 2, true), cFront('alert', [1, 0], 2, true), cFront('alert', [0, 0], 2, true), cFront('alert', [0, 1], 2, true)],
+    run: [cFront('pinned', [1, 0]), cFront('pinned', [0, 1])],
+    flee: [cFront('flat', [1, 0], 1), cFront('flat', [0, 1], 1)],
   },
   up: {
-    stand: [
-      '.p...p.',
-      'psp.psp',
-      'psspssp',
-      'psssssp',
-      '.psssp.',
-      'psssssp',
-      'psspssp',
-      'ps.s.sp',
-      '.p.s.p.',
-      '.p.p.p.',
-      '...p...',
-    ],
-    creep: [
-      [
-        '.p...p.',
-        'psp.psp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        'psssssp',
-        'ps.s.sp',
-        'p.psp.p',
-        'p..p..p',
-      ],
-      [
-        '.p...p.',
-        'psp.psp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        'psssssp',
-        'ps.s.pp',
-        'p.psp..',
-        'p..p...',
-      ],
-      [
-        '.p...p.',
-        'psp.psp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        'psssssp',
-        'ps.s.sp',
-        'p.psp.p',
-        'p..p..p',
-      ],
-      [
-        '.p...p.',
-        'psp.psp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        'psssssp',
-        'pp.s.sp',
-        '..psp.p',
-        '...p..p',
-      ],
-    ],
-    run: [
-      [
-        'pp...pp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        'psssssp',
-        'ps.s.sp',
-        'p.psp.p',
-        'p..s...',
-        '...p...',
-      ],
-      [
-        'pp...pp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        'psssssp',
-        'ps.s.sp',
-        'p.psp.p',
-        '...s..p',
-        '...p...',
-      ],
-    ],
-    flee: [
-      [
-        'pp...pp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        '.psssp.',
-        'ps...sp',
-        'p.....p',
-      ],
-      [
-        'pp...pp',
-        '.psssp.',
-        'psssssp',
-        'psspssp',
-        '.psssp.',
-        'ps...pp',
-        'p......',
-      ],
-    ],
+    stand: cBack(C_BACK, [0, 0], 'hang'),
+    creep: [cBack(C_BACK, [1, 0], 'hang', 0, 1), cBack(C_BACK, [0, 0], 'hang', 0, 1), cBack(C_BACK, [0, 1], 'hang', 1, 1), cBack(C_BACK, [0, 0], 'hang', 1, 1)],
+    run: [cBack(C_BACK_PIN, [1, 0], 'lift'), cBack(C_BACK_PIN, [0, 1], 'lift')],
+    flee: [cBack(C_BACK_FLAT, [1, 0], 'tuck', 0, 1), cBack(C_BACK_FLAT, [0, 1], 'tuck', 0, 1)],
   },
 };
 
 // ---- Wolf ----
 
-const WOLF: Rig = {
+const WOLF_SIDE: Side = {
   stand: [
-    '...........p..p....',
-    '..........pwppwp...',
-    '..........pwwwwwep.',
-    '.........pwwwwwwwwwp',
-    '...ppppppppwwwwwssp.',
-    '..ppppppppwwwwpppp..',
-    '.pwwwwwwwwwwwwp.....',
-    'pwwpwssssssswp......',
-    'pww.wp...pw.p.......',
-    'psp.w.p..p..p.......',
-    '.p..p.p..p..p.......',
+    '...........................p....p.......',
+    '..........................psp..psp......',
+    '..........................pssp.pssp.....',
+    '.........................pwwsppwssp.....',
+    '........................pwwwwwwwwwwp....',
+    '.......................pwwwwwwwpewwppp..',
+    '.......................pwwwwwwwwwwwwwwpp',
+    '......................pwwwwwwwwwwwwwwwpp',
+    '...........ppppppppppppwwwwwwwssssspp...',
+    '.........ppppppppppppppwswpswwsppppp....',
+    '........ppppppppppppppwpwpsswwp.........',
+    '.......pppppppppppwpwpwwwwwwwwsp........',
+    '......pppwpwpwpwpwwwwwwwwwwwwwwsp.......',
+    '.....ppwwwwwwwwwwwwwwwwwwwwwwwwsp.......',
+    '....pwwwwwwwwwwwwwwwwwwwwwwwwwwsp.......',
+    '...pwwwwwwwssssssssssswwwwwwwwssp.......',
+    '..pwwwwpwwpsppppppppppppsswwwssp........',
+    '..pwwwp.pwwp............pwwp.psp........',
+    '.pwwwp..pwwp............pwp..psp........',
+    '.pwwsp.pwwp.............psp..psp........',
+    '.pwssp.pwp..............psp..psp........',
+    '.ppsp..psp..............psp..psp........',
+    '..pp...pssp.............pp...pssp.......',
+    '......ppppp.............ppp..ppppp......',
   ],
-  creepTop: [
-    '.............p..p..',
-    '........ppp.pwppwp.',
-    '..ppppppwwwppwwwwwep',
-    '.ppppppppwwwwwwwwwwwp',
-    'ppwwwwwwwwwwwwwwwssp',
-    'pwpwwsssssswwwpppp..',
-    'pw',
-    '.p',
+  creep: [
+    '.............................p....p.....',
+    '............................psp..psp....',
+    '..............pppppp........pssp.pssp...',
+    '...........pppppppppp......pwwsppwssp...',
+    '......ppppppppppppppppp...pwwwwwwwwwwp..',
+    '....pppppppppppppppppppp.pwwwwwwwpewwppp',
+    '...ppwpppwpwwpwwpwwpwwpwppwwwwwwwwwwwwwwp',
+    '..pwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwpp',
+    '.pwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwsssspp.',
+    '.pwwwwwwwwwwwwwwwwwwwwwwwwwswpswssppp...',
+    'pwwwwwwwwsssssssssswwwwwwswssspp........',
+    'pwwwp.pwwppppppppppppppwwsssp...........',
+    'pwwp....................................',
+    'pwsp....................................',
+    'pspp....................................',
+    '.pp.....................................',
   ],
-  creepH: 9,
-  creepLegs: [6, 12, 4, 11, 6],
-  carryTop: [
-    '............p..p..',
-    '...........pwppwp.',
-    '...........pwwwwep',
-    '..........pwwwwwwwwp',
-    '......ppppwwwwsspp.',
-    '...pppppppwwwpppp..',
-    '.ppwwwwwwwwwwp.....',
-    'pwpwwssssswwp......',
-    'pw.p',
-    'p',
+  carry: [
+    '........................p....p......',
+    '.......................psp..psp.....',
+    '.......................pssp.pssp....',
+    '......................pwwsppwssp....',
+    '.....................pwwwwwwwwwwp...',
+    '....................pwwwwwwwpewwppp.',
+    '....................pwwwwwwwwwwwwwwpp',
+    '...................pwwwwwwwwwwwwwwwpp',
+    '...................pwwwwwwwsssssppp..',
+    '..................pwwswpswwsppppp....',
+    '..............pppppwpwpwswwwp........',
+    '........ppppppppppppwpwwwwwwp........',
+    '.....ppppppppppppppwwwwwwwwsp........',
+    '...ppppppppppwpwwpwwpwwwwwwsp........',
+    '..pwpwwpwwpwwwwwwwwwwwwwwwwsp........',
+    '.pwwwwwwwssssssssssswwwwwssp.........',
+    '.pwwwp.pwwpppppppppppppwwsp..........',
+    'pwwp................................',
+    'pwsp................................',
+    'pspp................................',
+    '.pp.................................',
   ],
-  carryH: 10,
-  carryLegs: [6, 11, 5, 10, 8],
-  runBody: [
-    '...ppppppppppp',
-    'ppppppppppppww',
-    'pwwwwwwwwwwwww',
-    '.pppwsssssswww',
+  run: [
+    '..........................pppp............',
+    '.........................pwssp............',
+    '.pppp.pppppppppppppppppppwwwwwpppp........',
+    'ppwwwwpppppppppppppppwwwwwwwwpewwwppp.....',
+    'ppwwwwpwwpwwpwwpwwpwwwwwwwwwwwwwwwwwwwpp..',
+    '.pppwwwwwwwwwwwwwwwwwwwwwwwwwwwwwswpwpwpp.',
+    '....pwwwwwsssssssswwwwwwwwwwssssppppppp...',
+    '.....pwwwwpppppppppwwwwwwssssssp..........',
+    '......pwwp.........pwwwwwwwwwp............',
+    '.......pp...........ppppppppp.............',
   ],
-  archBody: [
-    '.....ppp......',
-    '...ppppppppppp',
-    'ppppppppppppww',
-    'pwwwwwwwwwwwww',
-    '.pppwsssssswww',
+  gather: [
+    '..........pppppppp..........pppp..........',
+    '........pppppppppppppp.....pwssp..........',
+    '......ppppppppppppppppppppppwwwwwpppp.....',
+    '....pppppppppppppppppwwwwwwwwwwwwpewwppp..',
+    '.ppppwwpwwpwwpwwpwwpwwwwwwwwwwwwwwwwwwwwpp',
+    'ppwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwswpwpwpp..',
+    'ppppwwwwwsssssssswwwwwwwwwwssssppppppp....',
+    '....pwwwwpppppppppwwwwwwssssssp...........',
+    '.....pwwp.........pwwwwwwwwwp.............',
+    '......pp...........ppppppppp..............',
   ],
-  fleeBody: [
-    '........ppppppp',
-    '.....pppppppppw',
-    '...ppppppwwwwww',
-    '..pwwwwwwwwwwww',
-    '..pwwwssssswwww',
-    '...pw..........',
-    '...pp..........',
+  flee: [
+    '..............................pppp......',
+    '...........pppppppppp........pwssp......',
+    '........pppppppppppppppppppppwwwwwpppp..',
+    '.....pppppppppppppppppppppwwwwwwpewwppp.',
+    '....pwpwwpwwpwwpwwpwwpwwpwwwwwwwwwwwwwpp',
+    '...pwwwwwwwwwwwwwwwwwwwwwwwwwwwwssssssp.',
+    '...pwwwwwwwwsssssssswwwwwwwwwwsspppppp..',
+    '...pwpwwwppppppppppwwwwwwssssssp........',
+    '....pwwp..........pwwwwwwwwwp...........',
+    '.....pp............ppppppppp............',
   ],
-  pinHead: [
-    '.pppp....',
-    'pwwwwep..',
-    'wwwwwwwwp',
-    'pwwwpppp.',
-  ],
-  run: { h: 9, head: 13, hind: 4, fore: 12, belly: 4 },
-  flee: { h: 9, head: 13, hind: 4, fore: 12, foreY: 5, hindY: 6 },
-  digBody: [
-    'pp.....................',
-    'pwwp...................',
-    '.pwwpppp...............',
-    '..pwppppppp............',
-    '..pwwwwppppppp.........',
-    '..pwwwwwwwwwwwp.p..p...',
-    '..pwwssssswwwwppwppwp..',
-    '..pw.p...pwwwwwwwwwwep.',
-    '..pw.p...pwpwwwwwwwwwwp',
-    '..p..p...p.p.pwwwsssp..',
-    '..p..p...p....pppppp...',
-    '..p..p...p.............',
+  dig: [
+    '.pp.......................................',
+    'pwwpp.....................................',
+    'pwwwwpp...................................',
+    '.pwwwwwppppppp............................',
+    '..pwwwwpppppppppp.........................',
+    '...pwwwwwwpwpwpwppppp.....................',
+    '...pwwwwwwwwwwwwwwwwppp...................',
+    '...pwwwwwwwwwwwwwwwwwwwpp.................',
+    '...pwwwwwssssswwwwwwwwwwwp...p....p.......',
+    '...pwwwp.pppppppsswwwwwwwwpppsp..psp......',
+    '...pwwp.........ppwwwwwwwwwppssp.pssp.....',
+    '...pwsp...........pwwwwwwwwwpwwsppwssp....',
+    '...pwsp...........pwwwwwwwwwwwwwwwwwwp....',
+    '...pwsp...........pwwwwwwwwwwwwwwpewwppp..',
+    '...pwsp...........pwswwwwwwwwwwwwwwwwwwpp.',
+    '...pwsp...........pswswwwwwwwwwwwwwwwwwwpp',
+    '...psp............pswspswwwwwwwwsssssppp..',
+    '...pwsp...........psp.pswwsppppppppp......',
+    '...psp............psp..ppppp..............',
   ],
   digPaws: [
-    [[12, 11], [13, 11], [14, 11]],
-    [[11, 11]],
-    [[10, 11], [11, 11]],
-  ],
-  howl: [
     [
-      '..........p..p...',
-      '.........pwppwp..',
-      '.........pwwwwep.',
-      '........pwwwwwwwwp',
-      '........pwwwsssp..',
-      '........pwwwppp...',
-      '.......ppwwwp.....',
-      '......pppwwwsp....',
-      '....ppppwwwwsp....',
-      '..pppwwwwwwwp.....',
-      '.pwwwwwwwpwp.p....',
-      'pppppppppwp.pp....',
+      '..pwp.',
+      '..pwp.',
+      '.pwp..',
+      '.pppp.',
     ],
     [
-      '...........pp..',
-      '..........pwwp.',
-      '..........pwwsp',
-      '.........pwwwsp',
-      '........pwewwsp',
-      '.......ppwwwsp.',
-      '........pwwwsp.',
-      '.......ppwwwwsp',
-      '......pppwwwwsp',
-      '....ppppwwwwwp.',
-      '..pppwwwwwwwp..',
-      '.pwwwwwwwpwp.p.',
-      'pppppppppwp.pp.',
+      '..pwp.',
+      '..pwp.',
+      '..pwp.',
+      '..pppp',
     ],
     [
-      '..........pp...',
-      '..........pw.p.',
-      '..........pwp.p',
-      '.........pwwwsp',
-      '........pwewwsp',
-      '.......ppwwwsp.',
-      '........pwwwsp.',
-      '.......ppwwwwsp',
-      '......pppwwwwsp',
-      '....ppppwwwwwp.',
-      '..pppwwwwwwwp..',
-      '.pwwwwwwwpwp.p.',
-      'pppppppppwp.pp.',
+      '..pwp..',
+      '...pwp.',
+      '....pwp',
+      '....ppp',
     ],
   ],
-  anchor: { stand: 8, creep: 8, run: 9, flee: 9, carry: 8, dig: 9, howl: 8, front: 4 },
+  howlBody: [
+    '................pwwwwssp....',
+    '...............pwwwwwwssp...',
+    '..............ppwwwwwwssp...',
+    '............ppppwwwwwwwsp...',
+    '..........ppppppwwwwwwwsp...',
+    '........ppppwpwpwwwwwwwsp...',
+    '......ppwpwwwwwwwwwwwwwsp...',
+    '....ppwwwwwwwwwwwwwwwwwsp...',
+    '...pwwwwwwwwwwwwwwpwwppsp...',
+    '..pwwwwwwwwwwwwwwp.pwp.pwp..',
+    '.pwwwwwwwwwwwwwp...pwp.pwp..',
+    'ppppppppppppppp...pppp.pppp.',
+  ],
+  howlHeads: [
+    [
+      '.....p....p.......',
+      '....psp..psp......',
+      '....pssp.pssp.....',
+      '...pwwsppwssp.....',
+      '..pwwwwwwwwwwp....',
+      '.pwwwwwwwpewwppp..',
+      '.pwwwwwwwwwwwwwwpp',
+      'pwwwwwwwwwwwwwwwpp',
+      'pwwwwwwwwssssspp..',
+      'pwswpswwsppppp....',
+      '.psppswwp.........',
+    ],
+    [
+      '............pp....',
+      '...........pwwp...',
+      '..........pwwwsp..',
+      '.........pwwwwsp..',
+      '........pwwwwwsp..',
+      '...pp..pwwwwwssp..',
+      '..psspppwpewwsp...',
+      '..pssswwwwwwssp...',
+      '..pwwwwwwwwwsp....',
+      '...pswpwwwwssp....',
+      '....pspswwssp.....',
+    ],
+    [
+      '...........pp.....',
+      '..........pwwp....',
+      '.........pwwwsp.p.',
+      '........pwwwwsppsp',
+      '........pwwwwspssp',
+      '...pp..pwwwwwpssp.',
+      '..psspppwpewwssp..',
+      '..pssswwwwwwssp...',
+      '..pwwwwwwwwwsp....',
+      '...pswpwwwwssp....',
+      '....pspswwssp.....',
+    ],
+  ],
+};
+
+// Front: a sage cap and eye mask over a wool muzzle, the ruff below.
+const W_MASK = ['pwwwwssss', 'pwwwsssss', 'pwwspesss', 'pwwwsssss', 'pwpwwwssw', '.pwpwwwww', '..pwwwwww', '...pwwwwp', '....pwwwp'];
+const W_FACE = {
+  alert: mir(['..p......', '.psp.....', '.pssp....', '.psssp...', '.pwwssppp', ...W_MASK]),
+  pinned: mir(['.........', '.........', '.........', 'pp.......', 'pwpp.pppp', ...W_MASK.slice(0, 7), '...pwwwwp', '....pwpwp']),
+  flat: mir(['.........', '.........', '.........', '.........', '..ppppppp', ...W_MASK]),
+};
+const W_RUFF = mir(['..pwwwww', '.pwswwww', 'pwswwwww', '.pwwwwww', '.pswwwww']);
+const W_HUMP = mir(['.....ppp', '...ppppp', '.ppppwpw', '..pwwwww', '...wwwww', '....wwww']);
+function wFront(face: keyof typeof W_FACE, lift: [number, number], low = 0, hump = false): M {
+  const m = blank(18, 25 - low);
+  const y = hump ? 2 : 0;
+  if (hump) lay(m, W_HUMP, 0, 0);
+  lay(m, W_FACE[face], 0, y);
+  lay(m, W_RUFF, 0, y + 14);
+  const ly = y + 19 - low;
+  for (let j = 0; j < 3; j++) for (const x of [1, 2, 15, 16]) set(m, x, ly + j, 'p');
+  for (const [x, up] of [[6, lift[0]], [11, lift[1]]] as Pt[]) {
+    for (let j = 0; j < 5 - up; j++) { set(m, x - 1, ly + j, 'p'); set(m, x, ly + j, 'w'); set(m, x + 1, ly + j, 'p'); }
+    for (let i = -1; i <= 2; i++) set(m, x + i, ly + 4 - up, 'p');
+  }
+  return m;
+}
+// Back: the saddle runs down the spine as a band with tufted edges.
+const W_BACK = mir(['..p......', '.psp.....', '.pssp....', '.psssp...', '.pwwwsppp', '.pwwwwwww', '..pwwwwww', '..pwwwwwp', '.pwwwwwpp', 'pwwwwpwpp', 'pwwwwwppp', '.pwwwpwpp', '.pwwwwppp', 'pwwwwpwpp', 'pwwwwwwpp', 'pswwwwwww', '.pswwwpww']);
+const W_BACK_PIN = [...mir(['.........', '.........', '.........', 'pp.......', 'pwpp.pppp']), ...W_BACK.slice(5)];
+const W_BACK_FLAT = [...mir(['.........', '.........', '.........', '.........', '..ppppppp']), ...W_BACK.slice(5)];
+const W_TAIL = {
+  hang: ['.pwwp.', 'pwwwwp', 'pwwwwp', 'pwwwwp', 'pwwwsp', '.pssp.', '.pppp.', '..pp..'],
+  lift: ['.pppp.', 'pwwwwp', 'pwwwwp', 'pwwssp', '.pppp.', '..pp..'],
+  tuck: ['.pp.', 'pwwp', '.pp.'],
+};
+function wBack(body: Grid, lift: [number, number], tail: keyof typeof W_TAIL, sway = 0, low = 0): M {
+  const o = blank(18, 25 - low);
+  lay(o, body, 0, 0);
+  for (const [x, up] of [[3, lift[0]], [14, lift[1]]] as Pt[]) {
+    for (let j = 0; j < 8 - low - up; j++) { set(o, x - 1, 16 + j, 'p'); set(o, x, 16 + j, 'w'); set(o, x + 1, 16 + j, 'p'); }
+    for (let i = -1; i <= 1; i++) set(o, x + i, 23 - low - up, 'p');
+  }
+  const tuck = tail === 'tuck';
+  W_TAIL[tail].forEach((r, j) => {
+    for (let i = 0; i < r.length; i++) if (r[i] !== '.') set(o, (tuck ? 7 : 6) + i + (j > 3 ? sway : 0), (tuck ? 17 : 14) + j, r[i]);
+  });
+  return o;
+}
+
+const WOLF: Rig = {
+  side: WOLF_SIDE,
+  core: 'w',
+  creep: { w: 41, h: 19, hips: [[6, 11], [23, 11], [8, 11], [25, 11]] },
+  carry: { w: 37, h: 24, hips: [[6, 16], [21, 16], [8, 16], [23, 16]] },
+  rush: { w: 44, h: 18, hips: [[9, 8], [24, 9], [8, 8], [27, 9]], legY: 1.15 },
+  flee: { w: 44, h: 18, hips: [[8, 8], [23, 9], [7, 8], [26, 9]], legY: 1.15 },
+  dig: { w: 42, h: 23, paws: [19, 19] },
+  howl: { w: 32, h: 23, body: 11, heads: [[13, 0], [11, 1], [11, 1]] },
+  anchor: { stand: 17, creep: 16, run: 18, flee: 17, carry: 15, dig: 13, howl: 14, front: 9 },
   down: {
-    stand: [
-      '.p.....p.',
-      'pwp...pwp',
-      'pwwpppwwp',
-      'pwwwwwwwp',
-      'pwewwwewp',
-      '.pwwwwwp.',
-      '..wwpww..',
-      '..pwwwp..',
-      '.pppwppp.',
-      'pwwwwwwwp',
-      'pws.w.swp',
-      '.p.....p.',
-      '.p.....p.',
-    ],
-    creep: [
-      [
-        '...ppp...',
-        '.p.pwp.p.',
-        'pwppwppwp',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        'ppwwpwwpp',
-        'pw.....wp',
-        'p.......p',
-      ],
-      [
-        '...ppp...',
-        '.p.pwp.p.',
-        'pwppwppwp',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        'ppwwpwwpp',
-        'pw.....pp',
-        'p........',
-      ],
-      [
-        '...ppp...',
-        '.p.pwp.p.',
-        'pwppwppwp',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        'ppwwpwwpp',
-        'pw.....wp',
-        'p.......p',
-      ],
-      [
-        '...ppp...',
-        '.p.pwp.p.',
-        'pwppwppwp',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        'ppwwpwwpp',
-        'pp.....wp',
-        '........p',
-      ],
-    ],
-    run: [
-      [
-        '.........',
-        'pp.....pp',
-        '.pwwwwwp.',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        '..wwpww..',
-        '..pwwwp..',
-        '.pppwppp.',
-        'pws.w.wp.',
-        'p......p.',
-        'p........',
-      ],
-      [
-        '.........',
-        'pp.....pp',
-        '.pwwwwwp.',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        '..wwpww..',
-        '..pwwwp..',
-        '.pppwppp.',
-        '.pw.w.swp',
-        '.p......p',
-        '........p',
-      ],
-    ],
-    flee: [
-      [
-        '.........',
-        '.ppppppp.',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        '..wwpww..',
-        '..pwwwp..',
-        '.pppwppp.',
-        'pws.w.wp.',
-        'p......p.',
-        'p........',
-      ],
-      [
-        '.........',
-        '.ppppppp.',
-        'pwwwwwwwp',
-        'pwewwwewp',
-        '.pwwwwwp.',
-        '..wwpww..',
-        '..pwwwp..',
-        '.pppwppp.',
-        '.pw.w.swp',
-        '.p......p',
-        '........p',
-      ],
-    ],
+    stand: wFront('alert', [0, 0]),
+    creep: [wFront('alert', [0, 0], 2, true), wFront('alert', [1, 0], 2, true), wFront('alert', [0, 0], 2, true), wFront('alert', [0, 1], 2, true)],
+    run: [wFront('pinned', [1, 0]), wFront('pinned', [0, 1])],
+    flee: [wFront('flat', [1, 0], 1), wFront('flat', [0, 1], 1)],
   },
   up: {
-    stand: [
-      '.p.....p.',
-      'pwp...pwp',
-      'pwwpppwwp',
-      'pwwwwwwwp',
-      '.pwwwwwp.',
-      'ppppppppp',
-      'pwpppppwp',
-      'pwwwpwwwp',
-      'pww.w.wwp',
-      '.p..w..p.',
-      '.p..w..p.',
-      '....p....',
-    ],
-    creep: [
-      [
-        '.p.....p.',
-        'pwp...pwp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        'pww.w.wwp',
-        'p..pwp..p',
-        'p...p...p',
-      ],
-      [
-        '.p.....p.',
-        'pwp...pwp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        'pww.w.wpp',
-        'p..pwp...',
-        'p...p....',
-      ],
-      [
-        '.p.....p.',
-        'pwp...pwp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        'pww.w.wwp',
-        'p..pwp..p',
-        'p...p...p',
-      ],
-      [
-        '.p.....p.',
-        'pwp...pwp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        'ppw.w.wwp',
-        '...pwp..p',
-        '....p...p',
-      ],
-    ],
-    run: [
-      [
-        'pp.....pp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        'pww.w.wwp',
-        'p..pwp..p',
-        'p...w....',
-        '....w....',
-        '....p....',
-      ],
-      [
-        'pp.....pp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        'pww.w.wwp',
-        'p..pwp..p',
-        '....w...p',
-        '....w....',
-        '....p....',
-      ],
-    ],
-    flee: [
-      [
-        'pp.....pp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        '.pwwwwwp.',
-        'pw.....wp',
-        'p.......p',
-      ],
-      [
-        'pp.....pp',
-        '.pwwwwwp.',
-        'ppppppppp',
-        'pwpppppwp',
-        'pwwwpwwwp',
-        '.pwwwwwp.',
-        'pw.....pp',
-        'p........',
-      ],
-    ],
+    stand: wBack(W_BACK, [0, 0], 'hang'),
+    creep: [wBack(W_BACK, [1, 0], 'hang', 0, 1), wBack(W_BACK, [0, 0], 'hang', 0, 1), wBack(W_BACK, [0, 1], 'hang', 1, 1), wBack(W_BACK, [0, 0], 'hang', 1, 1)],
+    run: [wBack(W_BACK_PIN, [1, 0], 'lift'), wBack(W_BACK_PIN, [0, 1], 'lift')],
+    flee: [wBack(W_BACK_FLAT, [1, 0], 'tuck', 0, 1), wBack(W_BACK_FLAT, [0, 1], 'tuck', 0, 1)],
   },
 };
 
 // ---- Building ----
 
-// Turn eye marks into glint offsets (from the anchor at the feet).
-function build(rows: Grid, ax: number): PFrame {
-  const ay = rows.length - 1;
+// A sprite and its eye glints from a finished grid (anchor at the feet).
+function build(rows: M | Grid, ax: number, side: boolean): PFrame {
+  const g = rows.map((r) => (typeof r === 'string' ? r : r.join('')));
+  const ay = g.length - 1;
   const eyes: number[] = [];
-  const clean = rows.map((r, y) =>
-    r.replace(/e/g, (_c, x: number) => {
-      eyes.push(x - ax, y - ay);
-      return 'y';
-    }),
-  );
-  // One eye marked (a side view): the far one glints two pixels behind it,
-  // if that is still on the head.
-  if (eyes.length === 2) {
-    const x = eyes[0] + ax, y = eyes[1] + ay;
-    if ('sw'.includes(rows[y][x - 2] ?? '.')) eyes.push(eyes[0] - 2, eyes[1]);
-  }
-  return { s: spr(clean, ax, ay), eyes };
+  g.forEach((r, y) => {
+    for (let x = 0; x < r.length; x++) {
+      if (r[x] !== 'e') continue;
+      const x0 = r[x - 1] === 'p' ? x - 1 : x; // the glint covers the eye and its dark corner
+      eyes.push(x0 - ax, y - ay);
+      // In profile the far eye shows four pixels behind, if that is still head.
+      if (side && 'sw'.includes(r[x0 - 4] ?? '.') && 'sw'.includes(r[x0 - 3] ?? '.')) eyes.push(x0 - 4 - ax, y - ay);
+    }
+  });
+  return { s: spr2(g.map((r) => r.replace(/e/g, 'y')), ax, ay), eyes };
 }
 
 function makeSet(R: Rig): PredatorSprites {
-  const A = R.anchor;
-  const [ch, cf, cnh, cnf, cy] = R.creepLegs;
+  const A = R.anchor, S = R.side;
   const creep = [0, 1, 2, 3, 4, 5].map((k) => {
-    const L: Stroke[] = [];
-    creepLeg(L, ch, cy, k + 3, false);
-    creepLeg(L, cf, cy, k + 5, false);
-    creepLeg(L, cnh, cy, k, true);
-    creepLeg(L, cnf, cy, k + 2, true);
-    return build(frame(R.creepH, [[R.creepTop, 0, 0]], L), A.creep);
+    const { w, h, hips } = R.creep;
+    const m = blank(w, h), gy = h - 1;
+    limb(m, walkLeg(HIND_WALK, hips[0], gy, k + 3), false, 1, R.core);
+    limb(m, walkLeg(FORE_WALK, hips[1], gy, k + 5), false, 1, R.core);
+    lay(m, S.creep, 0, 0);
+    limb(m, walkLeg(HIND_WALK, hips[2], gy, k), true, 1, R.core);
+    limb(m, walkLeg(FORE_WALK, hips[3], gy, k + 2), true, 1, R.core);
+    return build(m, A.creep, true);
   });
-  const [dh, df, dnh, dnf, dy] = R.carryLegs;
+  // Carrying: short dragging steps (four of the six walk phases).
+  const DRAG = [0, 1, 2, 4];
   const carry = [0, 1, 2, 3].map((k) => {
-    const L: Stroke[] = [];
-    dragLeg(L, dh, dy, k + 2, false);
-    dragLeg(L, df, dy, k + 3, false);
-    dragLeg(L, dnh, dy, k, true);
-    dragLeg(L, dnf, dy, k + 1, true);
-    return build(frame(R.carryH, [[R.carryTop, 0, 0]], L), A.carry);
+    const { w, h, hips } = R.carry;
+    const m = blank(w, h), gy = h - 1, ph = (o: number) => DRAG[(k + o) % 4];
+    limb(m, walkLeg(HIND_WALK, hips[0], gy, ph(2)), false, 1, R.core);
+    limb(m, walkLeg(FORE_WALK, hips[1], gy, ph(3)), false, 1, R.core);
+    lay(m, S.carry, 0, 0);
+    limb(m, walkLeg(HIND_WALK, hips[2], gy, ph(0)), true, 1, R.core);
+    limb(m, walkLeg(FORE_WALK, hips[3], gy, ph(1)), true, 1, R.core);
+    return build(m, A.carry, true);
   });
-  const G = R.run;
-  // Extended frame rides a row higher (airborne); gathered uses the arched back.
-  const rush = [0, 1, 2, 3].map((k) => {
-    const by = k === 0 ? 1 : 2;
-    const body = k === 2 ? R.archBody : R.runBody;
-    const bodyY = k === 2 ? by - 1 : by;
-    const legY = by + G.belly;
-    return build(
-      frame(G.h, [[body, 0, bodyY], [R.pinHead, G.head, by - 1]], [...at(G.hind, legY, GALLOP_HIND[k]), ...at(G.fore, legY, GALLOP_FORE[k])]),
-      A.run,
-    );
+  // Rush and flee share the gallop; the stretched frame rides a row higher.
+  const gallop = (G: Rig['rush'], top: (k: number) => Grid, ax: number) =>
+    [0, 1, 2, 3].map((k) => {
+      const m = blank(G.w, G.h), by = k === 0 ? 0 : 1;
+      const L = GALLOP[k].map((pts, i) => pts.map(([x, y]) => [G.hips[i][0] + x, G.hips[i][1] + by + Math.round(y * G.legY)] as Pt));
+      const back = k === 0 ? -1 : 1;
+      limb(m, L[0], false, back, R.core);
+      limb(m, L[1], false, 1, R.core);
+      lay(m, top(k), 0, by);
+      limb(m, L[2], true, back, R.core);
+      limb(m, L[3], true, 1, R.core);
+      return build(m, ax, true);
+    });
+  const rush = gallop(R.rush, (k) => (k === 2 ? S.gather : S.run), A.run);
+  const flee = gallop(R.flee, () => S.flee, A.flee);
+  const dig = S.digPaws.map((paws) => {
+    const m = blank(R.dig.w, R.dig.h);
+    lay(m, S.dig, 0, 0);
+    lay(m, paws, R.dig.paws[0], R.dig.paws[1]);
+    return build(m, A.dig, true);
   });
-  // Fleeing: rump down, tail clamped under, ears flat; a low scramble on
-  // bent hind legs.
-  const F = R.flee;
-  const flee = [0, 1, 2, 3].map((k) =>
-    build(
-      frame(F.h, [[R.fleeBody, 0, 1], [R.pinHead, F.head, 0]], [
-        ...at(F.hind, 1 + F.hindY, GALLOP_HIND[k].filter(([, y]) => y < 2)),
-        ...at(F.fore, 1 + F.foreY, GALLOP_FORE[k]),
-      ]),
-      A.flee,
-    ),
-  );
-  const dig = R.digPaws.map((paws) => build(frame(R.digBody.length, [[R.digBody, 0, 0]], at(0, 0, paws)), A.dig));
-  const howl = R.howl.map((g) => build(g, A.howl));
-  const facing = (F0: Rig['down']): FacingSet => {
-    const st = build(F0.stand, A.front);
-    const list = (gs: Grid[]) => (gs.length ? gs.map((g) => build(g, A.front)) : [st]);
-    return { stand: st, creep: list(F0.creep), run: list(F0.run), flee: list(F0.flee), carry: [st] };
+  const howl = S.howlHeads.map((head, k) => {
+    const m = blank(R.howl.w, R.howl.h);
+    lay(m, S.howlBody, 0, R.howl.body);
+    lay(m, head, R.howl.heads[k][0], R.howl.heads[k][1]);
+    return build(m, A.howl, true);
+  });
+  const facing = (F: Rig['down']): FacingSet => {
+    const st = build(F.stand, A.front, false);
+    const list = (ms: M[]) => ms.map((m) => build(m, A.front, false));
+    return { stand: st, creep: list(F.creep), run: list(F.run), flee: list(F.flee), carry: [st] };
   };
-  return {
-    stand: build(R.stand, A.stand),
-    creep,
-    rush,
-    flee,
-    carry,
-    dig,
-    howl,
-    down: facing(R.down),
-    up: facing(R.up),
-  };
+  return { stand: build(S.stand, A.stand, true), creep, rush, flee, carry, dig, howl, down: facing(R.down), up: facing(R.up) };
 }
 
 const cache: Partial<Record<'coyote' | 'wolf', PredatorSprites>> = {};

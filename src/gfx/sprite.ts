@@ -2,16 +2,24 @@ import { CHAR } from '../palette';
 import { makeCanvas } from './screen';
 
 export interface Sprite {
-  w: number;
+  w: number; // grid pixels
   h: number;
-  ax: number; // anchor (feet) inside the sprite
+  ax: number; // anchor (feet) inside the sprite, in grid pixels
   ay: number;
   img: HTMLCanvasElement;
   flipImg: HTMLCanvasElement | null;
+  // Grid pixels per world pixel: 1 (the default) or PX for a sprite drawn
+  // in fine pixels. A dense sprite is w/d x h/d world pixels on screen and
+  // lands on the fine grid.
+  d?: number;
+}
+
+export interface SprOpts {
+  density?: number; // grid pixels per world pixel (PX for fine art)
 }
 
 // One char per pixel; '.' or ' ' is transparent. See CHAR in palette.ts.
-export function spr(rows: string[], ax?: number, ay?: number): Sprite {
+export function spr(rows: string[], ax?: number, ay?: number, o: SprOpts = {}): Sprite {
   const h = rows.length;
   const w = Math.max(...rows.map((r) => r.length));
   const [img, g] = makeCanvas(w, h);
@@ -24,11 +32,15 @@ export function spr(rows: string[], ax?: number, ay?: number): Sprite {
       g.fillRect(x, y, 1, 1);
     }
   }
-  return { w, h, ax: ax ?? Math.floor(w / 2), ay: ay ?? h - 1, img, flipImg: null };
+  const s: Sprite = { w, h, ax: ax ?? Math.floor(w / 2), ay: ay ?? h - 1, img, flipImg: null };
+  if (o.density && o.density !== 1) s.d = o.density;
+  return s;
 }
 
-export function fromCanvas(img: HTMLCanvasElement, ax: number, ay: number): Sprite {
-  return { w: img.width, h: img.height, ax, ay, img, flipImg: null };
+export function fromCanvas(img: HTMLCanvasElement, ax: number, ay: number, density = 1): Sprite {
+  const s: Sprite = { w: img.width, h: img.height, ax, ay, img, flipImg: null };
+  if (density !== 1) s.d = density;
+  return s;
 }
 
 function flipped(s: Sprite): HTMLCanvasElement {
@@ -42,13 +54,17 @@ function flipped(s: Sprite): HTMLCanvasElement {
   return s.flipImg;
 }
 
-// Draw with the anchor at (x, y). Flipping mirrors around the anchor column.
+// Draw with the anchor at world (x, y). Flipping mirrors around the anchor
+// column. A dense sprite's anchor goes to the nearest fine pixel.
 export function drawSpr(g: CanvasRenderingContext2D, s: Sprite, x: number, y: number, flip = false) {
-  if (flip) {
-    g.drawImage(flipped(s), Math.round(x) - (s.w - 1 - s.ax), Math.round(y) - s.ay);
-  } else {
-    g.drawImage(s.img, Math.round(x) - s.ax, Math.round(y) - s.ay);
+  const d = s.d;
+  if (!d) {
+    if (flip) g.drawImage(flipped(s), Math.round(x) - (s.w - 1 - s.ax), Math.round(y) - s.ay);
+    else g.drawImage(s.img, Math.round(x) - s.ax, Math.round(y) - s.ay);
+    return;
   }
+  const fx = Math.round(x * d) - (flip ? s.w - 1 - s.ax : s.ax), fy = Math.round(y * d) - s.ay;
+  g.drawImage(flip ? flipped(s) : s.img, fx / d, fy / d, s.w / d, s.h / d);
 }
 
 // Recolour a sprite (e.g. a silhouette for night eyes or a flash).
@@ -59,4 +75,14 @@ export function tint(s: Sprite, color: string): Sprite {
   g.fillStyle = color;
   g.fillRect(0, 0, s.w, s.h);
   return { ...s, img: c, flipImg: null };
+}
+
+// Size on screen in world pixels (a dense sprite's grid is finer).
+export const sprW = (s: Sprite) => s.w / (s.d ?? 1);
+export const sprH = (s: Sprite) => s.h / (s.d ?? 1);
+
+// Top-left at world (x, y), blown up `k` times (k whole): previews, the
+// title's dog, icons. Dense sprites keep their fine detail.
+export function drawSprAt(g: CanvasRenderingContext2D, s: Sprite, x: number, y: number, k = 1, flip = false) {
+  g.drawImage(flip ? flipped(s) : s.img, x, y, sprW(s) * k, sprH(s) * k);
 }

@@ -1118,6 +1118,53 @@ tier-5 fixture with today's bigger wild flocks): day 11.2 to 13.0ms and
 worst 14.9 to 15.7ms at 4x CPU throttle; 17.8 to 20.8 and 22.4 to 24.6ms
 at 6x. The cost is the simulation of the extra wild animals; I left it
 alone rather than risk changing how they herd.
+## M34 Characters at double density (round five)
+Before: every living thing was drawn at world scale, a pixel to a world
+pixel, so faces were a dot or two, flecks were single scattered pixels
+(noise at a glance), and legs were one pixel thick. After, on the
+double-density pipeline (PX = 2, `spr(..., { density: 2 })` through
+`spr2` in src/art/hd.ts), at the same size in the world:
+- [x] The dog, hand-drawn in fine pixels in all five views and every pose
+      from round four (trot, gallop, skid, bark, pant, proud, watching,
+      lying, settling, the idles): pointed ears, the mask round each eye
+      with a glint, the pale muzzle and nose, an open mouth for the bark
+      and the pant, the bandana with its fold and its point at the chest,
+      flecks in small clusters, a saddle over the shoulders, jointed legs
+      two fine pixels wide with paws, far legs drawn behind the near ones
+- [x] Customization in letters (dressFine): mask both/one/none, flecks
+      light/classic/heavy, saddle, tail tip, bandana/neckerchief/collar
+      reach every fine frame; the soaked twin darkens the flecks
+- [x] Sniffing and digging for the treasure hunt: `dog.sniff` (0..1) and
+      `dog.dig` (seconds left) drawn as a nose-down trot and stand, and a
+      dig (forepaws scraping in turn, rump up, a look into the hole) that
+      ends in a shake-off
+- [x] The sleeping curl in fine pixels with the player's own markings;
+      the z's, drips, wading line, ripples and wakes in fine pixels;
+      shadows as smooth fine ellipses that swing with the sun
+- [x] The herd hand-drawn at 2x: sheep in a curled fleece with dark faces
+      and topknots, ducks with a wing line and nostrilled bill, goats with
+      curved horns and a beard, cattle with a blaze, muzzle and tufted
+      tail (piebald and Highland coats drawn, not swapped), ponies with a
+      stranded mane, forelock and hocks; every coat, the scared twin with
+      the white of the eye showing, startles, gaits and chewing kept
+- [x] New young for every species (Gameplay's breeding): a duckling that
+      swims, a goat kid with horn buds, a stocky calf and a leggy foal,
+      `youngSprites(id, coat, scared)` next to the lamb
+- [x] Townsfolk at 2x: faces with eyes, nose and mouth, hats with crowns,
+      bands and brims, collars, buttons, belts, aprons with ties, skirts
+      with a fold, scarves with tails, boots with a shine, tools and loads
+      in the hand; every pose and season kept; folk placed to the fine
+      pixel so they walk smoothly
+- [x] Coyotes and wolves at 2x: tall ears with an inner ear, long muzzles,
+      teeth in the rush, the wolf's ruff and saddle tufts, a brush tail,
+      legs jointed at hock and wrist through every step; eye glints in
+      fine pixels on the eyes in every pose
+- [x] Checks: typecheck, build, shot, regions; `tune.mjs <species>
+      --seed=7` identical for all five; every sprite scanned (about
+      3,500): all in the palette, red only on the player's dog, nothing
+      half transparent; cooptest 51/52 (the brace's guest flock count
+      fails on platform-r5 alone too); perftest against platform-r5 (see
+      Decisions)
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -2216,3 +2263,19 @@ alone rather than risk changing how they herd.
   the tier card's slot and waits behind banners; the ribbon board stands
   just past the farmhouse's front right corner (World and light). The
   merge steps are in the session notes (favour-achievements.md).
+- Characters at double density are drawn by hand in fine pixels, not
+  upscaled: Scale2x (up2 in src/art/hd.ts) only smooths the old look and
+  adds no detail, so it is kept as a tool and nothing ships through it.
+  The dog is still built from parts (torso, head variants, tails, a fine
+  leg generator), so every view and gait stays consistent and the look's
+  letters reach every frame. Bobs are half a world pixel (one fine pixel)
+  at a trot.
+- The dog's sniff and dig are two plain fields on Dog that the treasure
+  hunt writes each frame; the drawing only reads them. Digging is shown
+  side on, whichever way the dog was heading.
+- Round five's perftest (6x throttle, phone size, three rounds alternating
+  with platform-r5 on a machine busy with other sessions): medians day
+  24.9 ms before / 23.1 ms after, worst 26.6 / 27.3 ms; within the noise.
+  Dense sprites cost the same pixels as the old ones drawn under scale(2);
+  fine shadows, ripples and drips are filled at half-pixel steps in world
+  space rather than switching transforms per call.
