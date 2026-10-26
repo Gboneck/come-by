@@ -1,10 +1,9 @@
 import { C } from '../palette';
 import { ROOFS, TRIMS, farmLook } from './ranchstyle';
 import { line, rect, px } from '../gfx/draw';
-import { text } from '../gfx/font';
 import { hash2 } from '../rng';
-import { seasonLook, snowCap } from './seasonlook';
-import type { Building, Pen, RegionGate } from '../ranch/buildings';
+import { lightLook, seasonLook, snowCap } from './seasonlook';
+import type { Building, RegionGate } from '../ranch/buildings';
 import type { FieldGate, Fence, Barn, Kennel, Market, Windmill } from '../ranch/structures';
 import { CS } from '../world/map';
 
@@ -19,16 +18,32 @@ export interface Drawable {
 // lands on anything standing in front of it.
 const shadowFirst = (b: Building, draw: () => void): Drawable => ({ y: -1e8 + b.id, draw });
 
+// A standing thing's shadow on the ground: its silhouette (x0..x1 across,
+// top..y1 tall) shifted the way the sun throws it (long and to the west at
+// sunrise, east in the golden hour), and a soft dithered contact shadow
+// hugging its foot.
+export function groundShadow(g: CanvasRenderingContext2D, x0: number, top: number, x1: number, y1: number) {
+  const sx = Math.round(lightLook.dx * 0.8), sy = Math.round(lightLook.dy * 0.5);
+  rect(g, x0 + sx, top + sy, x1 - x0, y1 - top, C.sage);
+  for (let x = x0 - 1; x <= x1; x++) {
+    px(g, x, y1, C.sage);
+    if ((x & 1) === 0) px(g, x, y1 + 1, C.sage);
+  }
+}
+
 // ---- Fences ----
 // Plum posts every 8px, wool rails, a sage line of shadow on the ground.
 // They are not new: posts differ a little in height, some caps have greyed,
 // a rail has the odd knot. An upgraded (sturdy) fence has thick capped posts
 // on stone footings and a third rail.
 
-const postH = (x: number, y: number) => (hash2(x, y, 401) < 0.22 ? 5 : 6);
-const postCap = (x: number, y: number) => (seasonLook.snow > 0.4 ? C.wool : hash2(x, y, 402) < 0.3 ? C.sage : C.moss);
+// Rails are pale wood; in snow they show dark and wet against the white.
+export const railCol = (): string => (seasonLook.snow > 0.4 ? C.sage : C.wool);
 
-function post(g: CanvasRenderingContext2D, x: number, base: number, sturdy: boolean) {
+export const postH = (x: number, y: number) => (hash2(x, y, 401) < 0.22 ? 5 : 6);
+export const postCap = (x: number, y: number) => (seasonLook.snow > 0.4 ? C.wool : hash2(x, y, 402) < 0.3 ? C.sage : C.moss);
+
+export function post(g: CanvasRenderingContext2D, x: number, base: number, sturdy: boolean) {
   if (sturdy) {
     rect(g, x, base - 6, 2, 7, C.plum);
     rect(g, x, base - 7, 2, 1, C.wool);
@@ -46,12 +61,13 @@ function post(g: CanvasRenderingContext2D, x: number, base: number, sturdy: bool
 export function hFence(g: CanvasRenderingContext2D, xa: number, xb: number, base: number, gap?: [number, number], sturdy = false) {
   const inGap = (x: number) => !!gap && x > gap[0] && x < gap[1];
   rect(g, xa, base + 1, xb - xa, 1, C.sage);
+  const rc = railCol();
   for (let x = xa; x <= xb; x++) {
     if (inGap(x)) continue;
     const knot = hash2(x, base, 404) < 0.05;
-    px(g, x, base - 2, C.wool);
-    px(g, x, base - 4, knot ? C.sage : C.wool);
-    if (sturdy) px(g, x, base - 6, C.wool);
+    px(g, x, base - 2, rc);
+    px(g, x, base - 4, knot ? C.sage : rc);
+    if (sturdy) px(g, x, base - 6, rc);
   }
   for (let x = xa; x <= xb; x += 8) {
     if (inGap(x) && x !== gap![0] && x !== gap![1]) continue;
@@ -67,35 +83,28 @@ export function hFence(g: CanvasRenderingContext2D, xa: number, xb: number, base
 export function vFenceSeg(g: CanvasRenderingContext2D, x: number, ya: number, yb: number, rail = true, sturdy = false) {
   if (rail) {
     rect(g, x + 2, ya - 2, 1, yb - ya, C.sage);
-    rect(g, x, ya - 4, 1, yb - ya, C.wool);
-    rect(g, x + 1, ya - 3, 1, yb - ya, C.wool);
-    if (sturdy) rect(g, x, ya - 6, 1, yb - ya, C.wool);
+    const rc = railCol();
+    rect(g, x, ya - 4, 1, yb - ya, rc);
+    rect(g, x + 1, ya - 3, 1, yb - ya, rc);
+    if (sturdy) rect(g, x, ya - 6, 1, yb - ya, rc);
     const k = ya + Math.floor(hash2(x, ya, 405) * 6);
     if (hash2(x, ya, 406) < 0.4) px(g, x + 1, k - 3, C.sage);
   }
   post(g, x, ya, sturdy);
 }
 
-function vFence(out: Drawable[], g: CanvasRenderingContext2D, x: number, ya: number, yb: number, gap?: [number, number], sturdy = false) {
-  for (let y = ya; y < yb; y += 8) {
-    const y2 = Math.min(yb, y + 8);
-    const railGap = gap && y >= gap[0] && y < gap[1];
-    out.push({ y, draw: () => vFenceSeg(g, x, y, y2, !railGap, sturdy) });
-  }
-  out.push({ y: yb, draw: () => vFenceSeg(g, x, yb, yb, false, sturdy) });
-}
-
 // A gate leaf swinging outward about its hinge. `along` is the unit vector
 // along the fence from the hinge, `outward` points out of the pen.
-function gateLeaf(g: CanvasRenderingContext2D, hx: number, hy: number, along: [number, number], outward: [number, number], len: number, swing: number, flash: number) {
+export function gateLeaf(g: CanvasRenderingContext2D, hx: number, hy: number, along: [number, number], outward: [number, number], len: number, swing: number, flash: number) {
   const a = swing * Math.PI * 0.5;
   const ex = hx + len * (along[0] * Math.cos(a) + outward[0] * Math.sin(a));
   const ey = hy + len * (along[1] * Math.cos(a) + outward[1] * Math.sin(a));
   line(g, hx, hy + 1, ex, ey + 1, C.sage);
-  line(g, hx, hy - 2, ex, ey - 2, C.wool);
-  line(g, hx, hy - 4, ex, ey - 4, C.wool);
+  const rc = railCol();
+  line(g, hx, hy - 2, ex, ey - 2, rc);
+  line(g, hx, hy - 4, ex, ey - 4, rc);
   // Diagonal brace.
-  line(g, hx, hy - 4, (hx + ex) / 2, (hy + ey) / 2 - 2, C.wool);
+  line(g, hx, hy - 4, (hx + ex) / 2, (hy + ey) / 2 - 2, rc);
   rect(g, ex - 0.5, ey - 5, 1, 6, C.plum);
   // Hinge straps on the rails at the post, a latch at the free end.
   const ux = (ex - hx) / Math.max(1, len), uy = (ey - hy) / Math.max(1, len);
@@ -108,96 +117,8 @@ function gateLeaf(g: CanvasRenderingContext2D, hx: number, hy: number, along: [n
   }
 }
 
-export function penDrawables(g: CanvasRenderingContext2D, p: Pen, t: number, showSign: boolean): Drawable[] {
-  const out: Drawable[] = [];
-  const x0 = p.x0, y0 = p.y0, x1 = p.x1, y1 = p.y1;
-  const s = p.gateSpan();
-  const topBase = y0 + CS - 1, botBase = y1 - 1;
-  const lx = x0 + 1, rx = x1 - CS + 1;
-  const LEN = s.x1 - s.x0 || s.y1 - s.y0;
-  const sturdy = p.level >= 2;
-
-  // Floor: trodden ground by the gate, straw strewn about, the grass worn.
-  const gp = p.gatePoint(-7);
-  out.push({
-    y: -1e9 + p.id,
-    draw: () => {
-      for (let yy = p.iy0 + 2; yy < p.iy1 - 1; yy++)
-        for (let xx = p.ix0 + 2; xx < p.ix1 - 1; xx++) {
-          const d = Math.hypot(xx - gp.x, (yy - gp.y) * 1.4);
-          const h = hash2(xx, yy, 410);
-          if (d < 9 && ((xx + yy) & 1) === 0 && h < 1.2 - d / 9) px(g, xx, yy, C.moss);
-          else if (h < 0.008) px(g, xx, yy, C.butter);
-          else if (h < 0.035) px(g, xx, yy, C.moss);
-        }
-    },
-  });
-
-  // Trough along the back fence, goods piling up along the side.
-  if (p.hasTrough) {
-    const tf = p.fixtures.find((f) => f.kind === 'trough'); // placed where it was put
-    const tx0 = tf ? tf.tx * CS * 2 + 1 : Math.round(p.cx - 7), ty0 = tf ? tf.ty * CS * 2 + 2 : p.iy0 + 2;
-    out.push({
-      y: ty0 + 4,
-      draw: () => {
-        rect(g, tx0 - 1, ty0 + 5, 14, 1, C.sage);
-        rect(g, tx0, ty0, 14, 4, C.plum);
-        rect(g, tx0 + 1, ty0 + 1, 12, 1, C.teal);
-        rect(g, tx0, ty0, 14, 1, C.moss);
-        px(g, tx0 + 4 + (Math.floor(t * 2) % 5), ty0 + 1, C.wool);
-        rect(g, tx0 + 1, ty0 + 4, 1, 1, C.plum);
-        rect(g, tx0 + 12, ty0 + 4, 1, 1, C.plum);
-      },
-    });
-  }
-  if (p.goods > 0) {
-    const list = p.goodsList().slice(0, 12); // a mixed paddock's goods, each its kind's
-    out.push({
-      y: p.iy1 - 2,
-      draw: () => {
-        list.forEach((sp, i) => {
-          const gx = p.ix0 + 3 + (i % 6) * 4, gy = p.iy1 - 4 - Math.floor(i / 6) * 4;
-          drawGood(g, sp, gx, gy);
-        });
-      },
-    });
-  }
-
-  const top = p.rot === 2 ? [s.x0, s.x1] as [number, number] : undefined;
-  const bot = p.rot === 0 ? [s.x0, s.x1] as [number, number] : undefined;
-  out.push({ y: topBase, draw: () => hFence(g, x0, x1 - 2, topBase, top, sturdy) });
-  out.push({ y: botBase, draw: () => hFence(g, x0, x1 - 2, botBase, bot, sturdy) });
-  vFence(out, g, lx, topBase + 8, botBase - 1, p.rot === 1 ? [s.y0, s.y1] : undefined, sturdy);
-  vFence(out, g, rx, topBase + 8, botBase - 1, p.rot === 3 ? [s.y0, s.y1] : undefined, sturdy);
-
-  // Gate leaf.
-  const gy = p.rot === 0 ? botBase : p.rot === 2 ? topBase : (s.y0 + s.y1) / 2;
-  out.push({
-    y: p.rot === 2 ? topBase + 0.5 : p.rot === 0 ? botBase + 0.5 : s.y1,
-    draw: () => {
-      if (p.rot === 0) gateLeaf(g, s.x0 + 1, gy, [1, 0], [0, 1], LEN - 2, p.swing, p.shutFlash);
-      else if (p.rot === 2) gateLeaf(g, s.x0 + 1, gy, [1, 0], [0, -1], LEN - 2, p.swing, p.shutFlash);
-      else if (p.rot === 1) gateLeaf(g, lx, s.y0, [0, 1], [-1, 0], LEN - 1, p.swing, p.shutFlash);
-      else gateLeaf(g, rx, s.y0, [0, 1], [1, 0], LEN - 1, p.swing, p.shutFlash);
-    },
-  });
-
-  // Sign: head count and capacity.
-  if (showSign && (p.animals.length > 0 || p.full)) {
-    out.push({
-      y: 1e9,
-      draw: () => {
-        const sp = p.animals[0]?.sp;
-        const cap = sp ? Math.floor(p.capacity / sp.space) : 0;
-        // A mixed paddock counts room, not heads.
-        const label = p.full ? 'FULL' : p.kinds.length > 1 ? `${p.used}/${p.capacity} ROOM` : `${p.animals.length}/${cap}`;
-        const tx = Math.round(p.cx), ty = Math.round(y0 - 12);
-        text(g, label, tx, ty, p.full ? C.butter : C.wool, { align: 'center', shadow: C.plum });
-      },
-    });
-  }
-  return out;
-}
+// Pens and paddocks: drawn in paddock.ts (re-exported here for older imports).
+export { penDrawables } from './paddock';
 
 // Tiny goods: egg, wool tuft, cheese wedge, milk can.
 export function drawGood(g: CanvasRenderingContext2D, sp: string, x: number, y: number) {
@@ -300,6 +221,29 @@ function chimney(g: CanvasRenderingContext2D, x: number, top: number, h: number)
 
 const FH_TOP = (b: Building) => b.y0 - (b.level >= 3 ? 12 : 7);
 
+// The farmhouse's lit windows at night, as rects (x, y, w, h), for the glow
+// drawn round them above the dark (render/world.ts). Matches drawFarmhouse.
+export function farmhouseWindows(b: Building): [number, number, number, number][] {
+  const x0 = b.x0, x1 = b.x1, y1 = b.y1, two = b.level >= 3;
+  const eave = y1 - (two ? 18 : 11), wy = y1 - 8;
+  const out: [number, number, number, number][] = [];
+  for (const wx of two ? [x0 + 5, x0 + 17, x1 - 22, x1 - 10] : [x0 + 5, x1 - 10]) out.push([wx, wy, 5, 3]);
+  if (two) for (const wx of [x0 + 6, x0 + 18, x1 - 21, x1 - 9]) out.push([wx, eave + 3, 4, 3]);
+  return out;
+}
+
+// A soft glow round a lit window, drawn above the night: a dithered ring of
+// buttercup that fades out from the frame.
+export function windowGlow(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, t: number) {
+  const fl = Math.sin(t * 5 + x) > 0.85 ? 1 : 0;
+  for (let yy = y - 3; yy <= y + h + 2; yy++)
+    for (let xx = x - 3; xx <= x + w + 2; xx++) {
+      const d = Math.max(x - 1 - xx, xx - (x + w), y - 1 - yy, yy - (y + h));
+      if (d < 1) continue;
+      if (d === 1 ? ((xx + yy) & 1) === 0 : d === 2 + fl ? ((xx + yy) & 3) === 0 : false) px(g, xx, yy, C.butter);
+    }
+}
+
 // Where the chimney smoke leaves the farmhouse (see render/life.ts).
 export function chimneyTop(b: Building): { x: number; y: number } {
   return { x: b.x1 - 10, y: FH_TOP(b) - 6 };
@@ -307,11 +251,7 @@ export function chimneyTop(b: Building): { x: number; y: number } {
 
 export function farmhouseDrawable(g: CanvasRenderingContext2D, b: Building, night: boolean, t = 0): Drawable[] {
   return [
-    shadowFirst(b, () => {
-      const top = FH_TOP(b);
-      rect(g, b.x0 - 4, top + 6, 4, b.y1 - top - 3, C.sage);
-      rect(g, b.x0 - 4, b.y1, b.x1 - b.x0, 3, C.sage);
-    }),
+    shadowFirst(b, () => groundShadow(g, b.x0, FH_TOP(b) + 3, b.x1, b.y1)),
     { y: b.y1, draw: () => drawFarmhouse(g, b, night, t) },
   ];
 }
@@ -520,7 +460,7 @@ export function fieldGateDrawables(g: CanvasRenderingContext2D, gt: FieldGate): 
 }
 
 export function shadowRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  rect(g, x - 4, y + 3, w, h, C.sage);
+  groundShadow(g, x, y, x + w, y + h);
 }
 
 // Barn: plum boards, wool trim and X-braced doors, a gambrel roof (teal)
@@ -531,10 +471,7 @@ export function barnDrawable(g: CanvasRenderingContext2D, b: Barn, night: boolea
   const wallH = 15, eave = y1 - wallH, roofTop = b.y0 - 8;
   const big = b.level >= 2;
   return [
-    shadowFirst(b, () => {
-      rect(g, x0 - 5, roofTop + 4, 5, y1 - roofTop - 1, C.sage);
-      rect(g, x0 - 5, y1, w, 3, C.sage);
-    }),
+    shadowFirst(b, () => groundShadow(g, x0, roofTop + 1, x1 + (big ? 5 : 0), y1)),
     {
       y: b.y1,
       draw: () => {

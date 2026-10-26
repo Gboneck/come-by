@@ -885,6 +885,64 @@ with their legs clipped off. After:
       three: day 14.0 ms before / 15.0 ms after, worst (winter storm night,
       predators, helpers) 19.7 / 18.5 ms, medians overlapping: no
       measurable cost
+## M28 World and light, round four
+Before → after, in plain words:
+- [x] Shadows: trees' shadows were baked in one place all day; now they
+      move with the sun, long to the west at sunrise, short at noon, long to
+      the east by evening, and buildings' shadows swing with them. Animals'
+      shadows shift the same way. No shadows at night.
+- [x] Golden hour: the late afternoon light warms the sunlit grass with a
+      light buttercup speckle (the shade stays cool); low sun slants in
+      shafts through the treetops in the golden hour.
+- [x] Blue hour: dusk and dawn come in teal before the plum of night.
+- [x] Night: lantern and camp-fire pools end in a dithered buttercup ring;
+      the farmhouse windows glow out into the dark.
+- [x] Morning mist drifts on fair mornings and burns off by mid-morning.
+- [x] Depth: trunks and flaring roots show under the crowns and along the
+      forest's lower edge; the big outcrops stand as taller cliffs with a
+      pale band of strata; the far bank of the river shows its earth face;
+      contact shadows hug building feet.
+- [x] Each region more its own: willows trailing strands by the water,
+      flowering gorse among the rocks, sheep tracks over the hills.
+- [x] Water: trees reflected below the far bank; fish jump now and then;
+      wet paths glint after rain.
+- [x] Wildlife: rabbits at the forest edge morning and evening, deer at
+      dawn and dusk, crows on the fences, frogs on the banks; all flee the
+      dog (hops, bounds into the trees, lifting off, a leap into the water).
+- [x] Checks: typecheck, build, shot, regions in every season, weather and
+      time of day, perftest, picturetest, tune --seed=7 (sheep, and cattle
+      in a winter storm: identical to `test/round-4`). perftest, run back to
+      back with an untouched `test/round-4` (best batch, phone size):
+      title 5.6 vs 6.3 ms, day 9.8 vs 10.6, worst 13.1 vs 13.3 at 4x;
+      title 9.0 vs 9.8, day 15.4 vs 16.2, worst 19.0 vs 20.0 at 6x, i.e. the
+      same within the machine's noise.
+
+- [x] Paddocks of any size (for Gameplay's paddocks, `src/art/paddock.ts`):
+      pens were drawn for one 8x7 shape with the gate in the middle of a
+      side. The paddock is now drawn as any rectangle:
+      - The gate can be anywhere along any side, and a wide gate gets two
+        leaves meeting in the middle.
+      - Posts are spaced evenly along each side at about 8px (10px on a big
+        field), with stouter corner and gate posts. The rails are worn: a
+        knot, a grey weathered streak, the odd sag.
+      - A small pen is trodden all over and strewn with straw. A big one
+        reads as a field: grass inside, a trodden lane just inside the fence,
+        a worn track from the gate to the trough, longer grass in the
+        corners, flowers in spring and summer.
+      - The ground is trodden outside the gate too.
+      - Fixtures: a trough, a hay rack, and a small field shelter in the
+        ranch's roofing with straw bedding.
+      - An inner hurdle with its own gate.
+      - In snow the lanes and tracks show as trodden paths, and every fence's
+        rails (old fences too) turn dark and wet instead of vanishing
+        against the white.
+      - Checks: typecheck, build, shot, picturetest (ok), regions (ranch,
+        show, sale, drover), tune --seed=7 for sheep (identical to before).
+        perftest run back to back with the commit before, best batch at 4x:
+        day 9.5 vs 10.3–10.9 ms, worst 12.1–13.1 vs 14.0–14.4. At 6x: day
+        14.3–15.0 vs 16.3–17.1, worst 20.4 vs 19.7–21.4. Cheaper, because a
+        pen's floor is one image now and no longer redrawn pixel by pixel
+        into the picture cache every frame.
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -1822,3 +1880,44 @@ with their legs clipped off. After:
   by the rules, since only they know the price.
 - The Ledger keeps its open page between visits (a book stays open where
   you left it); confirm closes it only when the page does not use it.
+- Tree shadows are no longer baked into the ground: the canopy's
+  silhouette is baked once in sage (`canopyShadow`) and laid over the
+  ground shifted by the sun's vector (`sunShadow` in `src/render/sky.ts`)
+  into a world-sized lit-ground picture (`LitGround`, `src/render/light.ts`).
+  When the sun moves a pixel it is redone 32 rows a frame, so a frame still
+  draws the ground as one image. (Drawing the shadow as its own layer every
+  frame cost 2-3 ms on a throttled phone; compositing plum onto water cost
+  more, so shadows on water are sage.) The shadow
+  mask the bake still keeps (where the shade usually lies) only places
+  ferns and such.
+- Building shadows read `lightLook` (`src/art/seasonlook.ts`), so the
+  picture cache redraws a building only when the sun has moved a whole
+  pixel.
+- The golden hour is a sparse random speckle (~5%), not a Bayer grid: a
+  regular grid over the whole meadow read as a filter. Blue hour mixes teal
+  into the dusk dither (up to 70% of its pixels); warm rings are on lamps
+  and the camp fire only (the farmhouse's big pool ringed its own roof).
+- Morning mist reuses the fog pass, up to 0.28, fair mornings only, off at
+  GRAPHICS LOW. Light shafts visit only the pixels inside their bands and
+  draw at GRAPHICS HIGH only. Wildlife counts scale with `quality.fx`.
+- The wildlife and the fish use their own seeded random numbers, never
+  `Math.random`, so a seeded `tune.mjs` run is unchanged by them.
+- Morning mist is light (up to 0.18, gone by 07:40): at the strength of fog
+  it laid a grid over every morning.
+- Paddock floors are one cached bitmap per paddock, painted from ImageData
+  and keyed on the size, the gate, the fixtures and the season, so a big
+  field costs one image a frame. A repaint always makes a new canvas,
+  because the picture cache knows an image by its object. A paddock reads
+  as a field gradually, as its smaller interior side grows from 6 to 10
+  tiles.
+- `penDrawables` lives in `src/art/paddock.ts` and is re-exported from
+  `art/buildings.ts`, so older imports (farm2.ts on valley-r4) keep working.
+  A trial merge of valley-r4 typechecks and draws Gameplay's real paddocks.
+  To merge, take this side of `penDrawables` in buildings.ts, keep
+  `export function shadowRect` with its `groundShadow` body, and drop
+  `fixtureDrawables` from valleyDrawables: the paddock draws its own
+  fixtures, and with both they would be drawn twice.
+- The paddock data the art reads: `rot` + `gateSpan()` for the gate,
+  `fixtures?: { kind, tx, ty }[]` and `hurdle?: { vertical, at, gate, swing }`
+  (types in `src/art/paddock.ts`). If there is `hasTrough` and no list, a
+  trough goes by the back fence, as before.

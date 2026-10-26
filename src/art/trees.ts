@@ -132,3 +132,30 @@ export function pineCovers(cov: Uint8Array, W: number, H: number, bx: number, by
     }
   }
 }
+
+// A willow by the water: a round crown taller than wide, its lower half
+// hanging in strands that trail below the outline, sage-lit on the sunny
+// side, a plum crescent of shade.
+export function stampWillow(b: CanopyBuf, cx: number, cy: number, r: number, seed: number) {
+  const { W, H, cp, cm, kind } = b;
+  const R = Math.ceil(r) + 1;
+  for (let dy = -R; dy <= R + 3; dy++) {
+    for (let dx = -R; dx <= R; dx++) {
+      const x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      const strand = ((x + Math.floor(hash2(x, 0, seed) * 2)) & 1) === 0;
+      const d = Math.hypot(dx, dy * 0.9);
+      const hang = dy > 0 && strand ? Math.floor(hash2(x, cy, seed + 1) * 4) : 0;
+      if (d > r + (dy > 0 ? hang : 0) + (hash2(x, y, seed) - 0.5) * 0.7) continue;
+      const i = y * W + x;
+      const s = (-dx * 0.6 + dy * 0.8) / (d || 1);
+      cm[i] = 1;
+      kind[i] = 2;
+      let c = U32.teal;
+      if (dy > -r * 0.2) c = strand ? (s < -0.2 && hash2(x, y, seed + 2) < 0.6 ? U32.sage : U32.teal) : U32.plum;
+      if (d > r - 1.2 && s > 0.2 && dy < 1) c = U32.plum;
+      else if (d > r - 1.5 && s < -0.5 && hash2(x, y, seed + 3) < 0.4) c = U32.sage;
+      cp[i] = c;
+    }
+  }
+}

@@ -6,6 +6,10 @@ import { hash2 } from '../rng';
 // put snow on top, blossom out, or turn their leaves.
 export const seasonLook = { snow: 0, leaves: 0, bloom: 0 };
 
+// The light as the art sees it: where shadows fall (a vector in px for
+// something about a building's height), and how golden the hour is.
+export const lightLook = { dx: -5, dy: 6, golden: 0 };
+
 export function setSeasonLook(s: { snow: number; leaves: number; bloom: number }) {
   seasonLook.snow = s.snow;
   seasonLook.leaves = s.leaves;
