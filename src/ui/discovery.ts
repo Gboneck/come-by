@@ -77,6 +77,55 @@ export function drawPlaceMarks(game: Game, g: CanvasRenderingContext2D, x0: numb
   }
 }
 
+// ---- The valley projects (src/systems/projects.ts) ----
+
+// The Ledger's lines for the valley projects, in the same shape as the
+// village's (src/ui/valley.ts): how many are done, the ones under way (the
+// one in hand with what it needs), and the next to come with what it
+// brings. The next goal is always visible.
+export function projectLines(game: Game, w: number): { s: string; c: string }[] {
+  const P = game.projects;
+  const out: { s: string; c: string }[] = [];
+  const add = (t: string, c: string) => { for (const s of wrap(t, w)) out.push({ s, c }); };
+  const done = PROJECTS.filter((p) => P.done.has(p.id)).length;
+  out.push({ s: '', c: C.wool });
+  add(`THE VALLEY ${done}/${PROJECTS.length}`, done === PROJECTS.length ? C.butter : C.wool);
+  const hand = P.inHand(game);
+  const status = (p: (typeof PROJECTS)[number]) => {
+    const o = P.open(game, p);
+    const st = p.kind === 'graze' ? `${Math.floor(P.frac(p.id) * 100)}% ${p.verb}` : `${P.delivered(p.id)}/${p.piles.reduce((n, q) => n + q.n, 0)} ${p.verb}`;
+    return o.ok ? st : `${st}, ${o.why}`;
+  };
+  const going = PROJECTS.filter((p) => !P.done.has(p.id) && (P.open(game, p).ok || (game.tier >= p.tier && P.frac(p.id) > 0)));
+  going.sort((a, b) => (a === hand ? -1 : b === hand ? 1 : 0));
+  for (const p of going.slice(0, 2)) {
+    add(`${p.label}: ${status(p)}`, p === hand ? C.wool : C.sage);
+    if (p === hand) add(p.needs, C.sage);
+  }
+  const next = PROJECTS.find((p) => !P.done.has(p.id) && !going.includes(p));
+  if (next) {
+    const o = P.open(game, next);
+    const why = next.place && game.tier >= next.tier && !game.discovery.found.has(next.place) ? `SOMEWHERE IN ${regionById(placeById(next.place).region).name.toUpperCase()}` : o.why;
+    add(`NEXT, ${next.label}: ${why}`, C.sage);
+    if (!going.length) add(`BRINGS ${next.brings}`, C.sage); // nothing in hand: what the next one is for
+  }
+  return out;
+}
+
+// A flag on the Ledger map at each project you can work (inked in plum, as
+// the map's other marks; teal while it waits for its season).
+export function drawProjectMarks(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number) {
+  const P = game.projects;
+  for (const p of PROJECTS) {
+    if (p.tier > game.tier || P.done.has(p.id) || (p.place && !game.discovery.found.has(p.place))) continue; // done: the place's star says it
+    const sx = x0 + Math.round(p.mark[0] / 16), sy = y0 + Math.round(p.mark[1] / 16);
+    const col = P.open(game, p).ok ? C.plum : C.teal;
+    rect(g, sx, sy - 6, 1, 7, C.plum);
+    rect(g, sx + 1, sy - 6, 3, 2, col);
+    px(g, sx + 1, sy - 4, col);
+  }
+}
+
 // Ledger lines: places found and keepsakes kept.
 export function discoveryLines(game: Game, w: number): { s: string; c: string }[] {
   const d = game.discovery;
@@ -86,56 +135,4 @@ export function discoveryLines(game: Game, w: number): { s: string; c: string }[
   const s = `KEEPSAKES ${kept.length}/${KEEPSAKES.length}${kept.length ? `: ${kept.join(', ')}` : ''}`;
   for (const l of wrap(s, w)) out.push({ s: l, c: C.sage });
   return out;
-}
-
-// ---- The valley projects (src/systems/projects.ts) ----
-
-// The Ledger's lines for the valley projects, in the same shape as the
-// village's and the paddocks' (src/ui/valley.ts) so they read as one list:
-// how many are done, the ones under way (the one in hand with what it needs
-// and brings), and the next to come. The next goal is always visible.
-export function projectLines(game: Game, w: number): { s: string; c: string }[] {
-  const P = game.projects;
-  const out: { s: string; c: string }[] = [];
-  const add = (t: string, c: string) => { for (const s of wrap(t, w)) out.push({ s, c }); };
-  const done = PROJECTS.filter((p) => P.done.has(p.id)).length;
-  add(`VALLEY PROJECTS ${done}/${PROJECTS.length}`, done === PROJECTS.length ? C.butter : C.wool);
-  const hand = P.inHand(game);
-  const status = (p: (typeof PROJECTS)[number]) => {
-    const o = P.open(game, p);
-    const st = p.kind === 'graze' ? `${Math.floor(P.frac(p.id) * 100)}% ${p.verb}` : `${P.delivered(p.id)}/${p.piles.reduce((n, q) => n + q.n, 0)} ${p.verb}`;
-    return o.ok ? st : `${st}, ${o.why}`;
-  };
-  const going = PROJECTS.filter((p) => !P.done.has(p.id) && (P.open(game, p).ok || (game.tier >= p.tier && P.frac(p.id) > 0)));
-  going.sort((a, b) => (a === hand ? -1 : b === hand ? 1 : 0));
-  for (const p of going.slice(0, 3)) {
-    add(`${p.label}: ${status(p)}`, p === hand ? C.wool : C.sage);
-    if (p === hand) {
-      add(p.needs, C.sage);
-      add(`BRINGS ${p.brings}`, C.sage);
-    }
-  }
-  const next = PROJECTS.find((p) => !P.done.has(p.id) && !going.includes(p));
-  if (next) {
-    const o = P.open(game, next);
-    const why = next.place && game.tier >= next.tier && !game.discovery.found.has(next.place) ? `SOMEWHERE IN ${regionById(placeById(next.place).region).name.toUpperCase()}` : o.why;
-    add(`NEXT, ${next.label}: ${why}`, C.sage);
-    if (!going.length) add(`BRINGS ${next.brings}`, C.sage); // nothing in hand: say what the next one is for
-  }
-  return out;
-}
-
-// A flag on the Ledger map at each project you can work, a star once done.
-export function drawProjectMarks(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number) {
-  const P = game.projects;
-  for (const p of PROJECTS) {
-    if (p.tier > game.tier || (p.place && !game.discovery.found.has(p.place))) continue;
-    const sx = x0 + Math.round(p.mark[0] / 16), sy = y0 + Math.round(p.mark[1] / 16);
-    if (P.done.has(p.id)) continue; // the place's star says it all
-    const open = P.open(game, p).ok;
-    rect(g, sx - 1, sy - 5, 1, 6, C.plum);
-    rect(g, sx, sy - 6, 1, 6, C.wool);
-    rect(g, sx + 1, sy - 6, 3, 2, open ? C.butter : C.sage);
-    px(g, sx + 1, sy - 4, open ? C.butter : C.sage);
-  }
 }

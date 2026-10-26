@@ -4,7 +4,7 @@ import type { Pen } from '../ranch/buildings';
 import { SPECIES_ORDER } from '../entities/species';
 import { SKIES } from '../systems/weather';
 import { SEASON_LIST } from '../systems/season';
-import { blessed, loaded } from '../systems/projects';
+import { LOAD_OF, blessed, loaded, setLoad } from '../systems/projects';
 import { FACES, HOST_MODES, K_SNAP, Reader, Writer, faceId, type HostMode } from './protocol';
 
 // One moment of the host's world, as the guests see it. Everything is kept
@@ -89,8 +89,8 @@ export function animalExtra(a: Animal): number {
 
 export function applyAnimalExtra(a: Animal, v: number) {
   a.young = (v & 1) !== 0;
-  if (v & 4) loaded.add(a);
-  else loaded.delete(a);
+  if (v & 4) setLoad(a, LOAD_OF[a.sp.id] ?? null);
+  else if (loaded.has(a)) setLoad(a, null);
   if (v & 8) blessed.add(a);
   else blessed.delete(a);
 }

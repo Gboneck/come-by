@@ -1525,10 +1525,13 @@ another origin are never answered from the cache.
   passes within 20px of a pile with a load left takes one; at stress over
   0.8 or in a panic it drops it, and the load is back on its pile; within
   the site's radius it is counted. Loads in transit go back overnight and on
-  a load. They live in projects.ts, not in Animal.load (Gameplay's log), so
-  they do not slow the animal.
-- What each brings: the reed bed, 8 more bales on autumn's first morning
-  (after the loft is filled to its 10, so it reads 18); the orchard, 5-7
+  a load. They are tracked in projects.ts and also set `Animal.load` (as
+  Gameplay's log does), so once both branches are in a loaded animal leans
+  into it (Characters' pose) and walks at 0.85 (Gameplay's drag).
+- What each brings: the reed bed, 8 more bales in the loft each autumn
+  (through Gameplay's `seasonal.loftBonus`: the autumn refill is LOFT_MAX
+  plus the bonus; until that field is merged in, projects.ts adds the 8 on
+  autumn's first morning itself); the orchard, 5-7
   sheep each morning but in winter when fewer than 3 are there (plain wild
   stock); the scrub, the valley's wild goats every day (7) instead of every
   3 days (5); the hut, a waystation (lying within 34px of its door rests the
@@ -1540,10 +1543,13 @@ another origin are never answered from the cache.
   own let-out stock) pays its delivery value again.
 - Projects open by tier, once their hidden place is found, and by season
   (the reed bed in spring or summer; the orchard, the scrub and the mill pond
-  not in winter); progress keeps out of season. The Ledger has them under
-  the village and paddocks (column A): VALLEY PROJECTS n/6, the ones under
-  way (the one in hand with what it needs and brings), NEXT; a flag on the
-  map at each workable site, the place's star once done.
+  not in winter); progress keeps out of season. The Ledger lists them as
+  their own THE VALLEY n/6 under HIDDEN PLACES in the first column (the
+  village is Gameplay's list above it; the second column overflowed a
+  landscape screen once an order was up): the ones under way (the one in
+  hand with what it needs), NEXT (and what it brings when nothing is under
+  way); a plum flag on the map at each workable site (teal while it waits
+  for its season), the place's star once done.
 - Project props are `WORKS` in places.ts, and the hut's walls and the ring's
   stones carry `project`/`when`/`ring`. `map.setProjects` restamps only the
   project props' cells, so the hurdle and Gameplay's bridge deck keep theirs.

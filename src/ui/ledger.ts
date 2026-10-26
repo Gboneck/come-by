@@ -138,11 +138,9 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
     add('KEEP THE RANCH GROWING', C.wool);
   }
   add('');
-  // The valley's projects (with the village and paddocks, as one list).
-  for (const l of projectLines(game, colW - 12)) add(l.s, l.c);
-  add('');
   for (const l of discoveryLines(game, colW - 12)) add(l.s, l.c);
   for (const l of travelLines(colW - 12)) add(l.s, l.c);
+  for (const l of projectLines(game, colW - 12)) add(l.s, l.c); // the valley projects, in the hidden places
   add('');
   const tot = game.totals;
   const deliv = Object.values(tot.delivered).reduce((s, n) => s + (n ?? 0), 0);

@@ -350,7 +350,7 @@ const ledger = await page.evaluate(async () => {
   g.mode = 'ledger';
   return projectLines(g, 200).map((l) => l.s);
 });
-check('the Ledger lists the valley', ledger[0] === 'VALLEY PROJECTS 1/6' && ledger.some((l) => l.startsWith('HIDDEN VALLEY SCRUB: 41% BROWSED')) && ledger.some((l) => l.startsWith('NEXT, THE MILL POND: AT TIER 4')), JSON.stringify(ledger));
+check('the Ledger lists the valley', ledger[1] === 'THE VALLEY 1/6' && ledger.some((l) => l.startsWith('HIDDEN VALLEY SCRUB: 41% BROWSED')) && ledger.some((l) => l.startsWith('NEXT, THE MILL POND: AT TIER 4')), JSON.stringify(ledger));
 await page.evaluate(() => window.game.render());
 await page.screenshot({ path: 'shots/projects-ledger.png' });
 

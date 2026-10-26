@@ -138,6 +138,14 @@ const RING = { x: 1468, y: 340, r: 28 };
 export const loaded = new WeakSet<Animal>();
 export const blessed = new WeakSet<Animal>();
 
+// Animal.load (valley.ts's log behind a cow) makes a loaded animal lean into
+// it and walk a little slower; a slate or a stone sets it too.
+export function setLoad(a: Animal, l: Load | null) {
+  (a as unknown as { load?: string | null }).load = l;
+  if (l) loaded.add(a);
+  else loaded.delete(a);
+}
+
 export interface ProjectsSave {
   g: Partial<Record<ProjectId, number>>; // grazed
   d: Partial<Record<ProjectId, number[]>>; // loads delivered from each pile
@@ -252,7 +260,7 @@ export class Projects implements ProjectView {
         if (a.sp.id !== p.species || a.pen || a.gone || a.trial || a.carried || a.young || this.carrying.has(a) || a.stress >= 0.6) continue;
         if (Math.hypot(a.x - pile.x, a.y - pile.y) > 20) continue;
         this.carrying.set(a, { id: p.id, pile: i });
-        loaded.add(a);
+        setLoad(a, p.load);
         if (game.isOnScreen(a.x, a.y)) game.fx.float(a.x, a.y - 12, p.load.toUpperCase(), C.wool, 0.9);
         game.audio?.play('click', { x: a.x, y: a.y });
         if (this.atPile(p.id, i) <= 0) break;
@@ -290,7 +298,7 @@ export class Projects implements ProjectView {
 
   private drop(a: Animal) {
     this.carrying.delete(a);
-    loaded.delete(a);
+    setLoad(a, null);
   }
 
   private prune(game: Game) {
@@ -330,6 +338,7 @@ export class Projects implements ProjectView {
   complete(game: Game, p: Project) {
     this.done.add(p.id);
     for (const [a, c] of this.carrying) if (c.id === p.id) this.drop(a);
+    this.hayMeadow(game, false);
     game.map.setProjects(this);
     if (p.id === 'hut' && !game.discovery.keepsakes.has('crook')) game.discovery.keepsakes.add('crook'); // turned up while mending
     const n = this.done.size;
@@ -411,10 +420,9 @@ export class Projects implements ProjectView {
   morning(game: Game, fresh: boolean) {
     for (const a of this.carrying.keys()) this.drop(a); // loads go back to their piles overnight
     this.blessedOut.clear();
+    this.hayMeadow(game, fresh);
     if (!fresh) return;
     const S = game.season;
-    // Willow Pool's hay meadow, cut in the summer, into the loft.
-    if (this.done.has('reeds') && S.season === 'autumn' && S.dayOf === 1) game.seasonal.loft += HAY_MEADOW;
     // A flock on the orchard pasture every morning (but in winter).
     if (this.done.has('orchard') && S.season !== 'winter' && game.tier >= 2) {
       const orch = placeById('orchard');
@@ -437,6 +445,17 @@ export class Projects implements ProjectView {
       if (!game.tip) game.tip = { text: `A VALLEY PROJECT: ${p.name} (${p.where}). SEE THE LEDGER.`, t: 8 };
       break;
     }
+  }
+
+  // Willow Pool's hay meadow: its bales go into the loft each autumn.
+  // seasonal.ts refills the loft to LOFT_MAX + loftBonus (Gameplay's, once
+  // both branches are in); without that field, add them here on autumn's
+  // first morning.
+  private hayMeadow(game: Game, fresh: boolean) {
+    const S = game.seasonal as { loft: number; loftBonus?: number };
+    const bonus = this.done.has('reeds') ? HAY_MEADOW : 0;
+    if ('loftBonus' in S) S.loftBonus = bonus;
+    else if (fresh && bonus && game.season.season === 'autumn' && game.season.dayOf === 1) S.loft += bonus;
   }
 
   // ---- Save and co-op ----
@@ -466,6 +485,7 @@ export class Projects implements ProjectView {
       for (const id of d.a ?? []) if (ids.includes(id)) this.announced.add(id);
       this.foldShut = !!d.f;
     }
+    this.hayMeadow(game, false);
     game.map.setProjects(this);
   }
 
