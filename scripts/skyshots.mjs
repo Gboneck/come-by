@@ -3,6 +3,8 @@
 // by the farmhouse with lamps about. For before/after comparisons.
 //   node scripts/skyshots.mjs --tag=before [--size=390x844@3] [--only=night,fog]
 // Writes shots/sky/<scene>-<tag>.png (the middle of the screen).
+//   node scripts/skyshots.mjs --compare=before,after
+// puts the two side by side, full size, round the dog: compare-<scene>.png.
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { readFileSync, mkdirSync } from 'node:fs';
@@ -31,6 +33,34 @@ const SCENES = [
   { name: 'fognight', weather: 'fog', setup: 'night' },
   { name: 'storm', weather: 'storm', setup: 'night' },
 ];
+
+const compare = opt('compare', '');
+if (compare) {
+  const [a, b] = compare.split(',');
+  const page = await browser.newPage();
+  for (const s of SCENES) {
+    if (only && !only.includes(s.name)) continue;
+    const [pa, pb] = [a, b].map((t) => readFileSync(`shots/sky/${s.name}-${t}.png`).toString('base64'));
+    const url = await page.evaluate(async ({ pa, pb }) => {
+      const load = (b64) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.src = `data:image/png;base64,${b64}`; });
+      const [ia, ib] = await Promise.all([load(pa), load(pb)]);
+      // The middle of each: the dog, the farmhouse's lamps, the pens.
+      const w = Math.round(ia.width * 0.62), h = Math.round(ia.height * 0.62), x = Math.round((ia.width - w) / 2), y = Math.round(ia.height * 0.2);
+      const c = document.createElement('canvas');
+      c.width = w * 2 + 12; c.height = h;
+      const g = c.getContext('2d');
+      g.fillStyle = '#42315A'; g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(ia, x, y, w, h, 0, 0, w, h);
+      g.drawImage(ib, x, y, w, h, w + 12, 0, w, h);
+      return c.toDataURL('image/png');
+    }, { pa, pb });
+    (await import('node:fs')).writeFileSync(`shots/sky/compare-${s.name}.png`, Buffer.from(url.split(',')[1], 'base64'));
+    console.log(`shots/sky/compare-${s.name}.png  (left ${a}, right ${b})`);
+  }
+  await browser.close();
+  await server.close();
+  process.exit(0);
+}
 
 let errors = 0;
 for (const s of SCENES) {
