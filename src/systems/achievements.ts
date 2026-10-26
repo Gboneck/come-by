@@ -11,6 +11,7 @@ import type { GuestNet } from '../net/guest';
 import { ownAchievements } from './save';
 import type { BadgeGroup, IconId } from '../art/badges';
 import { quality } from '../gfx/quality';
+import { whatsThisUp } from '../ui/whatsthis';
 import { buzz } from '../ui/settings';
 
 // Achievements: one list of the notable things a ranch can do, each with a
@@ -261,9 +262,9 @@ export class Achievements {
   }
 
   // The card on screen ages while it can be seen (not behind the tier card,
-  // the judge's card or a banner); then the next comes in.
+  // the judge's card, a banner or a what's-this card); then the next comes in.
   private cards(game: Game, dt: number) {
-    if (game.mode !== 'play' || game.feel.tierCard || game.trials.result || game.banner || game.feel.fading) return;
+    if (game.mode !== 'play' || game.feel.tierCard || game.trials.result || game.banner || whatsThisUp() || game.feel.fading) return;
     if (this.card) {
       this.cardT += dt;
       if (this.cardT > cardLife(this.card)) this.card = null;

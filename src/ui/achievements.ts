@@ -10,6 +10,7 @@ import { BADGE, drawBadge } from '../art/badges';
 import { Person, type FolkId } from '../entities/folk';
 import { peopleSprites } from '../art/people';
 import { playerDogSprites } from '../art/dogstyle';
+import { whatsThisUp } from './whatsthis';
 import type { LedgerInk, LedgerPage } from './ledger';
 import { sharePng } from './photo';
 
@@ -226,10 +227,11 @@ export const BADGES_PAGE: LedgerPage = { id: 'badges', tab: 'BADGES', draw: draw
 // ---- The card that drops in ----
 //
 // In the tier card's place (a third of the way down the screen), one at a
-// time, never over the tier card, the judge's card or a banner: the HUD
-// draws it in place of the banner (ui/hud.ts), and it waits its turn.
+// time, never over the tier card, the judge's card, a banner or a what's-
+// this card (which would take its tap): the HUD draws it in place of the
+// banner (ui/hud.ts), and it waits its turn.
 
-export const badgeUp = (game: Game) => !!game.achievements.card && !game.feel.tierCard && !game.trials.result && !game.banner;
+export const badgeUp = (game: Game) => !!game.achievements.card && !game.feel.tierCard && !game.trials.result && !game.banner && !whatsThisUp();
 
 export function drawBadgeCard(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
   const A = game.achievements;
