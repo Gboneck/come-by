@@ -230,27 +230,6 @@ export class PaddockEditor {
     return { cost, why, changed: true };
   }
 
-  // Build (or extend) it. Returns what to say and whether it went well.
-  commit(game: Game, R: PaddockRules, land: Land): { say: string; good: boolean; built?: Building } {
-    const d = this.draft;
-    if (!d) return { say: '', good: false };
-    const q = this.quote(game, R, land);
-    if (q.why) return { say: q.why, good: false };
-    if (d.base) {
-      const p = d.base;
-      if (!sameR(d.r, p) && !R.extend(game, p, d.r)) return { say: 'IT WILL NOT GO THERE', good: false };
-      if (d.gate.side !== p.gate.side || d.gate.at !== p.gate.at) {
-        const err = R.moveGate(game, p, d.gate);
-        if (err) return { say: err, good: false };
-      }
-      this.cancel();
-      return { say: q.cost ? `PADDOCK EXTENDED (-${q.cost}$)` : 'GATE MOVED', good: true, built: p };
-    }
-    const b = R.build(game, d.r, d.gate);
-    if (!b) return { say: 'IT WILL NOT GO THERE', good: false };
-    this.cancel();
-    return { say: `BUILT A ${d.r.w}x${d.r.h} PADDOCK`, good: true, built: b };
-  }
 
   // ---- Pointers: drag out a band, or the handles ----
 
