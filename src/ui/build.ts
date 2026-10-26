@@ -151,6 +151,13 @@ export class BuildMode {
   remote: ((a: BuildAction) => void) | null = null;
   waiting: BuildAction | null = null;
 
+  // The ranch's name and paint changed here: shown at once, and on a
+  // friend's ranch sent to the host (quietly: no waiting on an answer).
+  private lookChanged(game: Game) {
+    applyLook(game.look);
+    if (this.remote) this.remote({ k: 'look', ranch: game.look.ranch, roof: game.look.roof, trim: game.look.trim });
+  }
+
   act(game: Game, a: BuildAction) {
     if (this.remote) {
       if (this.waiting) return;
@@ -274,6 +281,7 @@ export class BuildMode {
     const X0 = tx * TS - 3, Y0 = ty * TS - 3, X1 = (tx + w) * TS + 3, Y1 = (ty + h) * TS + 3;
     const inside = (x: number, y: number) => x > X0 && x < X1 && y > Y0 && y < Y1;
     if (inside(game.dog.x, game.dog.y)) return { ...gh, reason: 'YOUR DOG IS IN THE WAY' };
+    for (const d of game.coop) if (inside(d.x, d.y)) return { ...gh, reason: `${d.tag || 'A FRIEND'} IS IN THE WAY` };
     if (game.animals.some((a) => !a.gone && !a.pen && inside(a.x, a.y))) return { ...gh, reason: 'ANIMALS IN THE WAY' };
     if (game.coins < def.cost) return { ...gh, reason: `NEED ${def.cost}$` };
     return { ...gh, ok: true };
@@ -334,11 +342,11 @@ export class BuildMode {
         if (inp.pressed('up')) this.row = (this.row + rows - 1) % rows;
         if (inp.pressed('down')) this.row = (this.row + 1) % rows;
         const r = RANCH_ROWS[this.row - 1];
-        if (inp.pressed('left') && r) { r.step(game, -1); applyLook(game.look); }
-        if (inp.pressed('right') && r) { r.step(game, 1); applyLook(game.look); }
+        if (inp.pressed('left') && r) { r.step(game, -1); this.lookChanged(game); }
+        if (inp.pressed('right') && r) { r.step(game, 1); this.lookChanged(game); }
         if (inp.pressed('confirm')) {
           if (this.row === 0) focusField('ranchname');
-          else if (r) { r.step(game, 1); applyLook(game.look); }
+          else if (r) { r.step(game, 1); this.lookChanged(game); }
         }
       }
     } else if (this.tab === 'build') {
@@ -834,6 +842,7 @@ export class BuildMode {
       if (ui.hovering(bx, y, bw, rh)) this.row = 0;
       textField(game.screen, g, 'ranchname', bx, y, bw - dice - 3, rh, game.look.ranch || 'NAME YOUR RANCH', RANCH_MAX, (s) => { game.look.ranch = s; }, game.t, this.row === 0, () => {
         game.look.ranch = game.look.ranch.trim();
+        this.lookChanged(game);
       });
       const dx = bx + bw - dice;
       panel(g, dx, y, dice, rh, ui.isActive('ranch-dice') ? C.teal : C.plum, C.butter);
@@ -842,12 +851,13 @@ export class BuildMode {
         stopTyping();
         game.look.ranch = pickName(RANCH_NAMES, game.look.ranch);
         this.row = 0;
+        this.lookChanged(game);
       }
       y += rh + gap;
     }
     RANCH_ROWS.forEach((r, i) => {
       const sel = this.row === i + 1;
-      if (optionRow(game, g, `ranch-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { this.row = i + 1; r.step(game, d); applyLook(game.look); })) this.row = i + 1;
+      if (optionRow(game, g, `ranch-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { this.row = i + 1; r.step(game, d); this.lookChanged(game); })) this.row = i + 1;
       y += rh + gap;
     });
     ui.captureAll('ranch-bg');
@@ -894,7 +904,8 @@ export type BuildAction =
   | { k: 'undecor'; cx: number; cy: number }
   | { k: 'train'; key: UpKey }
   | { k: 'hire' }
-  | { k: 'sell'; pen: number };
+  | { k: 'sell'; pen: number }
+  | { k: 'look'; ranch: string; roof: Roof; trim: Trim };
 
 export interface BuildResult {
   good: boolean;
@@ -1019,6 +1030,13 @@ export function applyBuild(game: Game, a: BuildAction): BuildResult {
     case 'hire': {
       const err = game.hireHelper();
       return err ? no(err) : { good: true, say: `${game.helpers[game.helpers.length - 1].name} JOINS THE RANCH!`, sound: 'tierup' };
+    }
+    case 'look': {
+      game.look.ranch = String(a.ranch ?? '').toUpperCase().slice(0, RANCH_MAX).trim();
+      if (a.roof in ROOFS) game.look.roof = a.roof;
+      if (a.trim in TRIMS) game.look.trim = a.trim;
+      applyLook(game.look);
+      return { good: true, say: '' };
     }
     case 'sell': {
       if (!game.ranch.buildings.some((b) => b.kind === 'market')) return no('BUILD A MARKET FIRST');
