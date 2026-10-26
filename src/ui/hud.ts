@@ -8,6 +8,7 @@ import { wrap } from '../gfx/font';
 import { touchLayout } from './touch';
 import { safeArea } from './safe';
 import { coachHint, drawCoach } from './coach';
+import { defOf } from '../ranch/catalog';
 import { jobArrows, jobCard } from './jobs';
 import { skyIcon } from './icons';
 import { CALM_MAX } from '../systems/trials';
@@ -183,7 +184,7 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const label = touch ? 'BUILD' : 'B: BUILD';
     const w = textWidth(label) + 8;
     bx -= w;
-    const pulse = game.tut === 6 && game.coins >= 20;
+    const pulse = game.tut === 6 && game.coins >= defOf('kennel').cost;
     if (button(game, g, 'hud-build', bx, rightY, w, bh, C.butter, pulse)) game.input.push('build');
     text(g, label, bx + w / 2, rightY + ty, C.wool, { align: 'center' });
   }

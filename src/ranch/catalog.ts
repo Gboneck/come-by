@@ -39,7 +39,7 @@ export const CATALOG: BuildDef[] = [
     icon: icon('trough', ['.........', '.........', 'ptttttttp', 'pwtwtwtwp', '.ppppppp.', '.p.....p.']),
   },
   {
-    id: 'kennel', kind: 'kennel', name: 'KENNEL', cost: 20, tier: 1, w: 3, h: 3, rotates: false, max: 1,
+    id: 'kennel', kind: 'kennel', name: 'KENNEL', cost: 15, tier: 1, w: 3, h: 3, rotates: false, max: 1,
     desc: 'TRAIN YOUR DOG: STAMINA, SPEED, BARK, NIP.',
     icon: icon('kennel', ['....p....', '...ppp...', '..ppppp..', '.ppppppp.', '.wwwwwww.', '.ww.p.ww.', '.wwpppww.']),
   },
