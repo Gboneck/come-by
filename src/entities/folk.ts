@@ -1,7 +1,8 @@
 import { C } from '../palette';
-import { ellipse, line, rect } from '../gfx/draw';
+import { line, rect } from '../gfx/draw';
+import { fineShadow } from '../art/hd';
 import { drawSpr } from '../gfx/sprite';
-import { dressed, peopleSprites, type Dress, type PeopleSprites, type Pic, type VillagerSpec } from '../art/people';
+import { dressedSoon, peopleSprites, type Dress, type PeopleSprites, type Pic, type VillagerSpec } from '../art/people';
 import { seasonLook } from '../art/seasonlook';
 import type { Drawable } from '../art/buildings';
 import type { Light } from '../render/night';
@@ -726,7 +727,7 @@ export class Folk {
   }
 
   drawShadows(g: CanvasRenderingContext2D) {
-    for (const p of this.people) if (p.shown) ellipse(g, p.x, p.y + 1, 3, 1, C.sage);
+    for (const p of this.people) if (p.shown) fineShadow(g, p.x, p.y + 0.5, CAST[p.id]?.look.build === 'stout' ? 6 : 5, 1.2, C.sage);
   }
 
   drawables(g: CanvasRenderingContext2D, inView: (x: number, y: number) => boolean): Drawable[] {
@@ -777,16 +778,16 @@ function hammering(p: Person, jobs: Job[]): boolean {
 }
 
 function drawPerson(g: CanvasRenderingContext2D, p: Person, jobs: Job[]) {
-  const s: PeopleSprites = dressed(p.spr, dressNow());
+  const s: PeopleSprites = dressedSoon(p.spr, dressNow());
   const f = p.face === 'l' ? 'r' : p.face;
   const seed = SEED[p.id] ?? 0;
-  const crook = !!CAST[p.id]?.crook;
-  // Something held out on one side: the lantern, or the shepherd's crook.
-  const holding = p.lantern || crook;
+  // Something held out on one side (drawn into the frames): the lantern at
+  // night, or the shepherd's crook.
+  const held = p.lantern ? 'lamp' : CAST[p.id]?.crook ? 'crook' : null;
   let flip = p.face === 'l';
   let sp: Pic;
   switch (p.pose) {
-    case 'walk': sp = (holding ? s.lamp : s.walk)[f][Math.floor(p.phase * 2) & 7]; break;
+    case 'walk': sp = (held === 'lamp' ? s.lamp : held ? s.crook : s.walk)[f][Math.floor(p.phase * 2) & 7]; break;
     case 'carry': sp = (s.carry[p.item ?? 'w'] ?? s.carry.w)[f][Math.floor(p.phase * 2) & 7]; break;
     case 'work': {
       // The blow lands as the strike frame starts (the sound is on it).
@@ -803,34 +804,14 @@ function drawPerson(g: CanvasRenderingContext2D, p: Person, jobs: Job[]) {
       break;
     case 'wave': sp = s.wave[f][Math.floor(p.anim * 4) & 1]; break;
     default:
-      if (holding) sp = s.lampStand[f];
+      if (held) sp = (held === 'lamp' ? s.lampStand : s.crookStand)[f];
       else if (p.bubble) sp = s.talk[f][TALK[Math.floor((p.bubble.t + seed) * 5) % TALK.length]];
       else if (p.anim > 5 && (p.anim + seed * 4) % 11 > 8) sp = s.idle[f];
       else if (f === 'd' && (p.anim + seed) % 3.7 < 0.14) sp = s.blink;
       else sp = s.stand[f];
   }
-  const x = Math.round(p.x), y = Math.round(p.y);
-  const held = p.pose === 'stand' || p.pose === 'walk';
-  const hx = x + (flip ? -sp.hx : sp.hx), hy = y + sp.hy;
-  if (crook && held) {
-    // The crook in the hand (behind the body, the hand round it), its hook
-    // turned outwards.
-    const out = f === 'u' ? -1 : f === 'd' ? 1 : flip ? -1 : 1;
-    const top = y - 14;
-    line(g, hx, y, hx, top + 1, C.plum);
-    rect(g, hx + out, top, 1, 1, C.plum);
-    rect(g, hx + out * 2, top + 1, 1, 2, C.plum);
-  }
-  drawSpr(g, sp, x, y, flip);
-  // The lantern hangs from the hand: the bail, and the glass glowing.
-  if (p.lantern && held) box(g, hx, hy + 2, 1, 2, 'y');
-}
-
-const COLOR: Record<string, string> = { y: C.butter, w: C.wool, o: C.moss, s: C.sage, t: C.teal };
-
-function box(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, c: string) {
-  rect(g, x - 1, y - 1, w + 2, h + 2, C.plum);
-  rect(g, x, y, w, h, COLOR[c] ?? C.wool);
+  // Placed to the nearest fine pixel (the shadow too), so walking is smooth.
+  drawSpr(g, sp, p.x, p.y, flip);
 }
 
 // Scaffolding round a big job, and a stack of timber by any site.
