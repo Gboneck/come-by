@@ -56,3 +56,39 @@ export function grid(fg: CanvasRenderingContext2D, rows: readonly string[], X: n
 export function gridAt(fg: CanvasRenderingContext2D, rows: readonly string[], X: number, B: number, map?: Record<string, string>, flip = false) {
   grid(fg, rows, X - (rows[0].length >> 1), B - rows.length + 1, map, flip);
 }
+
+// Scale2x: a picture doubled, its diagonals and curves rounded off instead
+// of stepping in 2x2 blocks, no new colours (for older art put on the fine
+// grid).
+export function scale2x(rows: readonly string[]): string[] {
+  const H = rows.length, W = Math.max(...rows.map((r) => r.length));
+  const at = (x: number, y: number) => (y < 0 || y >= H || x < 0 || x >= W ? '.' : rows[y][x] ?? '.');
+  const out: string[] = [];
+  for (let y = 0; y < H; y++) {
+    let r0 = '', r1 = '';
+    for (let x = 0; x < W; x++) {
+      const P = at(x, y), A = at(x, y - 1), B = at(x + 1, y), C = at(x - 1, y), D = at(x, y + 1);
+      r0 += (C === A && C !== D && A !== B ? A : P) + (A === B && A !== C && B !== D ? B : P);
+      r1 += (D === C && D !== B && C !== A ? C : P) + (B === D && B !== A && D !== C ? D : P);
+    }
+    out.push(r0, r1);
+  }
+  return out;
+}
+
+// A crown of leaf clumps on the fine grid, as the woods are drawn
+// (world/finecanopy.ts): each clump lit on its upper right, a dark rim on
+// its lower left. `parts` are [dx, dy, r] from (cx, cy), back to front.
+export function crown(fg: CanvasRenderingContext2D, cx: number, cy: number, parts: readonly (readonly [number, number, number])[], body = C.teal, hi = C.sage) {
+  for (const [dx, dy, r] of parts) {
+    const x0 = cx + dx, y0 = cy + dy;
+    for (let yy = -r; yy <= r; yy++)
+      for (let xx = -r; xx <= r; xx++) {
+        const d = Math.hypot(xx, yy * 1.1);
+        if (d > r) continue;
+        const s = (-xx * 0.6 + yy * 0.8) / (d || 1);
+        fg.fillStyle = d > r - 1.3 && s > -0.15 ? C.plum : d > r - 3 && d < r - 1 && s < -0.5 ? hi : body;
+        fg.fillRect(x0 + xx, y0 + yy, 1, 1);
+      }
+  }
+}
