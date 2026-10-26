@@ -196,8 +196,9 @@ function base(j: Job) {
         c = wet ? sage : moss;
         // Two wheel ruts a little in from each side, and the worn lip of
         // the track where it dips on its shady (lower, left) edges.
-        if (dp === 4 || (dp === 5 && ((fx >> 1) + (fy >> 1)) % 7 === 0)) c = wet ? plum : sage;
-        else if (dp === 1 && (at(x, y + 1) === K.Grass || at(x - 1, y) === K.Grass)) c = wet ? plum : sage;
+        // In the wet the ruts hold water.
+        if (dp === 4 || (dp === 5 && ((fx >> 1) + (fy >> 1)) % 7 === 0)) c = wet ? teal : sage;
+        else if (dp === 1 && (at(x, y + 1) === K.Grass || at(x - 1, y) === K.Grass)) c = sage;
         // Snow stays along the edges of a trodden track.
         if (j.look.snow > 0 && dp <= 1 + j.look.snow / 2) c = wool;
       } else {

@@ -1,6 +1,6 @@
 import { C, U32 } from '../palette';
 import { BAYER4, line } from '../gfx/draw';
-import { makeCanvas } from '../gfx/screen';
+import { PX, fine, makeCanvas } from '../gfx/screen';
 import { hash2 } from '../rng';
 import { WORLD_W } from '../world/map';
 import { windStrength } from './wind';
@@ -123,123 +123,138 @@ export class WeatherFx {
   }
 
   // On the ground (world coords): puddles on the paths, and the splash of
-  // drops landing.
+  // drops landing. Drawn on the fine grid.
   drawGround(g: CanvasRenderingContext2D, game: Game) {
     const { ox, oy, W, H } = game.view();
     const w = game.weather;
     if (seasonLook.snow > 0.4) return; // frozen: no puddles, drops fall as snow
-    if (this.wet > 0.12) {
-      const k = Math.min(1, (this.wet - 0.12) / 0.6);
-      for (const p of game.baked.puddles) {
-        if (p.x < ox - 8 || p.x > ox + W + 8 || p.y < oy - 4 || p.y > oy + H + 4) continue;
-        const rx = Math.round(p.r * k);
-        if (rx < 1) continue;
-        const ry = Math.max(1, Math.round(rx * 0.45));
-        for (let dy = -ry; dy <= ry; dy++) {
-          const hw = Math.round(rx * Math.sqrt(1 - (dy / (ry + 0.5)) ** 2));
-          g.fillStyle = dy === -ry ? C.sage : C.teal;
-          g.fillRect(p.x - hw, p.y + dy, hw * 2 + 1, 1);
-        }
-        g.fillStyle = C.wool;
-        if (rx > 2) g.fillRect(p.x + rx - 2, p.y - ry + 1, 1, 1);
-        // Rings where drops land in it.
-        if (w.rain > 0.1) {
-          const ph = (this.t * 2.5 + hash2(p.x, p.y, 3) * 4) % 1;
-          if (hash2(p.x, Math.floor(this.t * 2.5 + hash2(p.x, p.y, 3) * 4), 4) < w.rain && rx > 1) {
-            const r = Math.min(rx - 1, Math.round(ph * rx));
-            g.fillRect(p.x - r, p.y, 1, 1);
-            g.fillRect(p.x + r, p.y, 1, 1);
+    fine(g, (fg) => {
+      if (this.wet > 0.12) {
+        const k = Math.min(1, (this.wet - 0.12) / 0.6);
+        for (const p of game.baked.puddles) {
+          if (p.x < ox - 8 || p.x > ox + W + 8 || p.y < oy - 4 || p.y > oy + H + 4) continue;
+          const rx = Math.round(p.r * k * PX);
+          if (rx < 2) continue;
+          const ry = Math.max(1, Math.round(rx * 0.45));
+          const X = p.x * PX, Y = p.y * PX;
+          for (let dy = -ry; dy <= ry; dy++) {
+            const hw = Math.round(rx * Math.sqrt(1 - (dy / (ry + 0.5)) ** 2));
+            fg.fillStyle = dy === -ry ? C.sage : dy === -ry + 1 ? C.sage : C.teal;
+            fg.fillRect(X - hw, Y + dy, hw * 2 + 1, 1);
+          }
+          // The sky caught in it, and rings where drops land.
+          fg.fillStyle = C.wool;
+          if (rx > 4) fg.fillRect(X + rx - 5, Y - ry + 2, 3, 1);
+          if (w.rain > 0.1) {
+            const ph = (this.t * 2.5 + hash2(p.x, p.y, 3) * 4) % 1;
+            if (hash2(p.x, Math.floor(this.t * 2.5 + hash2(p.x, p.y, 3) * 4), 4) < w.rain) {
+              const r = Math.min(rx - 2, Math.round(ph * rx));
+              const rr = Math.max(1, r >> 1);
+              fg.fillRect(X - r, Y, 1, 1);
+              fg.fillRect(X + r, Y, 1, 1);
+              fg.fillRect(X, Y - rr, 1, 1);
+              fg.fillRect(X, Y + rr, 1, 1);
+            }
           }
         }
       }
-    }
-    // After the rain, the wet paths glint where the light catches them.
-    if (w.rain < 0.1 && this.wet > 0.3 && quality.fx >= 0.6) {
-      const n = Math.round((this.wet * W * H) / 2200);
-      g.fillStyle = C.wool;
+      // After the rain, the wet paths glint where the light catches them.
+      if (w.rain < 0.1 && this.wet > 0.3 && quality.fx >= 0.6) {
+        const n = Math.round((this.wet * W * H) / 2200);
+        fg.fillStyle = C.wool;
+        for (let j = 0; j < n; j++) {
+          const s = this.t * 2 + hash2(j, 0, 25) * 7, slot = Math.floor(s);
+          if (s - slot > 0.3) continue;
+          const x = ox + Math.floor(hash2(j, slot, 26) * W), y = oy + Math.floor(hash2(j, slot, 27) * H);
+          const so = game.baked.soil[y * WORLD_W + x];
+          if (so !== 1 && so !== 2) continue;
+          const big = s - slot < 0.15;
+          fg.fillRect(x * PX, y * PX, big ? 2 : 1, 1);
+          if (big) fg.fillRect(x * PX + 1, y * PX - 1, 1, 1);
+        }
+      }
+      if (w.rain < 0.05) return;
+      // Splashes: each slot shows a drop landing somewhere new every moment,
+      // then a little crown.
+      const n = Math.round(((w.rain * W * H) / 1400) * quality.fx);
+      fg.fillStyle = C.wool;
       for (let j = 0; j < n; j++) {
-        const s = this.t * 2 + hash2(j, 0, 25) * 7, slot = Math.floor(s);
-        if (s - slot > 0.3) continue;
-        const x = ox + Math.floor(hash2(j, slot, 26) * W), y = oy + Math.floor(hash2(j, slot, 27) * H);
-        const so = game.baked.soil[y * WORLD_W + x];
-        if (so === 1 || so === 2) g.fillRect(x, y, 1, 1);
+        const s = this.t * 9 + hash2(j, 0, 5) * 9;
+        const slot = Math.floor(s), f = s - slot;
+        const X = (ox + Math.floor(hash2(j, slot, 6) * W)) * PX, Y = (oy + Math.floor(hash2(j, slot, 7) * H)) * PX;
+        if (f < 0.35) fg.fillRect(X, Y, 1, 1);
+        else if (f < 0.75) {
+          const r = f < 0.55 ? 1 : 2;
+          fg.fillRect(X - r, Y - (r - 1), 1, 1);
+          fg.fillRect(X + r, Y - (r - 1), 1, 1);
+          fg.fillRect(X, Y - r, 1, 1);
+        }
       }
-    }
-    if (w.rain < 0.05) return;
-    // Splashes: each slot shows a drop landing somewhere new every moment.
-    const n = Math.round(((w.rain * W * H) / 1400) * quality.fx);
-    g.fillStyle = C.wool;
-    for (let j = 0; j < n; j++) {
-      const s = this.t * 9 + hash2(j, 0, 5) * 9;
-      const slot = Math.floor(s), f = s - slot;
-      const x = ox + Math.floor(hash2(j, slot, 6) * W), y = oy + Math.floor(hash2(j, slot, 7) * H);
-      if (f < 0.4) g.fillRect(x, y, 1, 1);
-      else if (f < 0.75) {
-        g.fillRect(x - 1, y, 1, 1);
-        g.fillRect(x + 1, y, 1, 1);
-        g.fillRect(x, y - 1, 1, 1);
-      }
-    }
+    });
   }
 
   // In the air, over everything (screen coords): streaks of rain slanting
-  // with the wind, and the lightning bolt itself.
+  // with the wind, snow drifting, and the lightning bolt itself. Fine grid.
   drawAir(g: CanvasRenderingContext2D, game: Game, W: number, H: number, night: boolean) {
     const w = game.weather;
-    if (w.rain > 0.03 && seasonLook.snow > 0.4) {
-      // Snowfall: flakes drifting down slowly, swaying, blown on the wind.
-      const n = Math.round(((w.rain * W * H) / 220) * quality.fx);
-      const drift = 6 + windStrength() * 30;
-      g.fillStyle = night ? C.sage : C.wool;
-      for (let i = 0; i < n; i++) {
-        const v = 14 + hash2(i, 1, 19) * 16;
-        const fall = this.t * v;
-        const y = Math.floor((((hash2(i, 2, 19) * (H + 10) + fall) % (H + 10)) + H + 10) % (H + 10)) - 5;
-        const x = Math.floor((((hash2(i, 3, 19) * (W + 20) + this.t * drift + Math.sin(this.t * 1.7 + i) * 3) % (W + 20)) + W + 20) % (W + 20)) - 10;
-        g.fillRect(x, y, 1, 1);
-        if (hash2(i, 4, 19) < 0.15) { g.fillRect(x + 1, y, 1, 1); g.fillRect(x, y + 1, 1, 1); }
-      }
-    } else if (w.rain > 0.03) {
-      const n = Math.round(((w.rain * W * H) / 260) * quality.fx);
-      const slant = 0.2 + windStrength() * 0.55;
-      const len = 3 + Math.round(w.rain * 2);
-      g.fillStyle = night ? C.sage : C.wool;
-      for (let i = 0; i < n; i++) {
-        const v = 230 + hash2(i, 1, 9) * 90;
-        const fall = this.t * v;
-        const y = Math.floor((((hash2(i, 2, 9) * (H + 30) + fall) % (H + 30)) + H + 30) % (H + 30)) - 15;
-        const x = Math.floor((((hash2(i, 3, 9) * (W + 40) + fall * slant) % (W + 40)) + W + 40) % (W + 40)) - 20;
-        // One rect per straight run of the streak (same pixels, fewer calls).
-        for (let k = 0; k < len; ) {
-          const dx = Math.round(k * slant);
-          let e = k + 1;
-          while (e < len && Math.round(e * slant) === dx) e++;
-          g.fillRect(x + dx, y + k, 1, e - k);
-          k = e;
+    fine(g, (fg) => {
+      const FW = W * PX, FH = H * PX;
+      if (w.rain > 0.03 && seasonLook.snow > 0.4) {
+        // Snowfall: flakes drifting down slowly, swaying, blown on the wind;
+        // the near ones a little star.
+        const n = Math.round(((w.rain * W * H) / 220) * quality.fx);
+        const drift = (6 + windStrength() * 30) * PX;
+        fg.fillStyle = night ? C.sage : C.wool;
+        for (let i = 0; i < n; i++) {
+          const v = (14 + hash2(i, 1, 19) * 16) * PX;
+          const fall = this.t * v;
+          const y = Math.floor((((hash2(i, 2, 19) * (FH + 20) + fall) % (FH + 20)) + FH + 20) % (FH + 20)) - 10;
+          const x = Math.floor((((hash2(i, 3, 19) * (FW + 40) + this.t * drift + Math.sin(this.t * 1.7 + i) * 6) % (FW + 40)) + FW + 40) % (FW + 40)) - 20;
+          if (hash2(i, 4, 19) < 0.18) { fg.fillRect(x - 1, y, 3, 1); fg.fillRect(x, y - 1, 1, 3); }
+          else fg.fillRect(x, y, hash2(i, 5, 19) < 0.4 ? 2 : 1, 1);
+        }
+      } else if (w.rain > 0.03) {
+        const n = Math.round(((w.rain * W * H) / 260) * quality.fx);
+        const slant = 0.2 + windStrength() * 0.55;
+        const len = (3 + Math.round(w.rain * 2)) * PX;
+        fg.fillStyle = night ? C.sage : C.wool;
+        for (let i = 0; i < n; i++) {
+          const v = (230 + hash2(i, 1, 9) * 90) * PX;
+          const fall = this.t * v;
+          const y = Math.floor((((hash2(i, 2, 9) * (FH + 60) + fall) % (FH + 60)) + FH + 60) % (FH + 60)) - 30;
+          const x = Math.floor((((hash2(i, 3, 9) * (FW + 80) + fall * slant) % (FW + 80)) + FW + 80) % (FW + 80)) - 40;
+          // One rect per straight run of the streak (same pixels, fewer calls).
+          for (let k = 0; k < len; ) {
+            const dx = Math.round(k * slant);
+            let e = k + 1;
+            while (e < len && Math.round(e * slant) === dx) e++;
+            fg.fillRect(x + dx, y + k, 1, e - k);
+            k = e;
+          }
         }
       }
-    }
-    if (this.flash > 0.08 && this.flashNear > 0.45) {
-      if (!this.bolt) {
-        // A jagged bolt from the top of the screen, with one fork.
-        const pts: number[][] = [];
-        let x = W * (0.2 + Math.random() * 0.6), y = -2;
-        const end = H * (0.3 + Math.random() * 0.25);
-        while (y < end) {
+      if (this.flash > 0.08 && this.flashNear > 0.45) {
+        if (!this.bolt) {
+          // A jagged bolt from the top of the screen, with one fork.
+          const pts: number[][] = [];
+          let x = W * (0.2 + Math.random() * 0.6), y = -2;
+          const end = H * (0.3 + Math.random() * 0.25);
+          while (y < end) {
+            pts.push([x, y]);
+            x += (Math.random() - 0.5) * 12;
+            y += 5 + Math.random() * 7;
+          }
           pts.push([x, y]);
-          x += (Math.random() - 0.5) * 12;
-          y += 5 + Math.random() * 7;
+          this.bolt = pts;
         }
-        pts.push([x, y]);
-        this.bolt = pts;
+        const b = this.bolt;
+        for (let i = 0; i < b.length - 1; i++) {
+          line(fg, b[i][0] * PX, b[i][1] * PX, b[i + 1][0] * PX, b[i + 1][1] * PX, C.wool);
+          line(fg, b[i][0] * PX + 1, b[i][1] * PX, b[i + 1][0] * PX + 1, b[i + 1][1] * PX, C.butter);
+        }
+        const m = b[Math.floor(b.length / 2)];
+        line(fg, m[0] * PX, m[1] * PX, (m[0] + 10) * PX, (m[1] + 12) * PX, C.wool);
       }
-      const b = this.bolt;
-      for (let i = 0; i < b.length - 1; i++) {
-        line(g, b[i][0], b[i][1], b[i + 1][0], b[i + 1][1], C.wool);
-        line(g, b[i][0] + 1, b[i][1], b[i + 1][0] + 1, b[i + 1][1], C.butter);
-      }
-      const m = b[Math.floor(b.length / 2)];
-      line(g, m[0], m[1], m[0] + 10, m[1] + 12, C.wool);
-    }
+    });
   }
 }
