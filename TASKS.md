@@ -1029,7 +1029,7 @@ Before → after, in plain words:
       guest badges and shared favour; savetest, ordertest, daytest pass;
       `tune.mjs --seed=7` is identical to main for all five species
 
-## M34 UI round five: goods you can see, what to do, readable text
+## M35 UI round five: goods you can see, what to do, readable text
 - [x] Goods you can see: the good's icon and "+1" over the animal that made
       it (friends see it too); goods wait in the paddock as things, a pile
       of each kind along the back fence (a nest box of eggs, wool bales,
