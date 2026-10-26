@@ -165,8 +165,10 @@ export function ledgerKeys(game: Game): boolean {
   const inp = game.input;
   if (inp.pressed('ledger')) return true;
   const n = LEDGER_PAGES.length + 1;
-  if (n > 1 && (inp.pressed('prev') || inp.pressed('next'))) {
-    ledgerView.page = (ledgerView.page + (inp.pressed('next') ? 1 : n - 1)) % n;
+  // Read each key once: pressed() uses the press up.
+  const step = inp.pressed('next') ? 1 : inp.pressed('prev') ? n - 1 : 0;
+  if (n > 1 && step) {
+    ledgerView.page = (ledgerView.page + step) % n;
     game.audio?.play('click');
   }
   ledgerView.page = Math.min(ledgerView.page, n - 1);
