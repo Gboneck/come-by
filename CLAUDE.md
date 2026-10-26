@@ -68,6 +68,8 @@ original and drawn in code. No external art files, ever.
   `scripts/seasontest.mjs` checks the calendar, winter hay, lambing, the
   shearer, the fair, rare breeds and seasons in the save (old saves load),
   `scripts/lambtest.mjs` drives ewes with lambs calm against barking,
+  `scripts/paddocktest.mjs` checks paddocks you size yourself (room, price,
+  placing, gates, extending, mixed flocks, fixtures, old saves' pens),
   `scripts/valleytest.mjs` checks the valley growing: the village's steps,
   market day, the festival parade, grazing a paddock clear, timber for the
   old bridge, the shearing shed, the dairy, the agility course, saves,
@@ -199,7 +201,11 @@ needs a line there.
 - `src/world/` tile map, regions, terrain/canopy baking; `places.ts` the
   hidden places (pockets, ways, landmarks, strays and wild flocks).
 - `src/entities/` dog, animals + species, predators, helpers.
-- `src/ranch/` buildings, pens, gates, build mode.
+- `src/ranch/` buildings, paddocks, gates; `paddock.ts` the rules for
+  paddocks you size yourself (place, extend, move the gate, fixtures,
+  price by fence, room by area), `village.ts` the village at the
+  crossroads. Kinds that get along share a paddock (`getsAlong` in
+  `buildings.ts`).
 - `src/systems/` day cycle, economy, progression, save, audio (mixer and
   sound effects), music (generative score), soundscape, synth (sample bank),
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'

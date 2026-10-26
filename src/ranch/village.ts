@@ -50,6 +50,10 @@ export const SPOTS = {
   road: { x: 96 * TS, y: 86 * TS }, // where newcomers walk in from
 };
 
+// The market square's three stalls (pixels, the ground point at each one's
+// counter), for anything that dresses a stall up (a buyer's name board).
+export const STALLS = PLOTS.filter((p) => p.kind === 'stall').map((p) => ({ x: (p.tx + p.w / 2) * TS, y: (p.ty + p.h) * TS }));
+
 export const doorOf = (p: Plot) => ({ x: (p.tx + p.w / 2) * TS, y: (p.ty + p.h) * TS + 4 });
 
 export class Village implements Fixture {
