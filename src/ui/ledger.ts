@@ -137,6 +137,40 @@ function drawLines(g: CanvasRenderingContext2D, lines: Line[], x0: number, y: nu
 
 const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? 9 : 7), 0);
 
+// More pages of the Ledger after the first (the ranch, built in): other
+// features add an entry here. Each page draws into the book's paper (`r`,
+// with `spine` the x of the fold on a wide screen, else 0) in ink (`PAPER_INK`:
+// plum writing, teal for what matters, sage for what is not yet). `keys`
+// gets the arrows and confirm while its page is open, and returns true when
+// it used confirm (else confirm closes the book).
+export interface LedgerInk { text: string; accent: string; dim: string }
+export const PAPER_INK: LedgerInk = { text: C.plum, accent: C.teal, dim: C.sage };
+export interface LedgerPage {
+  id: string;
+  tab: string;
+  draw: (game: Game, g: CanvasRenderingContext2D, r: { x: number; y: number; w: number; h: number; spine: number }, ink: LedgerInk) => void;
+  keys?: (game: Game) => boolean;
+}
+export const LEDGER_PAGES: LedgerPage[] = [];
+// The open page (0: the ranch). The book stays open where you left it.
+export const ledgerView = { page: 0 };
+
+// The Ledger's keys; true when it should close. Q/E ([ ], LB/RB) turn the
+// pages.
+export function ledgerKeys(game: Game): boolean {
+  const inp = game.input;
+  if (inp.pressed('ledger') || inp.pressed('cancel')) return true;
+  const n = LEDGER_PAGES.length + 1;
+  if (n > 1 && (inp.pressed('prev') || inp.pressed('next'))) {
+    ledgerView.page = (ledgerView.page + (inp.pressed('next') ? 1 : n - 1)) % n;
+    game.audio?.play('click');
+  }
+  ledgerView.page = Math.min(ledgerView.page, n - 1);
+  const page = LEDGER_PAGES[ledgerView.page - 1];
+  if (page?.keys?.(game)) return false;
+  return inp.pressed('confirm');
+}
+
 // The Ranch Ledger: where you are, what to do, what comes next. On a wide
 // screen the goals sit on the left, the map and the day's jobs on the right.
 export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H: number): boolean {
@@ -186,17 +220,23 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   const S = safeArea(game.screen);
   const top = 16, foot = 16;
   const ph = wide ? Math.max(top + linesH(A), top + 2 + mapH + 6 + linesH(B)) + foot : top + linesH(A) + 4 + linesH(B) + 4 + mapH + 4 + foot;
-  const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
+  const tabs = LEDGER_PAGES.length > 0;
+  const touch = game.input.touchMode;
+  const tabH = touch ? 12 : 10;
+  const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top + (tabs ? tabH + 3 : 0), Math.round(H / 2 - ph / 2));
   dimView(g, game.view());
+  const page = LEDGER_PAGES[Math.min(ledgerView.page, LEDGER_PAGES.length) - 1];
+  if (tabs) drawTabs(game, g, x0, y0 - 4, pw, tabH);
   book(g, x0, y0, pw, ph, wide ? colW + 11 : 0, game.t);
-  heading(g, 'RANCH LEDGER', x0 + (wide ? (colW + 11) / 2 : pw / 2), y0 + 4, C.plum, { align: 'center', shade: C.teal });
+  heading(g, page ? page.tab : 'RANCH LEDGER', x0 + (wide ? (colW + 11) / 2 : pw / 2), y0 + 4, C.plum, { align: 'center', shade: C.teal });
   // Tier pips, inked.
   for (let i = 0; i < TIERS.length; i++) {
     const tx = x0 + pw - 7 - (TIERS.length - i) * 5;
     rect(g, tx, y0 + 5, 4, 4, C.plum);
     if (i >= game.tier) rect(g, tx + 1, y0 + 6, 2, 2, C.wool);
   }
-  if (wide) {
+  if (page) page.draw(game, g, { x: x0 + 7, y: y0 + top, w: pw - 14, h: ph - top - foot - 2, spine: wide ? colW + 11 - 7 : 0 }, PAPER_INK);
+  else if (wide) {
     drawLines(g, A, x0 + 7, y0 + top);
     const mx = x0 + colW + 12 + Math.round((rightW - mapW) / 2);
     drawMap(game, g, mx, y0 + top + 2);
@@ -208,13 +248,36 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   }
 
   // Close.
-  const touch = game.input.touchMode;
-  const label = touch ? 'CLOSE' : 'TAB: CLOSE';
+  const label = touch ? 'CLOSE' : tabs ? 'Q/E: PAGE  TAB: CLOSE' : 'TAB: CLOSE';
   const bw = textWidth(label) + (touch ? 16 : 10), bh = touch ? 13 : 11;
   const bx = Math.round(x0 + pw / 2 - bw / 2), by = y0 + ph - bh - 2;
   panel(g, bx, by, bw, bh, ui.isActive('ledger-close') ? C.teal : C.plum, C.butter);
   text(g, label, bx + bw / 2, by + Math.floor((bh - 5) / 2), C.wool, { align: 'center' });
   return ui.click('ledger-close', bx, by, bw, bh) || ui.captureAll('ledger-bg');
+}
+
+// The page tabs: cloth tabs standing up from the cover's top edge, the open
+// page's tab in paper, joined to its page. Tap one to turn to it.
+function drawTabs(game: Game, g: CanvasRenderingContext2D, x0: number, top: number, pw: number, th: number) {
+  const names = ['RANCH', ...LEDGER_PAGES.map((p) => p.tab)];
+  const ws = names.map((n) => textWidth(n) + (game.input.touchMode ? 10 : 8));
+  let x = x0 + 4;
+  // Too many for the cover: share it out evenly.
+  const total = ws.reduce((a, b) => a + b + 2, 0);
+  const squeeze = total > pw - 8 ? (pw - 8) / total : 1;
+  names.forEach((n, i) => {
+    const w = Math.floor(ws[i] * squeeze), on = i === ledgerView.page;
+    const y = top - th + (on ? 0 : 1); // the open one stands a pixel taller
+    rect(g, x, y, w, th + 2, C.plum);
+    rect(g, x + 1, y + 1, w - 2, th + 1, on ? C.wool : C.teal);
+    if (!on) for (let k = 2; k < w - 2; k += 3) px(g, x + k, y + 1, C.sage);
+    text(g, n, x + w / 2, y + Math.floor((th - 5) / 2) + 1, on ? C.plum : C.wool, { align: 'center' });
+    if (game.ui.click(`ledger-tab-${i}`, x, y - 2, w, th + 4) && i !== ledgerView.page) {
+      ledgerView.page = i;
+      game.audio?.play('click');
+    }
+    x += w + 2;
+  });
 }
 
 // The Ledger's binding: a teal cloth cover a few pixels proud of the pages,

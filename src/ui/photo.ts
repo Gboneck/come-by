@@ -168,15 +168,27 @@ function toast(s: string) {
 
 // Scale the card up by a whole number (crisp, for sharing) and hand it on.
 function save(game: Game, src: HTMLCanvasElement, W: number, H: number) {
+  game.audio?.play('click');
+  const name = `come-by-${(game.look.ranch || 'ranch').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-day-${game.day.day}.png`;
+  sharePng(src, name, { touch: game.input.touchMode, w: W, h: H, text: `${game.look.name} on ${game.look.ranch || 'the ranch'}` })
+    .then((r) => { if (r !== 'cancelled') toast(r === 'shared' ? 'SHARED!' : r === 'saved' ? 'PHOTO SAVED' : 'COULD NOT SAVE THE PHOTO'); });
+}
+
+// Any canvas as a PNG, scaled up by a whole number to about 1200px on its
+// long side: the share sheet on a phone (when it takes files), a download
+// elsewhere. (w, h) is the part of `src` to take from its top-left (all of
+// it by default). Call it straight from the tap or key press: the share
+// sheet only opens while the press still counts as the player's. Closing
+// the share sheet is 'cancelled' (nothing is downloaded then).
+export type ShareResult = 'shared' | 'saved' | 'cancelled' | 'failed';
+export function sharePng(src: HTMLCanvasElement, name: string, o: { touch: boolean; w?: number; h?: number; title?: string; text?: string }): Promise<ShareResult> {
+  const W = o.w ?? src.width, H = o.h ?? src.height;
   const k = Math.max(2, Math.round(1200 / Math.max(W, H)));
   const [c, cg] = makeCanvas(W * k, H * k);
   cg.imageSmoothingEnabled = false;
   cg.drawImage(src, 0, 0, W, H, 0, 0, W * k, H * k);
-  game.audio?.play('click');
-  const name = `come-by-${(game.look.ranch || 'ranch').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-day-${game.day.day}.png`;
-  // A data URL turned into a file at once, so the share sheet opens while
-  // the tap still counts as the player's.
-  let file: File | null = null;
+  // A data URL turned into a file at once, so nothing waits on a callback.
+  let file: File;
   try {
     const url = c.toDataURL('image/png');
     const bin = atob(url.split(',')[1]);
@@ -184,20 +196,17 @@ function save(game: Game, src: HTMLCanvasElement, W: number, H: number) {
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     file = new File([bytes], name, { type: 'image/png' });
   } catch {
-    toast('COULD NOT SAVE THE PHOTO');
-    return;
+    return Promise.resolve('failed');
   }
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-  if (game.input.touchMode && nav.share && nav.canShare?.({ files: [file] })) {
-    nav.share({ files: [file], title: 'Come By', text: `${game.look.name} on ${game.look.ranch || 'the ranch'}` })
-      .then(() => toast('SHARED!'))
-      .catch(() => download(file!, name));
-    return;
-  }
-  download(file, name);
+  if (o.touch && nav.share && nav.canShare?.({ files: [file] }))
+    return nav.share({ files: [file], title: o.title ?? 'Come By', text: o.text })
+      .then((): ShareResult => 'shared')
+      .catch((e: unknown): ShareResult => (e instanceof DOMException && e.name === 'AbortError' ? 'cancelled' : download(file, name)));
+  return Promise.resolve(download(file, name));
 }
 
-function download(file: File, name: string) {
+function download(file: File, name: string): 'saved' | 'failed' {
   try {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');
@@ -207,8 +216,8 @@ function download(file: File, name: string) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast('PHOTO SAVED');
+    return 'saved';
   } catch {
-    toast('COULD NOT SAVE THE PHOTO');
+    return 'failed';
   }
 }

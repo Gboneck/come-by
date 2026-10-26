@@ -23,7 +23,7 @@ import { BuildMode } from './ui/build';
 import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
 import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
-import { drawLedger } from './ui/ledger';
+import { drawLedger, ledgerKeys } from './ui/ledger';
 import { REGIONS } from './world/map';
 import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
@@ -509,7 +509,7 @@ export class Game {
       return;
     }
     if (this.mode === 'ledger') {
-      if (this.input.pressed('ledger') || this.input.pressed('cancel') || this.input.pressed('confirm')) this.mode = 'play';
+      if (ledgerKeys(this)) this.mode = 'play';
       this.coopWorld(dt);
       return;
     }
