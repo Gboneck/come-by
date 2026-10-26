@@ -20,7 +20,7 @@ import { cycle, optionRow } from './rows';
 import { focusField, isTyping, stopTyping, textField } from './textfield';
 import { ROOFS, TRIMS, type Roof, type Trim } from '../art/ranchstyle';
 import { drawGateMark, drawRoad } from '../art/road';
-import { PaddockEditor, paddockRules, type PaddockLike, type PaddockRules } from './paddockbuild';
+import { PaddockEditor, paddockRules, type GateAt, type PaddockLike, type PaddockRules, type PRect } from './paddockbuild';
 import './paddockrules'; // the ranch's paddock rules, when this build has them
 
 // The ranch tab's paint rows (the name field sits above them).
@@ -32,6 +32,18 @@ const RANCH_ROWS: { label: string; value: (g: Game) => string; step: (g: Game, d
 ];
 
 export type Tab = 'build' | 'decor' | 'ranch' | 'dog' | 'market';
+
+// Co-op: what a guest's build mode asks the host to do. The host plays it
+// through the same methods (BuildMode.apply), so every rule and price holds.
+export type BuildCmd =
+  | { t: 'place'; item: number; cx: number; cy: number; rot: Rot }
+  | { t: 'paddock'; r: PRect; gate: GateAt; base: [number, number] | null }
+  | { t: 'upgrade' | 'remove' | 'undecor'; cx: number; cy: number }
+  | { t: 'decor'; piece: number; cx: number; cy: number }
+  | { t: 'dogup'; key: UpKey }
+  | { t: 'hire' }
+  | { t: 'sell'; tx: number; ty: number }
+  | { t: 'look'; ranch: string; roof: Roof; trim: Trim };
 const TABS: [Tab, string][] = [['build', 'BUILD'], ['decor', 'DECOR'], ['ranch', 'RANCH'], ['dog', 'DOG'], ['market', 'MARKET']];
 
 // How far out from the ranch centre you may build, by tier.
@@ -85,6 +97,9 @@ export class BuildMode {
   row = 0;
   msg: { text: string; t: number; good: boolean } | null = null;
   paddock = new PaddockEditor();
+  // Co-op guest: changes go to the host as commands instead (null in single
+  // player and on the host).
+  remote: ((c: BuildCmd) => void) | null = null;
   private rep: Record<string, number> = {};
   private paintKey = '';
 
@@ -133,6 +148,16 @@ export class BuildMode {
   }
 
   private commitPaddock(game: Game, R: PaddockRules) {
+    const d = this.paddock.draft;
+    if (this.remote && d) {
+      const q = this.paddock.quote(game, R, (x, y) => this.buildable(game, x, y));
+      if (q.why) {
+        this.say(q.why);
+        game.audio?.play('deny');
+        return;
+      }
+      return this.remote({ t: 'paddock', r: { ...d.r }, gate: { ...d.gate }, base: d.base ? [d.base.tx, d.base.ty] : null });
+    }
     const res = this.paddock.commit(game, R, (x, y) => this.buildable(game, x, y));
     this.say(res.say, res.good);
     if (!res.good) {
@@ -239,6 +264,8 @@ export class BuildMode {
     const X0 = tx * TS - 3, Y0 = ty * TS - 3, X1 = (tx + w) * TS + 3, Y1 = (ty + h) * TS + 3;
     const inside = (x: number, y: number) => x > X0 && x < X1 && y > Y0 && y < Y1;
     if (inside(game.dog.x, game.dog.y)) return { ...gh, reason: 'YOUR DOG IS IN THE WAY' };
+    const friend = game.coop.find((d) => inside(d.x, d.y)); // co-op: a friend's dog
+    if (friend) return { ...gh, reason: `${friend.tag || 'A DOG'} IS IN THE WAY` };
     if (game.animals.some((a) => !a.gone && !a.pen && inside(a.x, a.y))) return { ...gh, reason: 'ANIMALS IN THE WAY' };
     if (game.coins < def.cost) return { ...gh, reason: `NEED ${def.cost}$` };
     return { ...gh, ok: true };
@@ -251,6 +278,7 @@ export class BuildMode {
       game.audio?.play('deny');
       return;
     }
+    if (this.remote) return this.remote({ t: 'place', item: this.item, cx: this.cx, cy: this.cy, rot: this.rot });
     game.coins -= gh.def.cost;
     if (gh.paddock) {
       paddockRules()!.placeFixture!(game, gh.paddock, gh.def.id, gh.tx, gh.ty);
@@ -272,6 +300,7 @@ export class BuildMode {
     if (!d?.upgrade || b.level >= 2) return this.say('NOTHING TO UPGRADE');
     if (game.tier < d.upgrade.tier) return this.say(`UPGRADE AT TIER ${d.upgrade.tier}`);
     if (game.coins < d.upgrade.cost) return this.say(`NEED ${d.upgrade.cost}$`);
+    if (this.remote) return this.remote({ t: 'upgrade', cx: b.tx, cy: b.ty });
     game.coins -= d.upgrade.cost;
     b.level++;
     game.ranch.restamp();
@@ -281,6 +310,7 @@ export class BuildMode {
   }
 
   private remove(game: Game, b: Building) {
+    if (this.remote) return this.remote({ t: 'remove', cx: b.tx, cy: b.ty });
     const R = paddockRules();
     if (R && R.is(b)) {
       const err = R.remove(game, b);
@@ -332,11 +362,11 @@ export class BuildMode {
         if (inp.pressed('up')) this.row = (this.row + rows - 1) % rows;
         if (inp.pressed('down')) this.row = (this.row + 1) % rows;
         const r = RANCH_ROWS[this.row - 1];
-        if (inp.pressed('left') && r) { r.step(game, -1); applyLook(game.look); }
-        if (inp.pressed('right') && r) { r.step(game, 1); applyLook(game.look); }
+        if (inp.pressed('left') && r) { r.step(game, -1); this.painted(game); }
+        if (inp.pressed('right') && r) { r.step(game, 1); this.painted(game); }
         if (inp.pressed('confirm')) {
           if (this.row === 0) focusField('ranchname');
-          else if (r) { r.step(game, 1); applyLook(game.look); }
+          else if (r) { r.step(game, 1); this.painted(game); }
         }
       }
     } else if (this.tab === 'build') {
@@ -430,6 +460,7 @@ export class BuildMode {
       game.audio?.play('deny');
       return;
     }
+    if (this.remote) return this.remote({ t: 'decor', piece: this.piece, cx: this.cx, cy: this.cy });
     game.coins -= p.cost;
     game.decor.push({ id: p.id, tx, ty });
     this.say(`PLACED A ${p.name}`, true);
@@ -440,10 +471,65 @@ export class BuildMode {
   private removeDecor(game: Game) {
     const d = decorAt(game, this.cx, this.cy);
     if (!d) return;
+    if (this.remote) return this.remote({ t: 'undecor', cx: this.cx, cy: this.cy });
     const p = pieceOf(d.id);
     game.decor = game.decor.filter((x) => x !== d);
     game.coins += p.cost; // decor comes back in full
     this.say(`PICKED UP THE ${p.name} (+${p.cost}$)`);
+  }
+
+  // The ranch's name or paint changed (a guest's goes to the host too).
+  private painted(game: Game) {
+    applyLook(game.look);
+    if (this.remote) this.remote({ t: 'look', ranch: game.look.ranch, roof: game.look.roof, trim: game.look.trim });
+  }
+
+  // Co-op host: a guest's change, played through the same methods (this is
+  // a spare BuildMode, set to the guest's cursor and choices). What it says
+  // goes back to the guest's screen.
+  apply(game: Game, c: BuildCmd): { text: string; good: boolean } {
+    this.msg = null;
+    this.remote = null;
+    const at = (cx: number, cy: number) => { this.cx = cx; this.cy = cy; };
+    switch (c.t) {
+      case 'place': this.item = c.item; this.rot = c.rot; at(c.cx, c.cy); this.place(game); break;
+      case 'paddock': {
+        const R = paddockRules();
+        if (!R) break;
+        const base = c.base ? this.paddockAt(game, c.base[0], c.base[1]) : null;
+        if (c.base && !base) { this.say('THAT PADDOCK HAS GONE'); break; }
+        this.paddock.draft = { r: { ...c.r }, gate: { ...c.gate }, base };
+        this.commitPaddock(game, R);
+        this.paddock.cancel();
+        break;
+      }
+      case 'upgrade':
+      case 'remove': {
+        const b = this.buildingAt(game, c.cx, c.cy);
+        if (!b) this.say('NOTHING THERE NOW');
+        else if (c.t === 'upgrade') this.upgrade(game, b);
+        else this.remove(game, b);
+        break;
+      }
+      case 'decor': this.piece = c.piece; at(c.cx, c.cy); this.placeDecor(game); break;
+      case 'undecor': at(c.cx, c.cy); this.removeDecor(game); break;
+      case 'dogup': this.buyUpgrade(game, c.key); break;
+      case 'hire': this.hire(game); break;
+      case 'sell': {
+        const p = game.ranch.pens.find((x) => x.tx === c.tx && x.ty === c.ty);
+        if (p) this.sellOne(game, p);
+        break;
+      }
+      case 'look':
+        game.look.ranch = c.ranch;
+        if (c.roof in ROOFS) game.look.roof = c.roof;
+        if (c.trim in TRIMS) game.look.trim = c.trim;
+        applyLook(game.look);
+        this.say('THE RANCH IS FRESHLY PAINTED', true);
+        break;
+    }
+    const said = this.msg as BuildMode['msg']; // set by the calls above
+    return { text: said?.text ?? '', good: !!said?.good };
   }
 
   buyUpgrade(game: Game, key: UpKey) {
@@ -453,6 +539,7 @@ export class BuildMode {
     if (lvl >= MAX_UP) return this.say('ALREADY THE BEST');
     const cost = def.costs[lvl - 1];
     if (game.coins < cost) return this.say(`NEED ${cost}$`);
+    if (this.remote) return this.remote({ t: 'dogup', key });
     game.coins -= cost;
     game.upgrades[key]++;
     game.applyUpgrades();
@@ -462,6 +549,7 @@ export class BuildMode {
   }
 
   hire(game: Game) {
+    if (this.remote) return this.remote({ t: 'hire' });
     const err = game.hireHelper();
     if (err) this.say(err);
     else {
@@ -474,6 +562,7 @@ export class BuildMode {
     if (!game.ranch.buildings.some((b) => b.kind === 'market')) return this.say('BUILD A MARKET FIRST');
     const a = [...p.animals].sort((x, y) => y.stress - x.stress)[0];
     if (!a) return;
+    if (this.remote) return this.remote({ t: 'sell', tx: p.tx, ty: p.ty });
     const price = livestockPrice(game, a.sp.id, a);
     a.gone = true;
     p.animals = p.animals.filter((x) => x !== a);
@@ -874,6 +963,7 @@ export class BuildMode {
       if (ui.hovering(bx, y, bw, rh)) this.row = 0;
       textField(game.screen, g, 'ranchname', bx, y, bw - dice - 3, rh, game.look.ranch || 'NAME YOUR RANCH', RANCH_MAX, (s) => { game.look.ranch = s; }, game.t, this.row === 0, () => {
         game.look.ranch = game.look.ranch.trim();
+        this.painted(game);
       });
       const dx = bx + bw - dice;
       panel(g, dx, y, dice, rh, ui.isActive('ranch-dice') ? C.teal : C.plum, C.butter);
@@ -881,13 +971,14 @@ export class BuildMode {
       if (ui.click('ranch-dice', dx - 1, y - 2, dice + 2, rh + 4)) {
         stopTyping();
         game.look.ranch = pickName(RANCH_NAMES, game.look.ranch);
+        this.painted(game);
         this.row = 0;
       }
       y += rh + gap;
     }
     RANCH_ROWS.forEach((r, i) => {
       const sel = this.row === i + 1;
-      if (optionRow(game, g, `ranch-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { this.row = i + 1; r.step(game, d); applyLook(game.look); })) this.row = i + 1;
+      if (optionRow(game, g, `ranch-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { this.row = i + 1; r.step(game, d); this.painted(game); })) this.row = i + 1;
       y += rh + gap;
     });
     ui.captureAll('ranch-bg');

@@ -214,27 +214,153 @@ if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-penned.png` }
 const credit = await host.evaluate(() => window.game.banner?.big ?? '');
 check("the that'll do goes to the dog that drove them", credit === "THAT'LL DO, ZIGGY!", credit);
 
-// ---- The host ends the day: the guest waits on the card, then a new morning ----
+// ---- The day's end: the same card on both screens; tomorrow when both are ready ----
 await host.evaluate(() => window.game.endDay());
-await guest.waitForFunction(() => window.game.net.hostMode === 'summary' && window.game.summary, null, { timeout: 5000 }).catch(() => {});
-const sum = await guest.evaluate(() => ({ mode: window.game.net.hostMode, day: window.game.summary?.day, free: window.game.net.waiting }));
-check('host at the summary: the guest sees the card and waits', sum.mode === 'summary' && sum.day === 1 && sum.free, JSON.stringify(sum));
-if (SHOTS) {
-  await wait(500);
-  await guest.screenshot({ path: `${root}shots/coop/guest-summary.png` });
-}
-await host.evaluate(() => window.game.startDay());
-await guest.waitForFunction(() => window.game.day.day === 2 && window.game.net.hostMode === 'play', null, { timeout: 5000 }).catch(() => {});
-const morning = await guest.evaluate(() => { const g = window.game, d = g.doorPoint(); return { day: g.day.day, fromDoor: Math.round(Math.hypot(g.dog.x - d.x, g.dog.y - d.y)) }; });
-check('a new morning: day 2, and the guest dog is back at the door', morning.day === 2 && morning.fromDoor < 40, JSON.stringify(morning));
+await guest.waitForFunction(() => window.game.mode === 'summary' && window.game.summary, null, { timeout: 5000 }).catch(() => {});
+const sum = await guest.evaluate(() => ({ mode: window.game.mode, host: window.game.net.hostMode, day: window.game.summary?.day }));
+check("the day's end: the guest gets the same summary card", sum.mode === 'summary' && sum.host === 'summary' && sum.day === 1, JSON.stringify(sum));
+await wait(800);
+if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-summary.png` });
+await host.keyboard.press('Enter');
+await wait(600);
+const hostWaits = await host.evaluate(() => ({ mode: window.game.mode, banner: window.game.banner?.big }));
+check('the host presses next: it waits for the guest', hostWaits.mode === 'summary' && /WAITING FOR ZIGGY/.test(hostWaits.banner ?? ''), JSON.stringify(hostWaits));
+if (SHOTS) await host.screenshot({ path: `${root}shots/coop/host-summary-waiting.png` });
+await guest.keyboard.press('Enter');
+await host.waitForFunction(() => window.game.day.day === 2 && window.game.mode === 'play', null, { timeout: 5000 }).catch(() => {});
+await guest.waitForFunction(() => window.game.day.day === 2 && window.game.mode === 'play', null, { timeout: 5000 }).catch(() => {});
+const morning = await guest.evaluate(() => { const g = window.game, d = g.doorPoint(); return { day: g.day.day, mode: g.mode, fromDoor: Math.round(Math.hypot(g.dog.x - d.x, g.dog.y - d.y)) }; });
+check('the guest says ready too: day 2 starts, the guest dog at the door', morning.day === 2 && morning.mode === 'play' && morning.fromDoor < 40, JSON.stringify(morning));
+
+// ---- The host builds: the guest plays on (and cannot build at the same time) ----
+await host.evaluate(() => { window.game.coins = 500; window.game.day.t = 20; });
 await host.evaluate(() => window.game.enterBuild());
 await guest.waitForFunction(() => window.game.net.hostMode === 'build', null, { timeout: 5000 }).catch(() => {});
-check('host building: the guest is told to wait', await guest.evaluate(() => window.game.net.hostMode === 'build' && window.game.net.waiting));
-if (SHOTS) {
-  await wait(400);
-  await guest.screenshot({ path: `${root}shots/coop/guest-host-building.png` });
-}
+const t0 = await host.evaluate(() => window.game.day.t);
+await guest.keyboard.down('ArrowRight');
+await wait(700);
+await guest.keyboard.up('ArrowRight');
+const playsOn = await guest.evaluate(() => ({ waiting: window.game.net.waiting, mode: window.game.mode, speed: Math.round(window.game.dog.speed) }));
+const t1 = await host.evaluate(() => window.game.day.t);
+check('the host builds: the guest keeps playing, the day goes on', !playsOn.waiting && playsOn.mode === 'play' && t1 > t0, JSON.stringify({ ...playsOn, dayT: [Math.round(t0), Math.round(t1)] }));
+await guest.keyboard.press('KeyB');
+await wait(400);
+const lock = await guest.evaluate(() => ({ mode: window.game.mode, banner: window.game.banner?.big }));
+check('one builder at a time: the guest is told the host is building', lock.mode === 'play' && /BLUE IS BUILDING/.test(lock.banner ?? ''), JSON.stringify(lock));
+if (SHOTS) await guest.screenshot({ path: `${root}shots/coop/guest-host-building.png` });
 await host.evaluate(() => window.game.exitBuild());
+
+// ---- The guest builds: a paddock, then extends it, then a trough in it ----
+await guest.evaluate(() => { const g = window.game, d = g.doorPoint(); g.dog.x = d.x + 20; g.dog.y = d.y + 24; });
+await wait(300);
+await guest.keyboard.press('KeyB');
+await guest.waitForFunction(() => window.game.mode === 'build', null, { timeout: 4000 }).catch(() => {});
+check('the guest opens build mode (the same screen as the host)', await guest.evaluate(() => window.game.mode === 'build'));
+await host.keyboard.press('KeyB');
+await wait(300);
+check('...and while they build, the host waits for build mode', await host.evaluate(() => window.game.mode === 'play' && /ZIGGY IS BUILDING/.test(window.game.banner?.big ?? '')));
+const pens0 = await host.evaluate(() => window.game.ranch.pens.length);
+const spot = await guest.evaluate(async () => {
+  const g = window.game, b = g.build;
+  const { paddockRules } = await import('/src/ui/paddockbuild.ts');
+  const { CATALOG } = await import('/src/ranch/catalog.ts');
+  const R = paddockRules();
+  b.item = CATALOG.findIndex((d) => d.id === 'pen');
+  const land = (x, y) => b.buildable(g, x, y);
+  for (let cy = 104; cy < 124; cy += 2)
+    for (let cx = 70; cx < 128; cx += 2) {
+      b.paddock.start(R, cx, cy);
+      if (!b.paddock.quote(g, R, land).why) return { cx, cy, r: { ...b.paddock.draft.r } };
+    }
+  b.paddock.cancel();
+  return null;
+});
+if (spot) await guest.evaluate(() => window.game.input.push('confirm'));
+await host.waitForFunction((n) => window.game.ranch.pens.length > n, pens0, { timeout: 5000 }).catch(() => {});
+await guest.waitForFunction((r) => window.game.ranch.pens.some((p) => p.tx === r.tx && p.ty === r.ty), spot?.r ?? { tx: -1, ty: -1 }, { timeout: 5000 }).catch(() => {});
+const built = await host.evaluate((r) => ({ pens: window.game.ranch.pens.length, here: window.game.ranch.pens.some((p) => p.tx === r.tx && p.ty === r.ty), coins: window.game.coins }), spot?.r ?? { tx: -1, ty: -1 });
+check('the guest builds a paddock: on the host, from the shared purse, and back on their screen', !!spot && built.here && built.coins < 500 && (await guest.evaluate((r) => window.game.ranch.pens.some((p) => p.tx === r.tx && p.ty === r.ty), spot.r)), JSON.stringify({ spot, built }));
+// Extend it: open it in the editor (U on it) and push a side out.
+const grew = await guest.evaluate(async (r) => {
+  const g = window.game, b = g.build;
+  const { paddockRules } = await import('/src/ui/paddockbuild.ts');
+  const R = paddockRules();
+  const land = (x, y) => b.buildable(g, x, y);
+  b.cx = r.tx + 2;
+  b.cy = r.ty + 2;
+  const pd = g.ranch.pens.find((p) => p.tx === r.tx && p.ty === r.ty);
+  for (const [h, dir] of [['e', 'right'], ['s', 'down'], ['w', 'left'], ['n', 'up']]) {
+    b.paddock.extendFrom(R, pd);
+    b.paddock.handle = h;
+    b.paddock.nudge(R, dir);
+    if (!b.paddock.quote(g, R, land).why) { g.input.push('confirm'); return { h, r: { ...b.paddock.draft.r } }; }
+  }
+  b.paddock.cancel();
+  return null;
+}, spot?.r ?? { tx: 0, ty: 0 });
+await host.waitForFunction((w) => window.game.ranch.pens.some((p) => p.tx === w.tx && p.ty === w.ty && p.w === w.w && p.h === w.h), grew?.r ?? { tx: -1 }, { timeout: 5000 }).catch(() => {});
+check('the guest extends it', !!grew && (await host.evaluate((w) => window.game.ranch.pens.some((p) => p.tx === w.tx && p.ty === w.ty && p.w === w.w && p.h === w.h), grew.r)), JSON.stringify(grew));
+// A trough inside it.
+await guest.waitForFunction((w) => window.game.ranch.pens.some((p) => p.w === w.w && p.h === w.h && p.tx === w.tx), grew?.r ?? { tx: -1 }, { timeout: 5000 }).catch(() => {});
+const trough = await guest.evaluate(async (w) => {
+  const g = window.game, b = g.build;
+  const { CATALOG } = await import('/src/ranch/catalog.ts');
+  b.paddock.cancel();
+  b.item = CATALOG.findIndex((d) => d.id === 'trough');
+  for (let y = w.ty + 1; y < w.ty + w.h - 1; y++)
+    for (let x = w.tx + 2; x < w.tx + w.w - 2; x++) {
+      b.cx = x;
+      b.cy = y;
+      if (b.ghost(g).ok) { g.input.push('confirm'); return { x, y }; }
+    }
+  return { why: b.ghost(g).reason };
+}, grew?.r ?? spot?.r ?? { tx: 0, ty: 0, w: 0, h: 0 });
+await host.waitForFunction(() => window.game.ranch.pens.some((p) => (p.fixtures ?? []).some((f) => f.kind === 'trough')), null, { timeout: 5000 }).catch(() => {});
+check('the guest places a trough in it', await host.evaluate(() => window.game.ranch.pens.some((p) => (p.fixtures ?? []).some((f) => f.kind === 'trough'))), JSON.stringify(trough));
+if (SHOTS) {
+  await wait(500);
+  await guest.screenshot({ path: `${root}shots/coop/guest-building.png` });
+}
+await guest.keyboard.press('Escape');
+await guest.waitForFunction(() => window.game.mode === 'play', null, { timeout: 3000 }).catch(() => {});
+await host.waitForFunction(() => window.game.net.builder === null, null, { timeout: 3000 }).catch(() => {});
+check('the guest leaves build mode: it is free again', (await guest.evaluate(() => window.game.mode)) === 'play' && (await host.evaluate(() => window.game.net.builder)) === null);
+
+// ---- The guest lets stock out of a pen for an order (E at its gate) ----
+const letOut = await host.evaluate(async () => {
+  const g = window.game;
+  const orders = await import('/src/systems/orders.ts');
+  const pen = g.ranch.pens.find((p) => p.animals.length) ?? g.ranch.pens[0];
+  g.orders.list = [{ id: 99, yard: 'drover', species: pen.species ?? 'sheep', n: 2, due: orders.hourToT(17), got: 0, paid: 0, state: 'open' }];
+  const gp = pen.gatePoint(9);
+  return { x: gp.x, y: gp.y, i: g.ranch.pens.indexOf(pen), n: pen.animals.length };
+});
+await wait(400);
+await guest.evaluate((p) => { const g = window.game; g.dog.x = p.x; g.dog.y = p.y; g.dog.vx = g.dog.vy = 0; g.dog.hx = 0; g.dog.hy = -1; g.dog.face = 'u'; }, letOut);
+await wait(300);
+await guest.evaluate(() => window.game.input.push('nip'));
+await host.waitForFunction((i) => window.game.ranch.pens[i].letOut, letOut.i, { timeout: 3000 }).catch(() => {});
+check('the guest opens a pen gate to let stock out for an order', letOut.n > 0 && (await host.evaluate((i) => window.game.ranch.pens[i].letOut, letOut.i)), JSON.stringify(letOut));
+await host.evaluate((i) => { window.game.ranch.setLetOut(window.game.ranch.pens[i], false); window.game.orders.list = []; }, letOut.i);
+
+// ---- The guest starts a trial on their own ----
+await host.evaluate(() => { const g = window.game, d = g.doorPoint(); g.dog.x = d.x - 40; g.dog.y = d.y + 4; g.day.t = 30; });
+await guest.evaluate(() => { const g = window.game, p = g.ranch.course.post; g.dog.x = p.x + 4; g.dog.y = p.y + 4; g.dog.vx = g.dog.vy = 0; });
+await wait(400);
+for (let i = 0; i < 3 && !(await host.evaluate(() => !!window.game.trials.run)); i++) {
+  await guest.evaluate(() => window.game.input.push('nip'));
+  await host.waitForFunction(() => !!window.game.trials.run, null, { timeout: 1500 }).catch(() => {});
+}
+const solo = await host.evaluate(() => ({ cls: window.game.trials.run?.cls.id, runner: window.game.trials.run?.runner }));
+await guest.waitForFunction(() => !!window.game.trials.run, null, { timeout: 3000 }).catch(() => {});
+check('the guest starts a trial at the post (their run)', !!solo.cls && solo.cls !== 'brace' && solo.runner === 1 && (await guest.evaluate(() => !!window.game.trials.run)), JSON.stringify(solo));
+await host.evaluate(async () => (await import('/src/systems/trials.ts')).endRun(window.game, false));
+await guest.waitForFunction(() => !!window.game.trials.result, null, { timeout: 3000 }).catch(() => {});
+await wait(900); // the judge's card takes input after a beat
+await guest.keyboard.press('Enter');
+await host.waitForFunction(() => !window.game.trials.result && !window.game.trials.run, null, { timeout: 3000 }).catch(() => {});
+check("the guest closes the judge's card for both", await host.evaluate(() => !window.game.trials.result && !window.game.trials.run));
+await guest.evaluate(() => { const g = window.game, d = g.doorPoint(); g.dog.x = d.x + 20; g.dog.y = d.y + 20; });
 await host.evaluate(() => { window.game.day.t = 20; });
 
 // ---- Snapshot size and rate ----
@@ -432,7 +558,7 @@ if (process.env.COOP_DEBUG) {
   console.log('guest', JSON.stringify(await guest.evaluate(() => { const g = window.game, p = g.ranch.course.post; return { post: [p.x, p.y], dog: [g.dog.x, g.dog.y], st: g.net.status, waiting: g.net.waiting, mode: g.mode }; })));
 }
 await host.evaluate(() => window.game.input.push('nip'));
-await guest.waitForFunction(() => window.game.trials.run?.cls.id === 'brace', null, { timeout: 4000 }).catch(() => {});
+await guest.waitForFunction(() => window.game.trials.run?.cls.id === 'brace' && window.game.animals.filter((a) => a.trial).length === 10, null, { timeout: 4000 }).catch(() => {});
 const brace = await guest.evaluate(() => ({ cls: window.game.trials.run?.cls.id, flock: window.game.animals.filter((a) => a.trial).length }));
 const hostBrace = await host.evaluate(() => ({ cls: window.game.trials.run?.cls.id, n: window.game.trials.run?.flock.length }));
 check('both dogs at the post start a BRACE (host and guest see it)', hostBrace.cls === 'brace' && hostBrace.n === 10 && brace.cls === 'brace' && brace.flock === 10, JSON.stringify({ hostBrace, brace, braceHint }));
@@ -507,11 +633,12 @@ const redial = await guest.evaluate(() => ({ status: window.game.net.status, ful
 check('a dead line after a network change: the guest notices and dials again', redial.status === 'playing' && redial.fulls > fulls0, JSON.stringify(redial));
 
 // ---- The guest's line drops for a moment, then comes back ----
+const fullsG = await guest.evaluate(() => window.game.net.fulls);
 await guest.evaluate(() => window.game.net.dropLine());
 await host.waitForFunction(() => [...window.game.net.seats.values()][0]?.away > 0, null, { timeout: 5000 }).catch(() => {});
 const away = await host.evaluate(() => ({ away: [...window.game.net.seats.values()][0]?.away > 0, dogs: window.game.net.dogs.length }));
 check('host sees the guest drop (dog waits)', away.away && away.dogs === 1, JSON.stringify(away));
-await guest.waitForFunction(() => window.game.net.status === 'playing' && window.game.net.ready, null, { timeout: 15000 }).catch(() => {});
+await guest.waitForFunction((n) => window.game.net.status === 'playing' && window.game.net.ready && window.game.net.fulls > n, fullsG, { timeout: 15000 }).catch(() => {});
 await wait(300);
 const back = await guest.evaluate(() => ({ status: window.game.net.status, slot: window.game.net.slot, animals: window.game.animals.length }));
 const hostBack = await host.evaluate(() => ({ dogs: window.game.net.dogs.length, away: [...window.game.net.seats.values()][0]?.away }));

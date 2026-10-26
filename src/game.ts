@@ -117,6 +117,10 @@ export class Game {
   ranch: Ranch;
   day = new DayCycle();
   dog: Dog;
+  // This screen's own dog. `dog` is the same one, except for the moment a
+  // co-op host plays a friend's E (pen gate, the post, a field) as theirs.
+  ownDog: Dog;
+  actor = 0; // whose action is being played: 0 = ours, else a co-op guest's slot
   animals: Animal[] = [];
   groups: Group[] = [];
   fx = new Particles();
@@ -207,6 +211,7 @@ export class Game {
     this.ranch.setupStarter();
     const door = this.doorPoint();
     this.dog = new Dog(door.x, door.y);
+    this.ownDog = this.dog;
     this.cam.x = this.dog.x;
     this.cam.y = this.dog.y;
     if (opts.guest) {
@@ -331,6 +336,8 @@ export class Game {
   }
 
   enterBuild(fromSummary = false) {
+    // Co-op: one builder at a time.
+    if (this.net?.role === 'host' && !this.net.claimBuild(0)) return;
     this.buildFromSummary = fromSummary;
     this.mode = 'build';
     this.build.enter(this);
@@ -340,11 +347,22 @@ export class Game {
   exitBuild() {
     this.build.exit(this);
     this.input.clearQueue();
-    if (this.buildFromSummary) this.startDay();
-    else {
+    if (this.net?.role === 'host') this.net.releaseBuild(0);
+    if (this.buildFromSummary) {
+      // Co-op: done building is ready for tomorrow; friends may not be yet.
+      if (this.net?.role === 'host' && !this.net.nextDay(this)) {
+        this.mode = 'summary';
+        this.summaryT = 1;
+      } else this.startDay();
+    } else {
       this.mode = 'play';
       saveGame(this);
     }
+  }
+
+  // Any player's dog: 0 is this screen's own, others are co-op friends'.
+  dogOf(slot: number): Dog {
+    return slot ? this.net?.dogOf(slot) ?? this.ownDog : this.ownDog;
   }
 
   // What the purse can buy right now (for the end-of-day choice).
@@ -414,6 +432,7 @@ export class Game {
   }
 
   endDay() {
+    if (this.mode === 'build') this.build.exit(this); // co-op: the day can end while the host builds
     if (this.day.phase === 'night') {
       // Wild flocks out in the far pastures are not yours to lose.
       if (!this.stats.lostOwn) this.totals.nightsNoLoss++;
@@ -462,10 +481,28 @@ export class Game {
   }
 
   // Co-op host with friends here: menus do not stop the world for them.
-  private coopWorld(dt: number) {
+  private coopWorld(dt: number, camera = true) {
     if (this.demo) {
       if (this.mode === 'coop') this.updateDemo(dt); // the join screen over the title
-    } else if (this.net?.role === 'host' && this.net.dogs.length) this.stepWorld(dt, false);
+    } else if (this.friendsHere()) this.stepWorld(dt, false, camera);
+  }
+
+  // Build mode keeps the cursor in view without chasing it, so a tap or a
+  // mouse pointer stays put; the view pans when the cursor nears an edge.
+  buildCamera(dt: number) {
+    const k = damp(6, dt);
+    const { W, H } = this.screen;
+    const bx = (this.build.cx + 0.5) * 8, by = (this.build.cy + 0.5) * 8;
+    const mx = Math.min(W / 2 - 4, 28), mt = Math.min(H / 2 - 4, 40), mb = Math.min(H / 2 - 4, 76);
+    this.cam.x += (clamp(this.cam.x, bx - W / 2 + mx, bx + W / 2 - mx) - this.cam.x) * k;
+    this.cam.y += (clamp(this.cam.y, by - H / 2 + mb, by + H / 2 - mt) - this.cam.y) * k;
+    this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
+    this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+  }
+
+  // Co-op host with friends on the ranch: screens do not stop the world.
+  friendsHere(): boolean {
+    return this.net?.role === 'host' && this.net.dogs.length > 0;
   }
 
   showBanner(big: string, small?: string, max = 2.2) {
@@ -531,8 +568,12 @@ export class Game {
         this.input.clearQueue();
         return;
       }
-      if (this.input.pressed('build')) this.fadeTo(() => this.enterBuild(true));
-      else if (this.input.pressed('confirm') || this.input.pressed('bark')) this.fadeTo(() => this.startDay());
+      if (this.input.pressed('build')) {
+        if (this.net?.role !== 'host' || this.net.canBuild(0)) this.fadeTo(() => this.enterBuild(true));
+      } else if (this.input.pressed('confirm') || this.input.pressed('bark')) {
+        // Co-op: the next day waits for friends (or a second press).
+        if (this.net?.role !== 'host' || this.net.nextDay(this)) this.fadeTo(() => this.startDay());
+      }
       return;
     }
     if (this.mode === 'ledger') {
@@ -541,28 +582,25 @@ export class Game {
       return;
     }
     if (this.mode === 'build') {
-      this.fx.update(dt);
-      this.life.update(this, dt);
-      this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
+      if (this.friendsHere() && !this.buildFromSummary) this.stepWorld(dt, false, false); // friends play on
+      else {
+        this.fx.update(dt);
+        this.life.update(this, dt);
+        this.ranch.update(dt, this.animals, this.day.phase === 'night', -1e9, -1e9);
+      }
+      if (this.mode !== 'build') return; // the day ended while building
       if (this.build.update(this, dt) === 'exit') {
         if (this.buildFromSummary) this.fadeTo(() => this.exitBuild());
         else this.exitBuild();
       }
-      // Keep the cursor in view without chasing it, so a tap or a mouse
-      // pointer stays put; the view pans when the cursor nears an edge.
-      const k = damp(6, dt);
-      const { W, H } = this.screen;
-      const bx = (this.build.cx + 0.5) * 8, by = (this.build.cy + 0.5) * 8;
-      const mx = Math.min(W / 2 - 4, 28), mt = Math.min(H / 2 - 4, 40), mb = Math.min(H / 2 - 4, 76);
-      this.cam.x += (clamp(this.cam.x, bx - W / 2 + mx, bx + W / 2 - mx) - this.cam.x) * k;
-      this.cam.y += (clamp(this.cam.y, by - H / 2 + mb, by + H / 2 - mt) - this.cam.y) * k;
-      this.cam.x = clamp(this.cam.x, W / 2, WORLD_W - W / 2);
-      this.cam.y = clamp(this.cam.y, H / 2, WORLD_H - H / 2);
+      this.buildCamera(dt);
       return;
     }
     if (this.trials.result) {
-      // Trial result card: everything waits until it is closed.
-      this.fx.update(dt);
+      // Trial result card: everything waits until it is closed (with
+      // friends here the world goes on behind it).
+      if (this.friendsHere()) this.stepWorld(dt, false);
+      else this.fx.update(dt);
       // A beat before it takes input, so a press at the end of the run
       // does not skip the judge's card.
       if (resultAge(this, dt) < RESULT_READY) this.input.clearQueue();
@@ -600,7 +638,7 @@ export class Game {
 
   // The world going on: the clock, the night, the dogs, the herd, the ranch.
   // `control` is false while a co-op host is in a menu: their dog stands.
-  private stepWorld(dt: number, control: boolean) {
+  private stepWorld(dt: number, control: boolean, camera = true) {
     this.updateRest(dt);
     this.weather.update(dt);
     this.season.update(dt);
@@ -655,7 +693,7 @@ export class Game {
     this.folk.update(this, dt);
     this.favour.update(this, dt);
     this.achievements.update(this, dt);
-    this.updateCamera(dt);
+    if (camera) this.updateCamera(dt);
     this.updateTips(dt);
   }
 
@@ -1017,7 +1055,7 @@ export class Game {
     if (this.tip) return this.tip.text;
     if (this.net) {
       const h = this.net.hint(this);
-      if (h || this.net.role === 'guest') return h;
+      if (h) return h;
     }
     const jh = jobsHint(this);
     if (jh) return jh;
