@@ -4,6 +4,11 @@ import { critterSprites } from '../art/critters';
 import { quality } from '../gfx/quality';
 import { CS, TS, Ter, WORLD_W } from '../world/map';
 import type { Game } from '../game';
+import { mulberry32 } from '../rng';
+
+// Its own random numbers, so wild things never shift the herd's (a seeded
+// tune run must come out exactly the same with or without them).
+const rnd = mulberry32(4471);
 
 // The valley's wild things, for the eye only: rabbits nibbling at the
 // forest's edge morning and evening, deer stepping out at dawn, crows on the
@@ -54,9 +59,9 @@ export class Wildlife {
             w.x += w.vx * dt;
             w.y += w.vy * dt;
             if (this.underTrees(game, w) || w.flee > 3) w.gone = true;
-          } else if (w.t > 2 && Math.random() < dt * 0.25) {
+          } else if (w.t > 2 && rnd() < dt * 0.25) {
             // An idle hop or two.
-            w.flip = Math.random() < 0.5;
+            w.flip = rnd() < 0.5;
             w.x += w.flip ? -3 : 3;
           }
           break;
@@ -80,7 +85,7 @@ export class Wildlife {
         case 'crow':
           if (!w.flee && near(w, 30)) {
             w.flee = 0.01;
-            w.vx = (Math.random() < 0.5 ? -1 : 1) * (30 + Math.random() * 15);
+            w.vx = (rnd() < 0.5 ? -1 : 1) * (30 + rnd() * 15);
             w.vy = -22;
             w.flip = w.vx < 0;
           }
@@ -129,9 +134,9 @@ export class Wildlife {
       const spot = k === 'crow' ? this.perch(game, v) : this.spotFor(game, v, k);
       if (!spot) continue;
       if (dogs.some((d) => Math.hypot(d.x - spot.x, d.y - spot.y) < (k === 'deer' ? 110 : 60))) continue;
-      const n = k === 'deer' ? 1 + Math.floor(Math.random() * 3) : 1;
+      const n = k === 'deer' ? 1 + Math.floor(rnd() * 3) : 1;
       for (let i = 0; i < n; i++)
-        this.list.push({ kind: k, x: spot.x + i * 9 * (Math.random() < 0.5 ? -1 : 1), y: spot.y + (Math.random() - 0.5) * 6, vx: 0, vy: 0, z: 0, t: Math.random() * 3, flee: 0, flip: Math.random() < 0.5, gone: false });
+        this.list.push({ kind: k, x: spot.x + i * 9 * (rnd() < 0.5 ? -1 : 1), y: spot.y + (rnd() - 0.5) * 6, vx: 0, vy: 0, z: 0, t: rnd() * 3, flee: 0, flip: rnd() < 0.5, gone: false });
     }
   }
 
@@ -152,7 +157,7 @@ export class Wildlife {
   // Open grass in view near the trees (rabbits, deer) or on a bank (frogs).
   private spotFor(game: Game, v: View, k: Kind): { x: number; y: number } | null {
     for (let tries = 0; tries < 8; tries++) {
-      const x = Math.floor(v.ox + 8 + Math.random() * (v.W - 16)), y = Math.floor(v.oy + 8 + Math.random() * (v.H - 16));
+      const x = Math.floor(v.ox + 8 + rnd() * (v.W - 16)), y = Math.floor(v.oy + 8 + rnd() * (v.H - 16));
       if (game.map.t(Math.floor(x / TS), Math.floor(y / TS)) !== Ter.Grass) continue;
       const i = y * WORLD_W + x;
       const soil = game.baked.soil[i];
@@ -172,9 +177,9 @@ export class Wildlife {
   // A spot on a fence rail in view for a crow.
   private perch(game: Game, v: View): { x: number; y: number } | null {
     const fences = game.ranch.buildings.filter((b) => (b.kind === 'pen' || b.kind === 'fence') && b.x1 > v.ox && b.x0 < v.ox + v.W && b.y1 > v.oy && b.y0 < v.oy + v.H);
-    if (!fences.length || Math.random() < 0.6) return null;
-    const b = fences[Math.floor(Math.random() * fences.length)];
-    const x = Math.round(b.x0 + 3 + Math.random() * (b.x1 - b.x0 - 6));
+    if (!fences.length || rnd() < 0.6) return null;
+    const b = fences[Math.floor(rnd() * fences.length)];
+    const x = Math.round(b.x0 + 3 + rnd() * (b.x1 - b.x0 - 6));
     const y = b.kind === 'pen' ? b.y0 + CS - 1 - 4 : b.y1 - 1 - 4;
     return { x, y };
   }

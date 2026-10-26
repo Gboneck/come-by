@@ -4,7 +4,7 @@ import { fxSprites } from '../art/fx';
 import { critterSprites } from '../art/critters';
 import { chimneyTop } from '../art/buildings';
 import { yardFire } from '../art/course';
-import { hash2 } from '../rng';
+import { hash2, mulberry32 } from '../rng';
 import { drift, stepWind } from './wind';
 import { WeatherFx } from './weather';
 import { SeasonLayers } from './seasons';
@@ -66,6 +66,7 @@ export class Life {
   private bits: Bit[] = [];
   private smokeT = 0;
   private fishT = 4;
+  private rnd = mulberry32(9133); // its own stream: the herd's stays untouched
   private track = new WeakMap<object, Track>();
   private t = 0;
   wx = new WeatherFx();
@@ -94,12 +95,12 @@ export class Life {
     this.updateGlows(game, dt, v, w.rain > 0.5 ? 0 : dark, night && w.rain < 0.5);
     // Now and then a fish jumps in deep water: an arc, a splash, rings.
     if ((this.fishT -= dt) <= 0 && game.season.snow < 0.5) {
-      this.fishT = 4 + Math.random() * 7;
+      this.fishT = 4 + this.rnd() * 7;
       for (let k = 0; k < 6; k++) {
-        const x = Math.floor(v.ox + Math.random() * v.W), y = Math.floor(v.oy + Math.random() * v.H);
+        const x = Math.floor(v.ox + this.rnd() * v.W), y = Math.floor(v.oy + this.rnd() * v.H);
         const i = y * WORLD_W + x;
         if (game.baked.soil[i] !== 3 || game.baked.waterDist[i] < 4) continue;
-        this.add({ kind: 'fish', x, y, vx: (Math.random() < 0.5 ? -1 : 1) * 10, z: 0, vz: 34, max: 0.55 });
+        this.add({ kind: 'fish', x, y, vx: (this.rnd() < 0.5 ? -1 : 1) * 10, z: 0, vz: 34, max: 0.55 });
         break;
       }
     }
@@ -167,7 +168,7 @@ export class Life {
           if (b.z < 0) {
             b.life = 0;
             this.add({ kind: 'ring', x: b.x, y: b.y, max: 0.9, size: 5 });
-            for (let i = 0; i < 3; i++) this.add({ kind: 'drop', x: b.x, y: b.y, vx: (Math.random() - 0.5) * 30, vy: 0, z: 1, vz: 20 + Math.random() * 15, max: 1 });
+            for (let i = 0; i < 3; i++) this.add({ kind: 'drop', x: b.x, y: b.y, vx: (this.rnd() - 0.5) * 30, vy: 0, z: 1, vz: 20 + this.rnd() * 15, max: 1 });
           }
           break;
       }
