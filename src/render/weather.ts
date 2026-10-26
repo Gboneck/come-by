@@ -1,6 +1,6 @@
 import { C, U32 } from '../palette';
 import { BAYER4, line } from '../gfx/draw';
-import { makeCanvas } from '../gfx/screen';
+import { PX, makeCanvas } from '../gfx/screen';
 import { hash2 } from '../rng';
 import { WORLD_W } from '../world/map';
 import { windStrength } from './wind';
@@ -88,38 +88,61 @@ export class WeatherFx {
     // meadow, the moss lightened (the shadows, drawn after, stay cool).
     const gold = lightLook.golden * 0.045 * Math.max(0, 1 - w.rain * 3) * Math.max(0, 1 - w.fog * 2);
     if ((wetL < 0.5 && clouds < 0.5 && gold < 0.01) || !quality.shade) return;
-    if (!this.wc || this.wc.width !== W || this.wc.height !== H) {
-      [this.wc, this.wg] = makeCanvas(W, H);
-      this.wimg = this.wg.createImageData(W, H);
+    // Worked out per world pixel, dithered in fine pixels (PX x PX each;
+    // world pixels at MEDIUM and LOW, gfx/quality.ts).
+    const d = quality.fineSky ? PX : 1;
+    const FW = W * d, FH = H * d;
+    if (!this.wc || this.wc.width !== FW || this.wc.height !== FH) {
+      [this.wc, this.wg] = makeCanvas(FW, FH);
+      this.wimg = this.wg.createImageData(FW, FH);
     }
     const buf = new Uint32Array(this.wimg!.data.buffer);
+    buf.fill(0);
     const src = game.baked.groundPx, meadow = U32.meadow, moss = U32.moss, sage = U32.sage, butter = U32.butter;
     const CT = this.cloudTex, cx = Math.floor(this.cloudX), cy = Math.floor(this.cloudY);
+    // Golden sparkle: one fine pixel of a world pixel picked with four
+    // times the chance, so as much of the grass turns, in finer dots.
+    const gold4 = gold * 4;
     for (let y = 0; y < H; y++) {
       const wy = y + oy;
-      const row = wy * WORLD_W + ox, by = (wy & 3) * 4;
+      const row = wy * WORLD_W + ox, by = d === 1 ? (wy & 3) * 4 : (wy & 1) * 8;
       const ny = ((wy - cy) >> 2 & (NS - 1)) * NS;
+      const o0 = y * d * FW;
       for (let x = 0; x < W; x++) {
+        const c = src[row + x];
+        if (c !== meadow && c !== moss) continue; // only grass is shaded
         let level = wetL;
         if (clouds > 0) {
           // Sampled at a quarter resolution, so the clouds are big and soft.
           const n = CT[((x + ox - cx) >> 2 & (NS - 1)) + ny];
           if (n > 160) level += clouds * Math.min(1, (n - 160) / 30);
         }
-        let d = 0;
-        const thr = BAYER4[by + ((x + ox) & 3)];
-        if (thr < level) {
-          const c = src[row + x];
-          d = c === meadow ? moss : c === moss ? sage : 0;
-        } else if (gold > 0 && hash2(x + ox, wy, 77) < gold) {
-          const c = src[row + x];
-          d = c === meadow ? butter : c === moss ? meadow : 0;
+        const o = o0 + x * d;
+        if (d === 1) {
+          if (BAYER4[by + ((x + ox) & 3)] < level) buf[o] = c === meadow ? moss : sage;
+          else if (gold > 0 && hash2(x + ox, wy, 77) < gold) buf[o] = c === meadow ? butter : meadow;
+          continue;
         }
-        buf[y * W + x] = d;
+        const bx = by + ((x + ox) & 1) * 2;
+        if (level > 0) {
+          const d = c === meadow ? moss : sage;
+          // The four fine pixels, each with its own threshold.
+          if (BAYER4[bx] < level) buf[o] = d;
+          if (BAYER4[bx + 1] < level) buf[o + 1] = d;
+          if (BAYER4[bx + 4] < level) buf[o + FW] = d;
+          if (BAYER4[bx + 5] < level) buf[o + FW + 1] = d;
+        }
+        if (gold4 > 0) {
+          const h = hash2(x + ox, wy, 77);
+          if (h < gold4) {
+            const k = Math.floor((h / gold4) * 4), at = o + (k >> 1) * FW + (k & 1);
+            if (!buf[at]) buf[at] = c === meadow ? butter : meadow;
+          }
+        }
       }
     }
     this.wg!.putImageData(this.wimg!, 0, 0);
-    g.drawImage(this.wc, 0, 0);
+    g.drawImage(this.wc, 0, 0, W, H);
   }
 
   // On the ground (world coords): puddles on the paths, and the splash of

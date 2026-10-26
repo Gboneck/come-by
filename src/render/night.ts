@@ -1,7 +1,8 @@
 import { U32 } from '../palette';
 import { BAYER4 } from '../gfx/draw';
-import { makeCanvas } from '../gfx/screen';
+import { PX, makeCanvas } from '../gfx/screen';
 import { hash2 } from '../rng';
+import { quality } from '../gfx/quality';
 
 export interface Light {
   x: number; // screen coords
@@ -75,6 +76,7 @@ export class NightOverlay {
   private hole = new Float64Array(1);
   private warm = new Float32Array(1); // how strongly a lamp's ring glows here
   private exs = new Float32Array(1);
+  private col = new Float32Array(1);
 
   constructor() {
     [this.c, this.g] = makeCanvas(1, 1);
@@ -82,24 +84,32 @@ export class NightOverlay {
     this.buf = new Uint32Array(this.img.data.buffer);
   }
 
-  private ensure(W: number, H: number) {
-    if (W === this.W && H === this.H) return;
+  // The light is worked out per world pixel (W x H); the dither is laid in
+  // fine pixels (PX x PX each), so it is twice as fine as the world.
+  // (At MEDIUM and LOW, gfx/quality.ts, the dither is laid in world pixels:
+  // a quarter of the work.)
+  private d = 0;
+  private ensure(W: number, H: number, d: number) {
+    if (W === this.W && H === this.H && d === this.d) return;
     this.W = W;
     this.H = H;
-    this.c.width = W;
-    this.c.height = H;
-    this.img = this.g.createImageData(W, H);
+    this.d = d;
+    this.c.width = W * d;
+    this.c.height = H * d;
+    this.img = this.g.createImageData(W * d, H * d);
     this.buf = new Uint32Array(this.img.data.buffer);
     this.hole = new Float64Array(W * H);
     this.warm = new Float32Array(W * H);
     this.exs = new Float32Array(W);
+    this.col = new Float32Array(W);
   }
 
   draw(g: CanvasRenderingContext2D, W: number, H: number, ox: number, oy: number, o: SkyOpts) {
     const base = o.dark < 1 / 16 ? 0 : o.dark * 16;
     const over = o.overcast ?? 0, fog = (o.fog ?? 0) * 16, flash = o.flash ?? 0;
     if (base <= 0 && over < 0.5 && fog < 0.5 && flash <= 0) return;
-    this.ensure(W, H);
+    const d = quality.fineSky ? PX : 1;
+    this.ensure(W, H, d);
     const blue = o.blue ?? 0, teal = U32.teal;
     const buf = this.buf, plum = U32.plum, fogCol = o.fogNight ? U32.sage : U32.wool, wool = U32.wool, butter = U32.butter;
     const slope = o.slope ?? 0;
@@ -138,42 +148,72 @@ export class NightOverlay {
       }
     }
     const M = NS - 1; // NS is a power of two: & wraps negatives too
+    const FW = W * d;
+    // The night's level down each column (dawn and dusk come from one side).
+    const col = this.col;
+    for (let x = 0; x < W; x++) col[x] = base > 0 ? base * (1 + slope * (0.5 - x / W) * 2) : 0;
+    // Plain darkness (no fog, flash, warm rings or blue hour) is most of a
+    // night: those pixels take the short way.
+    const plain = flash <= 0 && fog <= 0 && !anyWarm && blue <= 0;
+    const B = BAYER4;
     for (let y = 0; y < H; y++) {
-      const by = ((y + oy) & 3) * 4;
       const wy = y + oy;
       const ey = ((y - hh) / hh) ** 2;
+      // The Bayer rows of this world row's fine pair (or its one row).
+      const by = d === 1 ? (wy & 3) * 4 : (wy & 1) * 8;
+      const o0 = y * d * FW;
       for (let x = 0; x < W; x++) {
-        const thr = BAYER4[by + ((x + ox) & 3)];
         const i = y * W + x;
-        if (thr < flash) {
-          buf[i] = thr < flash * 0.3 ? butter : wool;
-          continue;
-        }
-        let dark = base > 0 ? base * (1 + slope * (0.5 - x / W) * 2) : 0;
-        let level = over;
-        const wx = x + ox;
+        let dark = col[x];
         let f = 0;
         if (fog > 0) {
-          const n = WT[((wx - fx) & M) + ((wy >> 1) & M) * NS] / 255;
+          const n = WT[((x + ox - fx) & M) + ((wy >> 1) & M) * NS] / 255;
           f = fog * (0.25 + 0.55 * Math.min(1, exs[x] + ey)) * (0.5 + 0.8 * n);
         }
-        if ((dark > 0 || f > 0) && L.length) {
+        if (L.length && (dark > 0 || f > 0)) {
           const h = hole[i];
           if (h > 0) {
             dark -= 16 * h;
             f *= 1 - h;
           }
         }
+        let level = over;
         if (dark > 0) level += dark;
+        const o = o0 + x * d;
+        if (d === 1) {
+          const thr = B[by + ((x + ox) & 3)];
+          if (plain) buf[o] = thr < level ? plum : 0;
+          else {
+            if (dark > 0 && level + f > 10) f = Math.max(0, 10 - level);
+            const blueAt = blue > 0 && dark > 0 ? level * (1 - blue * 0.7) : Infinity;
+            buf[o] = thr < flash ? (thr < flash * 0.3 ? butter : wool) : thr < level ? (thr >= blueAt ? teal : plum) : anyWarm && thr < warm[i] * 3.2 ? butter : thr < level + f ? fogCol : 0;
+          }
+          continue;
+        }
+        const k = by + ((x + ox) & 1) * 2;
+        // The four fine pixels, each with its own threshold (anchored to the
+        // world, in fine pixels, so the dither does not crawl).
+        if (plain) {
+          buf[o] = B[k] < level ? plum : 0;
+          buf[o + 1] = B[k + 1] < level ? plum : 0;
+          buf[o + FW] = B[k + 4] < level ? plum : 0;
+          buf[o + FW + 1] = B[k + 5] < level ? plum : 0;
+          continue;
+        }
         // Night and fog together never cover more than ~2/3 of the pixels,
         // so the ground still reads between them.
         if (dark > 0 && level + f > 10) f = Math.max(0, 10 - level);
-        if (thr < level) buf[i] = blue > 0 && dark > 0 && thr >= level * (1 - blue * 0.7) ? teal : plum;
-        else if (anyWarm && thr < warm[i] * 3.2) buf[i] = butter;
-        else buf[i] = thr < level + f ? fogCol : 0;
+        const blueAt = blue > 0 && dark > 0 ? level * (1 - blue * 0.7) : Infinity;
+        const warmAt = anyWarm ? warm[i] * 3.2 : 0;
+        const lf = level + f;
+        for (let j = 0; j < 4; j++) {
+          const thr = B[k + (j >> 1) * 4 + (j & 1)];
+          buf[o + (j >> 1) * FW + (j & 1)] =
+            thr < flash ? (thr < flash * 0.3 ? butter : wool) : thr < level ? (thr >= blueAt ? teal : plum) : thr < warmAt ? butter : thr < lf ? fogCol : 0;
+        }
       }
     }
     this.g.putImageData(this.img, 0, 0);
-    g.drawImage(this.c, 0, 0);
+    g.drawImage(this.c, 0, 0, W, H);
   }
 }

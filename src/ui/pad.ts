@@ -189,26 +189,26 @@ const RULES: [RegExp, string][] = [
   [/^E$/, '(B)'],
 ];
 
-// The rules match whatever the case (prose is drawn in sentence case, see
-// ui/case.ts) and answer in the case they found: capitals for capitals, and
-// otherwise lower case but for the buttons in brackets and a capital to
-// start with where the phrase had one.
-const RULES_I: [RegExp, string][] = RULES.map(([re, to]) => [new RegExp(re.source, re.flags.includes('i') ? re.flags : `${re.flags}i`), to]);
-const isCaps = (m: string) => !/[a-z]/.test(m);
-function inCase(found: string, to: string): string {
-  if (isCaps(found)) return to;
-  const low = to.replace(/\([^)]*\)|[^(]+/g, (part) => (part.startsWith('(') ? part : part.toLowerCase()));
-  return /^[A-Z]/.test(found) && !low.startsWith('(') ? low[0].toUpperCase() + low.slice(1) : low;
+// The rules match in any case, and a replacement takes the case of what
+// it replaces: "HOLD Q" reads "HOLD (X)", "Hold Q" reads "Hold (X)" (the
+// buttons in brackets keep their capitals).
+function caseLike(src: string, out: string): string {
+  if (src === src.toUpperCase()) return out;
+  const low = out.replace(/\([^)]*\)|[^(]+/g, (part) => (part.startsWith('(') ? part : part.toLowerCase()));
+  // A capital at the start stays one (unless the start is now a button).
+  return /^[A-Z]/.test(src) && /^[a-z]/.test(low) ? low[0].toUpperCase() + low.slice(1) : low;
 }
+const RULES_I: [RegExp, string][] = RULES.map(([re, to]) => [new RegExp(re.source, re.flags.includes('i') ? re.flags : re.flags + 'i'), to]);
+
 const seen = new Map<string, string>();
 function prompts(s: string): string {
   let out = seen.get(s);
   if (out === undefined) {
     out = s;
     for (const [re, to] of RULES_I)
-      out = out.replace(re, (...a: unknown[]) => {
-        const caps = a.slice(1, -2) as string[];
-        return inCase(a[0] as string, to.replace(/\$(\d)/g, (_, i: string) => caps[Number(i) - 1] ?? ''));
+      out = out.replace(re, (...a) => {
+        const groups = a.slice(1, -2) as string[];
+        return caseLike(a[0] as string, to.replace(/\$(\d)/g, (_, n) => groups[Number(n) - 1] ?? ''));
       });
     if (seen.size > 500) seen.clear();
     seen.set(s, out);

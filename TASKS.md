@@ -1063,6 +1063,44 @@ Before → after, in plain words:
       to tap; dense sprites sized in world pixels (sprW/sprH); the goods
       icons in fine pixels with a plum outline
 - [x] Pad prompts match whatever the case and answer in the case they find
+## M34 Double density: fine pixels and a readable font (platform, round five)
+- [x] Two grids: world pixels (the sim, the map, layout, the old art) and
+      fine pixels, PX = 2 to a world pixel. The screen canvas is fine pixels
+      (about 432 on the short side, a whole number of device pixels each);
+      every frame is drawn under scale(PX), so the old art is exact 2x2
+      blocks (`scripts/densitytest.mjs`: the world layer is pixel-for-pixel
+      round four at 2x)
+- [x] Fine drawing: `fine(g, fn)`, `toFine`/`snapFine`, dense sprites
+      (`spr(..., { density: 2 })`, placed on the fine grid), `sprW/sprH/
+      drawSprAt`, fine offscreen canvases (`makeCanvas(w, h, PX)`); the
+      picture cache keeps fine pixels and follows fine() inside cached art
+- [x] A new font in fine pixels with lower case, proportional and kerned:
+      body (capitals 9, a line every 6 world px, a drop-in for the old
+      face), small (capitals 7), heading (Scale2x of the body: capitals 18);
+      the pad prompts hook kept and now case-insensitive
+- [x] Night, fog, flash and lamp rings, and the ground's cloud, wet and
+      golden-hour dither, laid in fine pixels (world pixels at MEDIUM and
+      LOW); ditherRect and the dim/fade covers as fine dither patterns
+- [x] `FineLayer` (src/gfx/chunks.ts): world-sized pictures in fine pixels,
+      painted in chunks around the camera with a world-pixel fallback, for
+      2x terrain; terrain and canopy stay world pixels until then
+- [x] Checks: densitytest, picturetest (FineLayer too), padtest (sentence
+      case prompts), perftest before and after, the other scripts
+
+Performance (perftest at 390x844@3, stepped seeded frames with every
+pixel drawn, best of two interleaved runs of 7 batches; other sessions
+were loading the machine, so treat differences under ~2 ms as noise).
+Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
+844 fine pixels, 2.8x as many pixels filled, in software here:
+
+| scene | CPU | round four (HIGH) | now, HIGH | now, LOW |
+|---|---|---|---|---|
+| title | 4x | 5.9 ms | 9.3 ms | 6.9 ms |
+| day: tier-5 ranch | 4x | 13.1 ms | 15.3 ms | 11.2 ms |
+| worst: winter storm night | 4x | 16.6 ms | 16.4 ms | 14.5 ms |
+| title | 6x | 11.4 ms | 8.1 ms | 11.5 ms |
+| day | 6x | 19.0 ms | 20.7 ms | 17.8 ms |
+| worst | 6x | 25.5 ms | 26.9 ms | 22.5 ms |
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -2156,3 +2194,24 @@ Before → after, in plain words:
   buttons, tabs, signs over the world and short status words stay capitals.
 - Pad prompts match case-insensitively and answer in the case they find,
   so a sentence-case hint still turns "Hold Q" into "Hold (X)".
+- The screen aims for 432 fine pixels on the short side, not 480: the scale
+  must be a whole number of device pixels per fine pixel, and on an upright
+  iPhone (1170 device px) that is 3 (195 world px wide) or 2 (292 wide with
+  everything a fifth smaller and fine text too small to read). Bigger
+  pixels won; the world shown is a little less than round four's 234.
+- The old art is drawn under scale(PX) rather than redrawn: it is exact
+  2x2 blocks, so day one looks as before and the art sessions move each
+  piece to fine pixels when they redraw it.
+- The night and ground dithers work out their light per world pixel and
+  dither per fine pixel: a finer dither for about 1.5x the work, not 4x.
+  MEDIUM and LOW keep the world-pixel dither, so AUTO can win the cost
+  back on a slow phone.
+- The heading size is the body face scaled by Scale2x (it rounds diagonals
+  as it doubles strokes) rather than a third hand-drawn alphabet: it keeps
+  the body's letterforms and costs nothing to maintain.
+- perftest's numbers are software rasterising (headless Chromium without a
+  GPU): the new pipeline fills 2.8x as many pixels, which a phone's GPU
+  does off the main thread. The JavaScript parts that grew were optimised
+  (the night pass, the ground dither), and LOW is cheaper than round
+  four's HIGH.
+
