@@ -23,7 +23,7 @@ import { BuildMode } from './ui/build';
 import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
 import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
-import { drawLedger } from './ui/ledger';
+import { LEDGER_PAGES, drawLedger, ledgerKeys, ledgerView } from './ui/ledger';
 import { REGIONS } from './world/map';
 import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
@@ -58,7 +58,6 @@ import { coopKeys, drawCoop, openCoop } from './ui/coop';
 import { drawTransfer, openTransfer, transferKeys } from './ui/transfer';
 import { Favour } from './systems/favour';
 import { Achievements } from './systems/achievements';
-import { drawCards, ledgerKeys } from './ui/achievements';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
@@ -302,6 +301,15 @@ export class Game {
 
   ledgerNew = false;
 
+  // Open the Ledger, at one of its pages (a badge's card tapped).
+  openLedger(page?: string) {
+    const i = LEDGER_PAGES.findIndex((p) => p.id === page);
+    if (i >= 0) ledgerView.page = i + 1;
+    this.mode = 'ledger';
+    this.ledgerNew = false;
+    this.input.clearQueue();
+  }
+
   isOnScreen(x: number, y: number, m = 8) {
     const { ox, oy, W, H } = this.view();
     return x > ox - m && x < ox + W + m && y > oy - m && y < oy + H + m;
@@ -504,7 +512,7 @@ export class Game {
       return;
     }
     if (this.mode === 'ledger') {
-      ledgerKeys(this); // pages, the badge grid, closing
+      if (ledgerKeys(this)) this.mode = 'play';
       this.coopWorld(dt);
       return;
     }
@@ -1092,7 +1100,6 @@ export class Game {
     } else if (this.mode === 'play') {
       drawHud(this, g, v.W, v.H);
       if (drawJobs(this, g, v.W, v.H)) this.input.push('confirm');
-      drawCards(this, g, v.W, v.H); // a badge earned, a buyer's favour
       if (!this.trials.result) drawTouchControls(this, g, v.W, v.H);
     } else if (this.mode === 'summary' && this.summary) {
       const r = drawSummary(this, g, v.W, v.H);

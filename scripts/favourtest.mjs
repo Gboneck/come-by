@@ -169,7 +169,13 @@ async function open(viewport, dpr = 1, phone = false) {
     T.step(60);
     out.showEarly = { got: sh.got, said: g.fx.list.some((p) => p.text === 'TOO RATTLED: LET IT SETTLE') };
     let t = 0;
-    while (sh.state === 'open' && t < 6000) { T.step(30); t += 30; }
+    const p = T.yard('sale').pen;
+    while (sh.state === 'open' && t < 6000) {
+      // The dog holds them in the yard while they settle.
+      for (const a of rattled) if (!a.pen && !p.contains(a.x, a.y)) { a.x = p.cx; a.y = p.cy; }
+      T.step(30);
+      t += 30;
+    }
     out.showLater = { state: sh.state, got: sh.got, seconds: Math.round(t / 60), calm: rattled.every((a) => a.peakStress < 0.3), specials: [...F.specials] };
     return out;
   });
@@ -308,7 +314,7 @@ async function open(viewport, dpr = 1, phone = false) {
     window.T.step(1);
     window.T.shot();
   });
-  check(await page.evaluate(async () => (await import('/src/ui/achievements.ts')).ledgerPage()) === 1, 'Q/E turns the Ledger to BUYERS');
+  check(await page.evaluate(async () => (await import('/src/ui/ledger.ts')).ledgerView.page) === 1, 'Q/E turns the Ledger to BUYERS');
   await page.screenshot({ path: 'shots/favour/ledger-buyers.png' });
   await ctx.close();
 }
@@ -320,8 +326,7 @@ async function open(viewport, dpr = 1, phone = false) {
     const g = window.game;
     g.favour.pts = { mill: 8, drover: 32, sale: 20, shear: 4 };
     g.favour.filled = { mill: 2, drover: 9, sale: 5, shear: 1 };
-    const ui = await import('/src/ui/achievements.ts');
-    ui.openLedgerAt(g, 1);
+    g.openLedger('buyers');
     window.T.step(1);
     window.T.shot();
   });

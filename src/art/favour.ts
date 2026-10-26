@@ -15,7 +15,8 @@ import type { Piece } from '../ui/decorbuild';
 //   2 a striped awning over the cart: a stall
 //   3 flower tubs at the gate
 //   4 your ranch's name on a board on the yard's front fence (the sale
-//     yard also pins up the valley rosette)
+//     yard also pins up the valley rosette), and over their market stall
+//     in the village once the square stands
 // and, on a day with a special order, its word by the cart's pennant.
 // Also the gifts, as decor pieces for build mode.
 
@@ -118,6 +119,29 @@ function yardDressing(game: Game, g: CanvasRenderingContext2D, y: Yard, t: numbe
   return out;
 }
 
+// The market square's three stalls, the miller's, the drover's and the sale
+// yard's (Gameplay's village, round four: STALLS in ranch/village.ts, their
+// ground points). A buyer who calls you friend puts your ranch's name up
+// over their stall once the square stands. On a merge with the village this
+// list is `STALLS` from there; until then there is no square.
+const STALL_SPOTS: { x: number; y: number }[] = [];
+const STALL_OF = { mill: 0, drover: 1, sale: 2 } as const;
+interface Square {
+  village?: { has?: (step: string) => boolean };
+}
+
+function stallBoards(game: Game, g: CanvasRenderingContext2D, inView: (x: number, y: number) => boolean): Drawable[] {
+  if (!STALL_SPOTS.length || !(game.ranch as unknown as Square).village?.has?.('square')) return [];
+  const name = game.look.ranch || 'YOUR RANCH';
+  const out: Drawable[] = [];
+  for (const id of ['mill', 'drover', 'sale'] as const) {
+    const s = STALL_SPOTS[STALL_OF[id]];
+    if (!s || game.favour.level(id) < 4 || !inView(s.x, s.y)) continue;
+    out.push({ y: s.y + 1, draw: () => nameBoard(g, Math.round(s.x), Math.round(s.y - 20), name) });
+  }
+  return out;
+}
+
 // A special order's word by the cart's pennant, in buttercup.
 function specialWord(g: CanvasRenderingContext2D, x: number, y: number, word: string, t: number) {
   if (Math.floor(t * 2) % 4 === 3) return;
@@ -127,7 +151,7 @@ function specialWord(g: CanvasRenderingContext2D, x: number, y: number, word: st
 export function favourDrawables(game: Game, g: CanvasRenderingContext2D): Drawable[] {
   const { ox, oy, W, H } = game.view();
   const t = game.t;
-  const out: Drawable[] = [];
+  const out: Drawable[] = stallBoards(game, g, (x, y) => x > ox - 60 && x < ox + W + 60 && y > oy - 20 && y < oy + H + 40);
   for (const y of game.ranch.yards) {
     const p = y.pen;
     if (p.x1 + 40 < ox || p.x0 - 40 > ox + W || p.y1 + 30 < oy || p.y0 - 30 > oy + H) continue;

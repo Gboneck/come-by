@@ -14,7 +14,7 @@ import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
 import { discoveryLines, drawFog, drawPlaceMarks } from './discovery';
 import { travelLines } from '../net/travels';
-import { drawLedgerPage, drawLedgerTabs, ledgerPage } from './achievements';
+import { BADGES_PAGE, BUYERS_PAGE } from './achievements';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -106,10 +106,46 @@ function drawLines(g: CanvasRenderingContext2D, lines: Line[], x0: number, y: nu
 
 const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? 9 : 7), 0);
 
+// More pages of the Ledger after the first (the ranch, built in): other
+// features add an entry here. Each page draws into the page's area (`r`,
+// with `spine` the x of the middle on a wide screen, else 0) in ink
+// (`PANEL_INK`: wool writing, buttercup for what matters, sage for what is
+// not yet). `keys` gets the arrows and confirm while its page is open, and
+// returns true when it used confirm (else confirm closes the book).
+// (The same shape as Feel and UI's book-style Ledger, round four.)
+export interface LedgerInk { text: string; accent: string; dim: string }
+export const PANEL_INK: LedgerInk = { text: C.wool, accent: C.butter, dim: C.sage };
+export interface LedgerPage {
+  id: string;
+  tab: string;
+  draw: (game: Game, g: CanvasRenderingContext2D, r: { x: number; y: number; w: number; h: number; spine: number }, ink: LedgerInk) => void;
+  keys?: (game: Game) => boolean;
+}
+export const LEDGER_PAGES: LedgerPage[] = [BUYERS_PAGE, BADGES_PAGE];
+// The open page (0: the ranch). The book stays open where you left it.
+export const ledgerView = { page: 0 };
+
+// The Ledger's keys; true when it should close. Q/E ([ ], LB/RB) turn the
+// pages.
+export function ledgerKeys(game: Game): boolean {
+  const inp = game.input;
+  if (inp.pressed('ledger') || inp.pressed('cancel')) return true;
+  const n = LEDGER_PAGES.length + 1;
+  // (Read each once: a press is used up when it is read.)
+  const step = inp.pressed('next') ? 1 : inp.pressed('prev') ? n - 1 : 0;
+  if (n > 1 && step) {
+    ledgerView.page = (ledgerView.page + step) % n;
+    game.audio?.play('click');
+  }
+  ledgerView.page = Math.min(ledgerView.page, n - 1);
+  const page = LEDGER_PAGES[ledgerView.page - 1];
+  if (page?.keys?.(game)) return false;
+  return inp.pressed('confirm');
+}
+
 // The Ranch Ledger: where you are, what to do, what comes next. On a wide
 // screen the goals sit on the left, the map and the day's jobs on the right.
 export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H: number): boolean {
-  if (ledgerPage()) return drawLedgerPage(game, g, W, H); // BUYERS, BADGES (ui/achievements.ts)
   const ui = game.ui;
   const tier = tierOf(game.tier);
   const next = TIERS[game.tier] ?? null;
@@ -156,14 +192,20 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   const S = safeArea(game.screen);
   const top = 16, foot = 16;
   const ph = wide ? Math.max(top + linesH(A), top + 2 + mapH + 6 + linesH(B)) + foot : top + linesH(A) + 4 + linesH(B) + 4 + mapH + 4 + foot;
-  const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
+  const tabs = LEDGER_PAGES.length > 0;
+  const touch = game.input.touchMode;
+  const tabH = touch ? 12 : 10;
+  const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top + (tabs ? tabH + 3 : 0), Math.round(H / 2 - ph / 2));
   dimView(g, game.view());
+  const page = LEDGER_PAGES[Math.min(ledgerView.page, LEDGER_PAGES.length) - 1];
+  if (tabs) drawTabs(game, g, x0, y0, pw, tabH);
   panel(g, x0, y0, pw, ph);
-  drawLedgerTabs(game, g, x0 + 5, y0 + 4);
-  rect(g, x0 + 5, y0 + 13, pw - 10, 1, C.sage);
+  text(g, page ? page.tab : 'RANCH LEDGER', x0 + pw / 2, y0 + 4, C.butter, { align: 'center' });
+  rect(g, x0 + 5, y0 + 11, pw - 10, 1, C.sage);
   // Tier pips.
   for (let i = 0; i < TIERS.length; i++) rect(g, x0 + pw - 8 - (TIERS.length - i) * 5, y0 + 4, 4, 4, i < game.tier ? C.butter : C.sage);
-  if (wide) {
+  if (page) page.draw(game, g, { x: x0 + 7, y: y0 + top, w: pw - 14, h: ph - top - foot - 2, spine: wide ? colW + 11 - 7 : 0 }, PANEL_INK);
+  else if (wide) {
     drawLines(g, A, x0 + 7, y0 + top);
     const mx = x0 + colW + 12 + Math.round((rightW - mapW) / 2);
     drawMap(game, g, mx, y0 + top + 2);
@@ -175,11 +217,32 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
   }
 
   // Close.
-  const touch = game.input.touchMode;
-  const label = touch ? 'CLOSE' : 'TAB: CLOSE';
+  const label = touch ? 'CLOSE' : tabs ? 'Q/E: PAGE  TAB: CLOSE' : 'TAB: CLOSE';
   const bw = textWidth(label) + (touch ? 16 : 10), bh = touch ? 13 : 11;
   const bx = Math.round(x0 + pw / 2 - bw / 2), by = y0 + ph - bh - 2;
   panel(g, bx, by, bw, bh, ui.isActive('ledger-close') ? C.teal : C.plum, C.butter);
   text(g, label, bx + bw / 2, by + Math.floor((bh - 5) / 2), C.wool, { align: 'center' });
   return ui.click('ledger-close', bx, by, bw, bh) || ui.captureAll('ledger-bg');
+}
+
+// The page tabs, standing up from the panel's top edge, the open page's in
+// teal. Tap one to turn to it. A dot on BADGES while there are new ones.
+function drawTabs(game: Game, g: CanvasRenderingContext2D, x0: number, top: number, pw: number, th: number) {
+  const names = ['RANCH', ...LEDGER_PAGES.map((p) => p.tab)];
+  const ws = names.map((n) => textWidth(n) + (game.input.touchMode ? 10 : 8));
+  let x = x0 + 4;
+  const total = ws.reduce((a, b) => a + b + 2, 0);
+  const squeeze = total > pw - 8 ? (pw - 8) / total : 1;
+  names.forEach((n, i) => {
+    const w = Math.floor(ws[i] * squeeze), on = i === ledgerView.page;
+    const y = top - th + (on ? 0 : 1);
+    panel(g, x, y, w, th + 2, on ? C.teal : C.plum, on ? C.butter : C.sage);
+    text(g, n, x + w / 2, y + Math.floor((th - 5) / 2) + 1, on ? C.butter : C.wool, { align: 'center' });
+    if (LEDGER_PAGES[i - 1]?.id === 'badges' && game.achievements.unseen && !on) rect(g, x + w - 4, y + 2, 2, 2, C.butter);
+    if (game.ui.click(`ledger-tab-${i}`, x, y - 2, w, th + 4) && i !== ledgerView.page) {
+      ledgerView.page = i;
+      game.audio?.play('click');
+    }
+    x += w + 2;
+  });
 }

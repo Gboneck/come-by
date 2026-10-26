@@ -270,10 +270,12 @@ async function open(viewport, dpr = 1, phone = false) {
   check(tr.home, 'and into their own save at home', tr.home);
 
   // ---- The Ledger's BADGES page and its keys ----
-  const led = await page.evaluate(() => {
+  const led = await page.evaluate(async () => {
     const g = window.game, T = window.T, A = g.achievements;
+    const L = await import('/src/ui/ledger.ts');
     T.clear();
     g.mode = 'play';
+    L.ledgerView.page = 0;
     const out = {};
     g.input.push('ledger');
     T.step(1);
@@ -281,7 +283,7 @@ async function open(viewport, dpr = 1, phone = false) {
     T.step(1);
     g.input.push('next');
     T.step(1);
-    out.page = T.ui.ledgerPage();
+    out.page = L.LEDGER_PAGES[L.ledgerView.page - 1]?.id;
     A.sel = 0;
     g.input.push('right');
     T.step(1);
@@ -289,35 +291,33 @@ async function open(viewport, dpr = 1, phone = false) {
     g.input.push('down');
     T.step(1);
     out.down = A.sel;
-    T.shot();
-    return out;
-  });
-  check(led.page === 2, 'Q/E turns to BADGES', led.page);
-  check(led.right === 1 && led.down > 1, 'the arrows move along the grid', led);
-  await page.screenshot({ path: 'shots/achieve/badges.png' });
-  const det = await page.evaluate(() => {
-    const g = window.game, T = window.T, A = g.achievements;
-    A.sel = T.ach.ACHIEVEMENTS.findIndex((a) => a.id === 'hundred');
+    // Confirm on a badge not won yet keeps the book open (it makes
+    // postcards of won ones).
+    A.sel = T.ach.ACHIEVEMENTS.findIndex((a) => !A.has(a.id));
     g.input.push('confirm');
     T.step(1);
+    out.locked = g.mode;
+    A.sel = T.ach.ACHIEVEMENTS.findIndex((a) => a.id === 'hundred');
+    T.step(1);
     T.shot();
-    return A.detail;
-  });
-  check(det, 'ENTER opens a badge', det);
-  await page.screenshot({ path: 'shots/achieve/detail.png' });
-  const back = await page.evaluate(() => {
-    const g = window.game, T = window.T, A = g.achievements;
-    g.input.push('cancel');
-    T.step(1);
-    const out = { detail: A.detail, mode: g.mode };
-    g.input.push('cancel');
-    T.step(1);
-    out.closed = g.mode;
-    // A secret one shows its hint.
-    A.sel = T.ach.ACHIEVEMENTS.findIndex((a) => a.secret && !A.has(a.id));
     return out;
   });
-  check(!back.detail && back.mode === 'ledger' && back.closed === 'play', 'ESC goes back, then closes', back);
+  check(led.page === 'badges', 'Q/E turns to BADGES', led.page);
+  check(led.right === 1 && led.down > 1, 'the arrows move along the grid', led);
+  check(led.locked === 'ledger', 'confirm on a badge is the page\'s own (the book stays open)', led.locked);
+  await page.screenshot({ path: 'shots/achieve/badges.png' });
+  const back = await page.evaluate(() => {
+    const g = window.game, T = window.T, A = g.achievements;
+    // A secret one shows its hint.
+    A.sel = T.ach.ACHIEVEMENTS.findIndex((a) => a.secret && !A.has(a.id));
+    T.step(1);
+    T.shot();
+    g.input.push('cancel');
+    T.step(1);
+    return g.mode;
+  });
+  await page.screenshot({ path: 'shots/achieve/secret.png' });
+  check(back === 'play', 'ESC closes the book', back);
 
   // ---- The postcard ----
   const pc = await page.evaluate(() => window.T.ui.postcardUrl(window.game, 'hundred'));
@@ -356,21 +356,36 @@ async function open(viewport, dpr = 1, phone = false) {
   const { ctx, page } = await open({ width: 390, height: 844 }, 3, true);
   await page.evaluate(() => {
     const g = window.game, T = window.T;
+    g.banner = null;
     g.totals.calmBatches = 10;
     g.totals.orders = 1;
     T.step(30);
     T.shot();
   });
   await page.screenshot({ path: 'shots/achieve/card-phone.png' });
-  const tap = await page.evaluate(() => {
+  const tap = await page.evaluate(async () => {
     const g = window.game, T = window.T;
+    const L = await import('/src/ui/ledger.ts');
     T.clear();
-    T.ui.openLedgerAt(g, 2, 'steady');
+    g.banner = null;
+    g.achievements.got.delete('steady');
+    T.step(30);
+    // Tap the card: the Ledger opens at BADGES, the badge picked.
+    const c = g.achievements.card;
+    g.achievements.cardT = 1;
+    g.achievements.sel = 0;
+    const { W, H } = g.screen;
+    const p = { id: 1, x: W / 2, y: Math.round(H * 0.24), downX: W / 2, downY: Math.round(H * 0.24), justDown: true, justUp: false, isDown: true, owner: null };
+    g.input.ptrs.set(1, p);
+    T.shot();
+    p.justDown = false; p.justUp = true; p.isDown = false;
+    T.shot();
+    g.input.ptrs.delete(1);
     T.step(1);
     T.shot();
-    return { page: T.ui.ledgerPage(), sel: T.ach.ACHIEVEMENTS[g.achievements.sel].id };
+    return { card: c?.id, mode: g.mode, page: L.LEDGER_PAGES[L.ledgerView.page - 1]?.id, sel: T.ach.ACHIEVEMENTS[g.achievements.sel].id };
   });
-  check(tap.page === 2 && tap.sel === 'steady', 'a tapped card opens the Ledger at its badge', tap);
+  check(tap.card === 'steady' && tap.mode === 'ledger' && tap.page === 'badges' && tap.sel === 'steady', 'a tapped card opens the Ledger at its badge', tap);
   await page.screenshot({ path: 'shots/achieve/badges-phone.png' });
   await ctx.close();
 }

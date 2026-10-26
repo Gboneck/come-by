@@ -104,7 +104,7 @@ const STATES = {
       g.setTier(4, false);
       g.favour.pts = { mill: 14, drover: 33, sale: 24, shear: 4 };
       g.favour.filled = { mill: 3, drover: 8, sale: 5, shear: 1 };
-      (await import('/src/ui/achievements.ts')).openLedgerAt(g, 1);
+      g.openLedger('buyers');
       return 10;
     },
   },
@@ -112,7 +112,8 @@ const STATES = {
     fn: async () => {
       const g = window.game;
       for (const id of ['home', 'steady', 'quiet', 'ribbon', 'cup', 'sold', 'trusted', 'friend', 'lambs', 'visit']) g.achievements.got.set(id, 3);
-      (await import('/src/ui/achievements.ts')).openLedgerAt(g, 2, 'friend');
+      g.achievements.sel = 21;
+      g.openLedger('badges');
       return 10;
     },
   },
@@ -120,6 +121,7 @@ const STATES = {
     fn: () => {
       const g = window.game;
       g.tut = 99;
+      g.banner = null;
       g.achievements.grant(g, 'friend');
       return 25;
     },

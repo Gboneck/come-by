@@ -123,7 +123,6 @@ export class Achievements {
   card: Card | null = null;
   cardT = 0; // age of the card on screen
   sel = 0; // the BADGES page's selection
-  detail = false; // the BADGES page showing one badge large
   unseen = 0; // earned since the BADGES page was last looked at
   hostPins: Group[] | null = null; // co-op guest: the host's board
   private checkT = 0;
@@ -261,9 +260,10 @@ export class Achievements {
     this.cards(game, dt);
   }
 
-  // The card on screen ages while it can be seen; then the next comes in.
+  // The card on screen ages while it can be seen (not behind the tier card,
+  // the judge's card or a banner); then the next comes in.
   private cards(game: Game, dt: number) {
-    if (game.mode !== 'play' || game.feel.tierCard || game.trials.result || game.feel.fading) return;
+    if (game.mode !== 'play' || game.feel.tierCard || game.trials.result || game.banner || game.feel.fading) return;
     if (this.card) {
       this.cardT += dt;
       if (this.cardT > cardLife(this.card)) this.card = null;
