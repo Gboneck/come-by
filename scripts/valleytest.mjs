@@ -108,7 +108,7 @@ const res = await page.evaluate(async () => {
 
   // ---- Fields past the clearing ----
   const v = g.valley;
-  const sw = v.paddocks[0];
+  const sw = v.fields[0];
   const t0 = sw.tiles[Math.floor(sw.tiles.length / 2)], tx = t0 % 192, ty = Math.floor(t0 / 192);
   check('fields are for sale: not land to build on yet', sw.tiles.length > 60 && v.landAt(tx, ty) === false && !g.build.buildable(g, tx, ty) && v.landAt(96, 104) === null, { tiles: sw.tiles.length });
   g.dog.x = sw.mouth.x; g.dog.y = sw.mouth.y;
@@ -141,7 +141,7 @@ const res = await page.evaluate(async () => {
     secs += 5;
     if (secs % 60 === 0) half.push(+(1 - v.left(sw)).toFixed(2));
   }
-  const inside = sheep.filter((a) => v.paddockAt(a.x, a.y) === sw).length;
+  const inside = sheep.filter((a) => v.fieldAt(a.x, a.y) === sw).length;
   check('a flock left to graze in it eats it down (some of it in a minute)', half[0] > 0.05, { grazedByMinute: half });
   // A player moves the flock round; here we help it along: finish the job.
   if (!sw.cleared) {
@@ -152,7 +152,7 @@ const res = await page.evaluate(async () => {
   morning(10);
   check('a cleared field brings the second cottage', vil.has('cottage2'));
   // Stock penned in a paddock on a field grazes it too.
-  const se = v.paddocks[1];
+  const se = v.fields[1];
   g.coins += 1000;
   g.dog.x = se.mouth.x; g.dog.y = se.mouth.y;
   V.buyField(g);
@@ -161,7 +161,7 @@ const res = await page.evaluate(async () => {
   const x0 = Math.min(...st.map((t) => t.x)) + 2, y0 = Math.min(...st.map((t) => t.y)) + 1;
   let fieldPen = null;
   for (let dy = 0; dy < 4 && !fieldPen; dy++)
-    for (let dx = 0; dx < 8 && !fieldPen; dx++) fieldPen = P.placePaddock(g, { tx: x0 + dx, ty: y0 + dy, w: 8, h: 7 }, P.defaultGate(8, 7, 2));
+    for (let dx = 0; dx < 8 && !fieldPen; dx++) fieldPen = P.buildPaddock(g, { tx: x0 + dx, ty: y0 + dy, w: 8, h: 7 }, { side: 2, at: 3 });
   const left0 = v.left(se);
   if (fieldPen) for (let i = 0; i < 6; i++) { const a = new A.Animal('goat', fieldPen.cx + (i % 3) * 8 - 8, fieldPen.cy + Math.floor(i / 3) * 8 - 4); a.home = true; a.pen = fieldPen; fieldPen.animals.push(a); g.animals.push(a); }
   step(20, { x: 0, y: 0, sprint: false, lie: true });
@@ -315,7 +315,7 @@ const res = await page.evaluate(async () => {
   old.buildings = old.buildings.filter((b) => !['shed', 'dairy', 'agility'].includes(b.kind));
   localStorage.setItem('comeby-save-v1', JSON.stringify(old));
   SV.loadInto(g);
-  check('an old save loads: no village yet, paddocks overgrown, the bridge broken', vil.built.size === 0 && v.paddocks.every((p) => !p.cleared && p.scrub[0] === 1) && !v.bridge && shallow(), { built: vil.built.size });
+  check('an old save loads: no village yet, paddocks overgrown, the bridge broken', vil.built.size === 0 && v.fields.every((p) => !p.cleared && p.scrub[0] === 1) && !v.bridge && shallow(), { built: vil.built.size });
   // Co-op: what a guest is sent puts the valley back the same way.
   vil.built.add('cottage1');
   v.logs = 2;

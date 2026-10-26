@@ -12,7 +12,7 @@ import { BRIDGE_LOGS, bridgeLanding, woodpile } from '../systems/valley';
 import { villageDrawables, villageLights } from './village';
 import { fixtureDrawables } from './farm2';
 
-// The valley's projects as they stand: the overgrown paddocks (scrub that
+// The valley's projects as they stand: the fields for sale (scrub that
 // thins as a flock grazes it, then wildflowers), the woodpile and the old
 // bridge at the ford (broken, then mended), a log dragged behind a cow; and
 // the village. (Gameplay drew this; Graphics may restyle it.)
@@ -104,7 +104,7 @@ export function valleyDrawables(game: Game, g: CanvasRenderingContext2D): Drawab
   const out: Drawable[] = [...villageDrawables(game, g, inView, night), ...fixtureDrawables(game, g, (x, y) => inView(x - 8, y - 8, x + 8, y + 8))];
   const v = game.valley, t = game.t;
   // Paddocks: scrub on the ground (or flowers once cleared), and a sign.
-  for (const p of v.paddocks) {
+  for (const p of v.fields) {
     const s = p.site;
     if (!inView((s.cx - s.rx - 2) * TS, (s.cy - s.ry - 2) * TS, (s.cx + s.rx + 2) * TS, (s.cy + s.ry + 2) * TS)) continue;
     out.push({

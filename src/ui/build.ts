@@ -5,7 +5,7 @@ import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
-import { extendPaddock, extendPrice, extendProblem, fixtureProblem, isFixture, placeFixture } from '../ranch/paddock';
+import { extendPaddock, extendPrice, extendProblem, extendRect, fixtureProblem, isFixture, paddockAt, placeFixture } from '../ranch/paddock';
 import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
@@ -146,7 +146,8 @@ export class BuildMode {
     if (def.max && count >= def.max) return { ...gh, reason: 'YOU HAVE ONE ALREADY' };
     if (isFixture(def.id)) {
       // A trough, field shelter or hay rack: inside a paddock (ranch/paddock.ts).
-      const { pen, why } = fixtureProblem(game, def.id, tx, ty);
+      const pen = paddockAt(game, tx, ty);
+      const why = fixtureProblem(game, pen, def.id, tx, ty);
       if (!pen) return { ...gh, reason: why ?? '' };
       if (why) return { ...gh, pen, reason: why };
       if (game.coins < def.cost) return { ...gh, pen, reason: `NEED ${def.cost}$` };
@@ -174,7 +175,7 @@ export class BuildMode {
     }
     game.coins -= gh.def.cost;
     if (gh.pen && isFixture(gh.def.id)) {
-      placeFixture(game, gh.def.id, gh.tx, gh.ty);
+      placeFixture(game, gh.pen, gh.def.id, gh.tx, gh.ty);
     } else {
       game.ranch.add(makeBuilding(gh.def, gh.tx, gh.ty, this.rot));
       clearDecorUnder(game, gh.tx, gh.ty, gh.w, gh.h);
@@ -197,10 +198,10 @@ export class BuildMode {
 
   private upgrade(game: Game, b: Building) {
     if (b instanceof Pen) {
-      const side = this.extendSide(b);
-      const why = extendProblem(game, b, side, 2);
+      const r = extendRect(b, this.extendSide(b), 2);
+      const why = extendProblem(game, b, r) ?? (game.coins < extendPrice(b, r) ? `NEED ${extendPrice(b, r)}$` : null);
       if (why) return this.say(why);
-      extendPaddock(game, b, side, 2);
+      extendPaddock(game, b, r);
       this.say(`PADDOCK EXTENDED: ROOM FOR ${b.capacity}`, true);
       game.audio?.play('build');
       return;
@@ -562,7 +563,7 @@ export class BuildMode {
         lines.push(kinds.length ? `${kinds.join(', ')}, ${under.goods} GOODS` : 'EMPTY');
         lines.push(`${under.w}X${under.h}, ROOM ${under.used}/${under.capacity}${under.fixtures.length ? `, ${under.fixtures.map((f) => f.kind.toUpperCase()).join(', ')}` : ''}`);
         const side = this.extendSide(under);
-        lines.push(`U: EXTEND ${['SOUTH', 'WEST', 'NORTH', 'EAST'][side]} 2 (${extendPrice(under, side, 2)}$)`);
+        lines.push(`U: EXTEND ${['SOUTH', 'WEST', 'NORTH', 'EAST'][side]} 2 (${extendPrice(under, extendRect(under, side, 2))}$)`);
       }
       if (ud.upgrade && under.level < 2) lines.push(`U: UPGRADE ${ud.upgrade.cost}$ (${ud.upgrade.desc})`);
       lines.push('X: REMOVE');

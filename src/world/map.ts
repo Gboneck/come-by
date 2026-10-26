@@ -105,8 +105,8 @@ export const YARD_H = 5;
 export const VILLAGE = { cx: 86, cy: 78.5, rx: 11.5, ry: 6.5 };
 // Fields past the clearing, off the ranch's south side: land to buy, under
 // scrub until stock has grazed it clear (src/systems/valley.ts).
-export interface PaddockSite { id: 'southwest' | 'southeast'; name: string; price: number; cx: number; cy: number; rx: number; ry: number }
-export const PADDOCKS: PaddockSite[] = [
+export interface FieldSite { id: 'southwest' | 'southeast'; name: string; price: number; cx: number; cy: number; rx: number; ry: number }
+export const FIELDS: FieldSite[] = [
   { id: 'southwest', name: 'THE SOUTH-WEST FIELD', price: 200, cx: 78, cy: 119, rx: 8, ry: 5 },
   { id: 'southeast', name: 'THE SOUTH-EAST FIELD', price: 300, cx: 116, cy: 118, rx: 8, ry: 5 },
 ];
@@ -234,7 +234,7 @@ export class WorldMap {
     // The village green, and the overgrown paddocks (ranch ground). No RNG,
     // so everything after comes out as before.
     this.carveEllipse(VILLAGE.cx, VILLAGE.cy, VILLAGE.rx, VILLAGE.ry, 0, 0.1, 96);
-    for (const [i, p] of PADDOCKS.entries()) this.carveEllipse(p.cx, p.cy, p.rx, p.ry, regionById('ranch').index, 0.1, 90 + i);
+    for (const [i, p] of FIELDS.entries()) this.carveEllipse(p.cx, p.cy, p.rx, p.ry, regionById('ranch').index, 0.1, 90 + i);
 
     // Home Meadow: a pond and a few groves.
     this.pond(158, 112, 4.2, 2.8);

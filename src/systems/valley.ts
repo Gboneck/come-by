@@ -2,7 +2,7 @@ import { C } from '../palette';
 import type { Game } from '../game';
 import type { Animal } from '../entities/animal';
 import { SPECIES } from '../entities/species';
-import { MW, PADDOCKS, TS, Ter, WOODPILE, regionById, type PaddockSite, type SpeciesId, type WorldMap } from '../world/map';
+import { MW, FIELDS, TS, Ter, WOODPILE, regionById, type FieldSite, type SpeciesId, type WorldMap } from '../world/map';
 import { ARCH, PLOTS, SPOTS, type StepId } from '../ranch/village';
 import { SEASON_DAYS } from './season';
 import type { MorningBanner } from './seasonal';
@@ -51,14 +51,14 @@ const penned = (g: Game, sp?: SpeciesId) => g.ranch.pens.reduce((n, p) => n + p.
 export const STEPS: StepDef[] = [
   { id: 'cottage1', name: 'A COTTAGE', deed: 'FILL AN ORDER FOR A BUYER', after: null, done: (g) => g.totals.orders >= 1, line: 'A FAMILY MOVES INTO A COTTAGE AT THE CROSSROADS' },
   { id: 'square', name: 'THE MARKET SQUARE', deed: 'FILL 4 ORDERS', after: 'cottage1', done: (g) => g.totals.orders >= 4, line: 'MARKET DAY IS THE THIRD OF EACH SEASON: THE DROVER PAYS MORE' },
-  { id: 'cottage2', name: 'A SECOND COTTAGE', deed: 'GRAZE A FIELD CLEAR', after: 'cottage1', done: (g) => g.valley.paddocks.some((p) => p.cleared), line: 'ANOTHER FAMILY MOVES IN' },
+  { id: 'cottage2', name: 'A SECOND COTTAGE', deed: 'GRAZE A FIELD CLEAR', after: 'cottage1', done: (g) => g.valley.fields.some((p) => p.cleared), line: 'ANOTHER FAMILY MOVES IN' },
   { id: 'smithy', name: 'THE SMITHY', deed: 'PEN 4 CATTLE', after: 'square', done: (g) => penned(g, 'cow') >= 4, line: 'THE SMITH CAN FORGE AN OX YOKE: THE OLD BRIDGE AT THE FORD CAN BE MENDED' },
   { id: 'hall', name: 'THE VILLAGE HALL', deed: 'WIN A RIBBON AT A TRIAL OR THE FAIR', after: 'square', done: (g) => g.totals.ribbons.some((n) => n > 0) || g.totals.fairRibbons.some((n) => n > 0), line: 'A FESTIVAL ON THE GREEN THE LAST DAY OF EACH SEASON' },
   { id: 'cottage3', name: 'A THIRD COTTAGE', deed: 'HAVE 40 ANIMALS PENNED', after: 'cottage2', done: (g) => penned(g) >= 40, line: 'THE VILLAGE IS FULL OF LIFE' },
 ];
 
-export interface PaddockState {
-  site: PaddockSite;
+export interface FieldState {
+  site: FieldSite;
   tiles: number[]; // ty * MW + tx
   index: Map<number, number>; // tile -> its place in `tiles`
   scrub: Float32Array; // per tile, 1 = overgrown .. 0 = grazed
@@ -69,7 +69,7 @@ export interface PaddockState {
 }
 
 export class Valley {
-  paddocks: PaddockState[] = [];
+  fields: FieldState[] = [];
   private mask: Uint8Array; // paddock index + 1 per tile
   logs = 0;
   bridge = false;
@@ -82,7 +82,7 @@ export class Valley {
   constructor(map: WorldMap) {
     this.mask = new Uint8Array(map.region.length);
     const ranch = regionById('ranch');
-    for (const site of PADDOCKS) {
+    for (const site of FIELDS) {
       const tiles: number[] = [];
       let mx = 0, my = 0, md = -1;
       for (let ty = Math.floor(site.cy - site.ry - 2); ty <= site.cy + site.ry + 2; ty++)
@@ -93,19 +93,19 @@ export class Valley {
           const dr = ((tx + 0.5 - ranch.cx) / ranch.rx) ** 2 + ((ty + 0.5 - ranch.cy) / ranch.ry) ** 2;
           if (d > 1.3 || dr <= 1) continue;
           tiles.push(i);
-          this.mask[i] = this.paddocks.length + 1;
+          this.mask[i] = this.fields.length + 1;
           // The sign stands at the paddock tile nearest the ranch's middle.
           const near = 1 / (1 + Math.hypot(tx - ranch.cx, ty - ranch.cy));
           if (near > md) { md = near; mx = tx; my = ty; }
         }
-      this.paddocks.push({ site, tiles, index: new Map(tiles.map((t, j) => [t, j])), scrub: new Float32Array(tiles.length).fill(1), cleared: false, owned: false, shown: 0, mouth: { x: mx * TS + 4, y: my * TS + 4 } });
+      this.fields.push({ site, tiles, index: new Map(tiles.map((t, j) => [t, j])), scrub: new Float32Array(tiles.length).fill(1), cleared: false, owned: false, shown: 0, mouth: { x: mx * TS + 4, y: my * TS + 4 } });
     }
   }
 
   // Building land: null if not a field; true once bought.
   landAt(tx: number, ty: number): boolean | null {
     const k = this.mask[ty * MW + tx];
-    return k ? this.paddocks[k - 1].owned : null;
+    return k ? this.fields[k - 1].owned : null;
   }
 
   // On a field still under scrub only paddocks and fences go up.
@@ -116,25 +116,25 @@ export class Valley {
     return null;
   }
 
-  // Scrub left on a tile, 0..1 (0 off the paddocks or once cleared).
+  // Scrub left on a tile, 0..1 (0 off the fields or once cleared).
   scrubAt(tx: number, ty: number): number {
     const k = this.mask[ty * MW + tx];
     if (!k) return 0;
-    const p = this.paddocks[k - 1];
+    const p = this.fields[k - 1];
     if (p.cleared) return 0;
     const j = p.index.get(ty * MW + tx);
     return j === undefined ? 0 : p.scrub[j];
   }
 
-  left(p: PaddockState) {
+  left(p: FieldState) {
     let s = 0;
     for (const v of p.scrub) s += v;
     return s / Math.max(1, p.scrub.length);
   }
 
-  paddockAt(px: number, py: number): PaddockState | null {
+  fieldAt(px: number, py: number): FieldState | null {
     const k = this.mask[Math.floor(py / TS) * MW + Math.floor(px / TS)];
-    return k ? this.paddocks[k - 1] : null;
+    return k ? this.fields[k - 1] : null;
   }
 }
 
@@ -205,12 +205,12 @@ export function valleyUpdate(g: Game, dt: number) {
 
 function grazePaddocks(g: Game, dt: number) {
   const v = g.valley;
-  if (v.paddocks.every((p) => p.cleared)) return;
+  if (v.fields.every((p) => p.cleared)) return;
   for (const a of g.animals) {
     if (a.gone || a.carried || a.trial) continue; // penned stock grazes its paddock too
     const rate = GRAZE[a.sp.id] * (a.young ? 0.5 : 1);
     if (!rate || a.stress > 0.45 || Math.hypot(a.vx, a.vy) > a.sp.walk * 0.7) continue;
-    const p = v.paddockAt(a.x, a.y);
+    const p = v.fieldAt(a.x, a.y);
     if (!p || p.cleared) continue;
     const tx = Math.floor(a.x / TS), ty = Math.floor(a.y / TS);
     let best = -1, bs = 0.001;
@@ -223,7 +223,7 @@ function grazePaddocks(g: Game, dt: number) {
     const own = p.index.get(ty * MW + tx);
     if (own !== undefined) p.scrub[own] = Math.max(0, p.scrub[own] - rate * dt * 0.25);
   }
-  for (const p of v.paddocks) {
+  for (const p of v.fields) {
     if (p.cleared) continue;
     const left = v.left(p);
     const q = Math.floor((1 - left) * 4);
@@ -235,7 +235,7 @@ function grazePaddocks(g: Game, dt: number) {
   }
 }
 
-export function clearPaddock(g: Game, p: PaddockState) {
+export function clearPaddock(g: Game, p: FieldState) {
   p.cleared = true;
   p.scrub.fill(0);
   g.showBanner(`${p.site.name} IS CLEAR`, p.owned ? 'GRAZED DOWN TO GOOD GRASS: BUILD ANYTHING ON IT NOW' : 'GOOD GRASS NOW: BUY IT AT ITS SIGN TO BUILD ON IT', 3.4);
@@ -316,7 +316,7 @@ function parade(g: Game) {
 
 // E at a field's sign: buy it.
 export function buyField(g: Game): boolean {
-  const p = g.valley.paddocks.find((x) => !x.owned && Math.hypot(g.dog.x - x.mouth.x, g.dog.y - x.mouth.y) < 24);
+  const p = g.valley.fields.find((x) => !x.owned && Math.hypot(g.dog.x - x.mouth.x, g.dog.y - x.mouth.y) < 24);
   if (!p) return false;
   if (g.coins < p.site.price) {
     g.showBanner(`${p.site.name}: ${p.site.price}$`, `YOU HAVE ${g.coins}$`, 1.8);
@@ -339,9 +339,9 @@ export function valleyHint(g: Game): string | null {
   }
   if (!v.bridge && near(bridgeLanding(g), 36)) return `THE OLD BRIDGE: ${v.logs}/${BRIDGE_LOGS} LOGS.${g.ranch.village.has('smithy') ? ' COWS BRING THEM FROM THE WOODPILE WEST OF HERE.' : ' A SMITH COULD FORGE THE YOKE TO HAUL TIMBER.'}`;
   const E = g.input.touchMode ? 'NIP' : 'E';
-  for (const p of v.paddocks) {
+  for (const p of v.fields) {
     if (!p.owned && near(p.mouth, 24)) return `${E}: BUY ${p.site.name} ${p.site.price}$ (YOU HAVE ${g.coins}$)`;
-    if (!p.cleared && (near(p.mouth, 30) || v.paddockAt(d.x, d.y) === p)) return `${p.owned ? '' : 'FOR SALE. '}OVERGROWN: ${Math.round((1 - v.left(p)) * 100)}% GRAZED. STOCK GRAZING HERE, PENNED OR LOOSE, CLEARS IT.`;
+    if (!p.cleared && (near(p.mouth, 30) || v.fieldAt(d.x, d.y) === p)) return `${p.owned ? '' : 'FOR SALE. '}OVERGROWN: ${Math.round((1 - v.left(p)) * 100)}% GRAZED. STOCK GRAZING HERE, PENNED OR LOOSE, CLEARS IT.`;
   }
   if (isFestival(g) && !v.paradeDone && Math.abs(d.x - ARCH.x) < 50 && d.y > ARCH.y0 - 30 && d.y < ARCH.y1 + 30) return 'THE FESTIVAL: DRIVE FIVE OF A KIND THROUGH THE ARCH.';
   if (near(SPOTS.green, 64)) {
@@ -368,7 +368,7 @@ export function valleySave(g: Game): ValleySave {
   return {
     village: [...g.ranch.village.built],
     builtDay: { ...g.ranch.village.builtDay },
-    scrub: v.paddocks.map((p) => ({ id: p.site.id, v: p.cleared ? [] : [...p.scrub].map((x) => Math.round(x * 100) / 100), cleared: p.cleared, owned: p.owned })),
+    scrub: v.fields.map((p) => ({ id: p.site.id, v: p.cleared ? [] : [...p.scrub].map((x) => Math.round(x * 100) / 100), cleared: p.cleared, owned: p.owned })),
     logs: v.logs,
     bridge: v.bridge,
     parades: v.parades,
@@ -380,7 +380,7 @@ export function valleyLoad(g: Game, d: ValleySave | undefined) {
   const v = g.valley;
   g.ranch.village.built = new Set((d?.village ?? []).filter((id) => STEPS.some((s) => s.id === id)));
   g.ranch.village.builtDay = { ...(d?.builtDay ?? {}) };
-  for (const p of v.paddocks) {
+  for (const p of v.fields) {
     const s = d?.scrub.find((x) => x.id === p.site.id);
     p.cleared = !!s?.cleared;
     p.owned = !!s?.owned;

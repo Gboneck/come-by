@@ -80,7 +80,7 @@ export function hayHeld(g: Game) {
 
 // Bales a pen eats in a winter night: one per HAY_PER places of stock, a
 // third less from a hay rack (less trodden into the mud).
-export const penHay = (p: Pen) => (p.animals.length ? Math.ceil((p.used / HAY_PER) * (p.has('hayrack') ? 2 / 3 : 1)) : 0);
+export const penHay = (p: Pen) => (p.animals.length ? Math.ceil((p.used / HAY_PER) * (p.has('rack') ? 2 / 3 : 1)) : 0);
 
 // Bales the pens eat in a winter night, as they stand.
 export function hayNeed(g: Game) {

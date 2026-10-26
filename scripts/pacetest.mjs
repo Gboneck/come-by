@@ -64,7 +64,7 @@ for (const seed of seeds) {
         hungry: g.seasonal.hungryNights - (c.season === 'winter' && c.dayOf === 1 ? 0 : hungry0),
         ribbons: g.totals.fairRibbons.reduce((s, n) => s + n, 0) - ribbons0,
         hayLeft: Z.hayHeld(g), hayNeed: Z.hayNeed(g),
-        village: g.ranch.village.built.size, cleared: g.valley.paddocks.filter((p) => p.cleared).length, logs: g.valley.logs, bridge: g.valley.bridge,
+        village: g.ranch.village.built.size, cleared: g.valley.fields.filter((p) => p.cleared).length, logs: g.valley.logs, bridge: g.valley.bridge,
       };
     });
     days.push(log);

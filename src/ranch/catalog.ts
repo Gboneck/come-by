@@ -1,7 +1,7 @@
 import { spr, type Sprite } from '../gfx/sprite';
 import type { BuildingKind, Rot } from './buildings';
 
-export type ItemId = 'pen' | 'fence' | 'trough' | 'shelter' | 'hayrack' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill' | 'hay' | 'shed' | 'dairy' | 'agility';
+export type ItemId = 'pen' | 'fence' | 'trough' | 'shelter' | 'rack' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill' | 'hay' | 'shed' | 'dairy' | 'agility';
 
 export interface BuildDef {
   id: ItemId;
@@ -38,14 +38,14 @@ export const CATALOG: BuildDef[] = [
     icon: icon('trough', ['.........', '.........', 'ptttttttp', 'pwtwtwtwp', '.ppppppp.', '.p.....p.']),
   },
   {
-    id: 'shelter', kind: 'shelter', name: 'FIELD SHELTER', cost: 45, tier: 2, w: 2, h: 2, rotates: false,
+    id: 'shelter', kind: 'shelter', name: 'FIELD SHELTER', cost: 45, tier: 2, w: 3, h: 2, rotates: false,
     desc: 'PUT IN A PADDOCK: ITS STOCK IS SAFE AT NIGHT, AS IN A BARN\'S RING.',
     icon: icon('shelter', ['....p....', '..ppppp..', '.ppppppp.', 'ppppppppp', '.w.....w.', '.w.yyy.w.', '.wyyyyyw.']),
   },
   {
-    id: 'hayrack', kind: 'hayrack', name: 'HAY RACK', cost: 20, tier: 2, w: 2, h: 1, rotates: false,
+    id: 'rack', kind: 'rack', name: 'HAY RACK', cost: 20, tier: 2, w: 2, h: 1, rotates: false,
     desc: 'PUT IN A PADDOCK: ITS STOCK EATS A THIRD LESS HAY IN WINTER.',
-    icon: icon('hayrack', ['.........', 'p.p.p.p.p', 'pyyyyyyyp', 'pyyyyyyyp', 'ppppppppp', '.p.....p.']),
+    icon: icon('rack', ['.........', 'p.p.p.p.p', 'pyyyyyyyp', 'pyyyyyyyp', 'ppppppppp', '.p.....p.']),
   },
   {
     id: 'kennel', kind: 'kennel', name: 'KENNEL', cost: 15, tier: 1, w: 3, h: 3, rotates: false, max: 1,

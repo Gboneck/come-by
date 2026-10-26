@@ -18,7 +18,7 @@ import { RARE_BREEDS } from './entities/species';
 import { buyBreed, hayHeld, hayNeed, isFairDay, shelteredSpot, HAY_SPOIL } from './systems/seasonal';
 import { AGILITY, AgilityYard, Barn, Dairy, ShearingShed } from './ranch/structures';
 import { bridgeLanding, buyField, woodpile } from './systems/valley';
-import { extendPaddock, extendPrice, extendProblem } from './ranch/paddock';
+import { extendPaddock, extendPrice, extendProblem, extendRect } from './ranch/paddock';
 import { agilityPostNear, dairyOpen, startAgility } from './systems/farmwork';
 
 // A "decent player" for pacing runs (scripts/pacetest.mjs). Each day it
@@ -264,15 +264,16 @@ export class Pacer {
         const across = side % 2 === 0 ? p.w : p.h;
         const k0 = Math.max(2, Math.ceil(need / (across * perTile)));
         for (let k = k0; k <= k0 + 6; k++) {
-          if (extendProblem(g, p, side, k)) continue;
-          const cost = extendPrice(p, side, k);
-          if (!best || cost < best.cost) best = { side, k, cost };
+          const r = extendRect(p, side, k);
+          if (extendProblem(g, p, r)) continue;
+          const cost = extendPrice(p, r);
+          if (cost <= g.coins && (!best || cost < best.cost)) best = { side, k, cost };
           break;
         }
       }
       if (!best) continue;
       const before = g.coins;
-      if (!extendPaddock(g, p, best.side, best.k)) continue;
+      if (!extendPaddock(g, p, extendRect(p, best.side, best.k))) continue;
       this.spent += before - g.coins;
       this.paddocksExtended++;
       this.did.push(`EXTENDED A PADDOCK ${best.k} ${['SOUTH', 'WEST', 'NORTH', 'EAST'][best.side]} ${before - g.coins}$ (${p.w}X${p.h})`);
@@ -284,7 +285,7 @@ export class Pacer {
   // Land short: buy a field at the ranch's edge (stock on it grazes it clear).
   private buyLand(): boolean {
     const g = this.g;
-    const f = g.valley.paddocks.find((p) => !p.owned && g.coins >= p.site.price + 60);
+    const f = g.valley.fields.find((p) => !p.owned && g.coins >= p.site.price + 60);
     if (!f || !this.walkTo({ x: f.mouth.x, y: f.mouth.y + 6 }, 60, 6)) return false;
     const before = g.coins;
     if (!buyField(g) || g.coins >= before) return false;

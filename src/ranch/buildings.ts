@@ -17,7 +17,7 @@ export type BuildingKind =
   | 'dairy'
   | 'agility'
   | 'shelter'
-  | 'hayrack'
+  | 'rack'
   | 'regiongate';
 
 // Pens open on one side: 0 = south, 1 = west, 2 = north, 3 = east.
@@ -87,9 +87,9 @@ export function paddockCapacity(w: number, h: number, level = 1) {
 // Fixtures placed inside a paddock (src/ranch/paddock.ts): a trough (more
 // goods, calmer stock), a field shelter (safe at night, as in a barn's
 // ring) and a hay rack (less hay wasted in winter).
-export type FixtureKind = 'trough' | 'shelter' | 'hayrack';
+export type FixtureKind = 'trough' | 'shelter' | 'rack';
 export interface PenFixture { kind: FixtureKind; tx: number; ty: number }
-export const FIXTURE_SIZE: Record<FixtureKind, { w: number; h: number }> = { trough: { w: 2, h: 1 }, shelter: { w: 2, h: 2 }, hayrack: { w: 2, h: 1 } };
+export const FIXTURE_SIZE: Record<FixtureKind, { w: number; h: number }> = { trough: { w: 2, h: 1 }, shelter: { w: 3, h: 2 }, rack: { w: 2, h: 1 } };
 
 // A paddock: any size (src/ranch/paddock.ts has the rules), its gate on
 // any side at any point along it. `rot` is the gate's side, `gateAt` how
@@ -142,6 +142,16 @@ export class Pen extends Building implements Enclosure {
 
   canHold(sp: SpeciesId) {
     return this.animals.every((a) => getsAlong(a.sp.id, sp));
+  }
+  canShare(sp: SpeciesId) {
+    return this.canHold(sp);
+  }
+  // What is in it, by kind.
+  mix(): { sp: SpeciesId; n: number }[] {
+    return this.kinds.map((sp) => ({ sp, n: this.animals.filter((a) => a.sp.id === sp).length }));
+  }
+  get gate(): { side: Rot; at: number } {
+    return { side: this.rot, at: this.gateStart };
   }
 
   hasRoomFor(a: Animal) {
@@ -209,11 +219,13 @@ export class Pen extends Building implements Enclosure {
     fillCells(map, x0, y0, x0 + CS, y1, SOLID);
     fillCells(map, x1 - CS, y0, x1, y1, SOLID);
     fillCells(map, this.ix0, this.iy0, this.ix1, this.iy1, PEN);
-    // A shelter and a hay rack stand solid inside (a trough is walked over).
+    // A hay rack stands solid inside, and a shelter's back wall (stock
+    // stands under its roof, open to the south); a trough is walked over.
     for (const f of this.fixtures) {
       if (f.kind === 'trough') continue;
       const z = FIXTURE_SIZE[f.kind];
-      fillCells(map, f.tx * TS + 1, f.ty * TS + 2, (f.tx + z.w) * TS - 1, (f.ty + z.h) * TS, SOLID);
+      const h = f.kind === 'shelter' ? TS / 2 : z.h * TS - 2;
+      fillCells(map, f.tx * TS + 1, f.ty * TS + 2, (f.tx + z.w) * TS - 1, f.ty * TS + 2 + h, SOLID);
     }
     const s = this.gateSpan();
     clearCells(map, s.x0, s.y0, s.x1, s.y1, SOLID);

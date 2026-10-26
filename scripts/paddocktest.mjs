@@ -53,30 +53,31 @@ const res = await page.evaluate(async () => {
   g.coins = 10000;
 
   // ---- Size, capacity, price ----
-  check('an 8x7 paddock holds 16 and costs 25$, as the old pen did', P.paddockCapacity(8, 7) === 16 && P.paddockPrice(8, 7) === 25);
-  const small = P.paddockPrice(8, 7) / 16, big = P.paddockPrice(16, 14) / P.paddockCapacity(16, 14);
-  check('one big paddock is cheaper per head than small ones', big < small * 0.6, { perSpaceSmall: +small.toFixed(2), perSpaceBig: +big.toFixed(2), bigHolds: P.paddockCapacity(16, 14), bigCosts: P.paddockPrice(16, 14) });
+  check('an 8x7 paddock holds 16 and costs 25$, as the old pen did', P.paddockCapacity(8, 7) === 16 && P.paddockPrice({ tx: 0, ty: 0, w: 8, h: 7 }) === 25 && P.holds({ tx: 0, ty: 0, w: 8, h: 7 })[0].n === 16);
+  const R = (w, h) => ({ tx: 0, ty: 0, w, h });
+  const small = P.paddockPrice(R(8, 7)) / 16, big = P.paddockPrice(R(16, 14)) / P.paddockCapacity(16, 14);
+  check('one big paddock is cheaper per head than small ones', big < small * 0.6, { perSpaceSmall: +small.toFixed(2), perSpaceBig: +big.toFixed(2), bigHolds: P.paddockCapacity(16, 14), bigCosts: P.paddockPrice(R(16, 14)) });
 
   // ---- Placing ----
-  const tooSmall = P.placeProblem(g, { tx: 100, ty: 108, w: 5, h: 5 }, P.defaultGate(5, 5, 0));
-  const corner = P.placeProblem(g, { tx: 100, ty: 108, w: 8, h: 7 }, { side: 0, at: 0 });
-  const offRanch = P.placeProblem(g, { tx: 60, ty: 60, w: 8, h: 7 }, P.defaultGate(8, 7, 0));
-  const onRoad = P.placeProblem(g, { tx: 92, ty: 101, w: 8, h: 7 }, P.defaultGate(8, 7, 0));
+  const tooSmall = P.paddockProblem(g, { tx: 100, ty: 108, w: 5, h: 5 }, { side: 0, at: 1 });
+  const corner = P.paddockProblem(g, { tx: 100, ty: 108, w: 8, h: 7 }, { side: 0, at: 0 });
+  const offRanch = P.paddockProblem(g, { tx: 60, ty: 60, w: 8, h: 7 }, P.defaultGate(R(8, 7), 0));
+  const onRoad = P.paddockProblem(g, { tx: 92, ty: 101, w: 8, h: 7 }, P.defaultGate(R(8, 7), 0));
   check('too small, a gate on a corner, off the ranch, on the drove road: refused', tooSmall && corner && offRanch === 'NOT ON RANCH LAND' && onRoad, { tooSmall, corner, offRanch, onRoad });
   // The first clear spot for a 12x9 with its gate on the east side, two
   // tiles down.
   const gate = { side: 3, at: 2 };
   const spot = (w, h, gt) => {
     // Room to grow 4 to the west as well.
-    for (let ty = 86; ty < 120; ty++) for (let tx = 76; tx < 120; tx++) if (!P.placeProblem(g, { tx, ty, w, h }, gt) && !P.placeProblem(g, { tx: tx - 4, ty, w: w + 4, h }, gt)) return { tx, ty, w, h };
+    for (let ty = 86; ty < 120; ty++) for (let tx = 76; tx < 120; tx++) if (!P.paddockProblem(g, { tx, ty, w, h }, gt) && !P.paddockProblem(g, { tx: tx - 4, ty, w: w + 4, h }, gt)) return { tx, ty, w, h };
     return null;
   };
   const r = spot(12, 9, gate);
-  const why = r ? P.placeProblem(g, r, gate) : 'NO ROOM';
+  const why = r ? P.paddockProblem(g, r, gate) : 'NO ROOM';
   const coins0 = g.coins;
-  const big1 = P.placePaddock(g, r, gate);
+  const big1 = P.buildPaddock(g, r, gate);
   const s = big1?.gateSpan();
-  check('a 12x9 paddock with its gate on the east side, two tiles down', !why && big1 && g.coins === coins0 - P.paddockPrice(12, 9) && big1.capacity === P.paddockCapacity(12, 9) && s.x0 === (r.tx + r.w) * 8 - 4 && s.y0 === (r.ty + 2) * 8, { why, cap: big1?.capacity, span: s });
+  check('a 12x9 paddock with its gate on the east side, two tiles down', !why && big1 && g.coins === coins0 - P.paddockPrice(r) && big1.capacity === P.paddockCapacity(12, 9) && s.x0 === (r.tx + r.w) * 8 - 4 && s.y0 === (r.ty + 2) * 8, { why, cap: big1?.capacity, span: s });
   // The fence is solid, the gate a gap.
   const solid = (x, y) => (g.map.flagsAtPx(x, y) & M.SOLID) !== 0;
   check('its fence is solid, its gate opens', solid(big1.x0 + 2, big1.cy) && solid(big1.x1 - 2, big1.y1 - 6) && (big1.swing < 0.85 || !solid(s.x0 + 2, s.y0 + 6)));
@@ -99,21 +100,22 @@ const res = await page.evaluate(async () => {
 
   // ---- Extending ----
   const before = { tx: big1.tx, w: big1.w, h: big1.h, cap: big1.capacity, gate: big1.gatePoint(0) };
-  const ePrice = P.extendPrice(big1, 1, 4);
+  const eR = P.extendRect(big1, 1, 4);
+  const ePrice = P.extendPrice(big1, eR);
   const coinsE = g.coins;
-  const why1 = P.extendProblem(g, big1, 1, 4);
-  const ok1 = P.extendPaddock(g, big1, 1, 4); // out to the west by 4
+  const why1 = P.extendProblem(g, big1, eR);
+  const ok1 = P.extendPaddock(g, big1, eR); // out to the west by 4
   check('extending a side pays only for the new fence', !why1 && ok1 && g.coins === coinsE - ePrice && ePrice === Math.round(0.8 * 2 * 4) && big1.w === before.w + 4 && big1.tx === before.tx - 4, { why1, ePrice, w: big1.w });
   const gNow = big1.gatePoint(0);
   check('the east gate stays where it was when the west side moves', Math.abs(gNow.x - before.gate.x - 0) < 0.1 && Math.abs(gNow.y - before.gate.y) < 0.1, { before: before.gate, now: gNow });
   check('more room, the flock still penned', big1.capacity > before.cap && big1.animals.length === 8 && big1.animals.every((a) => big1.contains(a.x, a.y)), { cap: big1.capacity });
-  const ok2 = P.extendPaddock(g, big1, 3, 3); // the gate side out by 3
+  const ok2 = P.extendPaddock(g, big1, P.extendRect(big1, 3, 3)); // the gate side out by 3
   check('the gate moves out with its own side', ok2 && Math.abs(big1.gatePoint(0).x - (gNow.x + 24)) < 0.1, { gate: big1.gatePoint(0) });
-  const blocked = P.extendProblem(g, big1, 1, 40);
+  const blocked = P.extendProblem(g, big1, P.extendRect(big1, 1, 40));
   check('it will not extend off the ranch or past the most', !!blocked, blocked);
 
   // ---- Moving the gate ----
-  const moved = P.moveGate(g, big1, { side: 2, at: 4 });
+  const moved = P.moveGate(g, big1, { side: 2, at: 4 }) === null;
   const ns = big1.gateSpan();
   check('the gate moves to another side for free', moved && big1.rot === 2 && ns.y0 === big1.y0 && ns.x0 === (big1.tx + 4) * 8);
 
@@ -148,19 +150,19 @@ const res = await page.evaluate(async () => {
 
   // ---- Fixtures ----
   const fx = big1.tx + 2, fy = big1.ty + 2;
-  const okS = P.placeFixture(g, 'shelter', fx, fy);
-  check('a field shelter inside makes it safe at night', okS && big1.has('shelter') && g.sheltered(big1) && solid(fx * 8 + 8, fy * 8 + 10));
+  const okS = P.placeFixture(g, big1, 'shelter', fx, fy + 3);
+  check('a field shelter inside makes it safe at night', okS && big1.has('shelter') && g.sheltered(big1) && solid(fx * 8 + 12, (fy + 3) * 8 + 4));
   const need0 = Z.penHay(big1);
-  P.placeFixture(g, 'hayrack', fx, fy + 4);
-  check('a hay rack: a third less hay', big1.has('hayrack') && Z.penHay(big1) < need0, { without: need0, with: Z.penHay(big1) });
-  const dupe = P.fixtureProblem(g, 'shelter', fx + 6, fy + 3).why;
-  const outside = P.fixtureProblem(g, 'trough', 96, 104).why;
+  P.placeFixture(g, big1, 'rack', fx, fy + 2);
+  check('a hay rack: a third less hay', big1.has('rack') && Z.penHay(big1) < need0, { without: need0, with: Z.penHay(big1) });
+  const dupe = P.fixtureProblem(g, big1, 'shelter', fx + 8, fy + 3);
+  const outside = P.fixtureProblem(g, null, 'trough', 96, 104);
   check('one of each, and only inside a paddock', dupe === 'THIS PADDOCK HAS ONE' && outside === 'PLACE IT IN A PADDOCK', { dupe, outside });
-  P.placeFixture(g, 'trough', fx + 7, fy);
+  P.placeFixture(g, big1, 'trough', fx + 7, fy);
   check('a trough placed where it was put', big1.hasTrough && big1.fixtures.some((f) => f.kind === 'trough' && f.tx === fx + 7));
   // A barn whose ring reaches only the gate still shelters a big paddock.
   const r2 = spot(12, 9, { side: 2, at: 1 });
-  const other = r2 && P.placePaddock(g, r2, { side: 2, at: 1 });
+  const other = r2 && P.buildPaddock(g, r2, { side: 2, at: 1 });
   let barnOk = false;
   if (other) {
     const gp2 = other.gatePoint(0);
@@ -172,12 +174,21 @@ const res = await page.evaluate(async () => {
   }
   check("a barn's ring reaching a big paddock's gate shelters it", barnOk);
 
+  // Removing: not while stock is in it; half the fence back.
+  const rmFull = P.removePaddock(g, big1);
+  let small1 = null;
+  for (let ty = 86; ty < 120 && !small1; ty++) for (let tx = 72; tx < 120 && !small1; tx++) if (!P.paddockProblem(g, { tx, ty, w: 8, h: 7 }, { side: 0, at: 3 })) small1 = { tx, ty, w: 8, h: 7 };
+  const tmp = small1 && P.buildPaddock(g, small1, { side: 0, at: 3 });
+  const coinsR = g.coins;
+  const rmOk = tmp ? P.removePaddock(g, tmp) : 'NONE';
+  check('a paddock comes down only when empty, half its fence paid back', rmFull === 'EMPTY IT FIRST' && rmOk === null && g.coins === coinsR + Math.floor(25 / 2), { rmFull, rmOk });
+
   // ---- Saves ----
   SV.saveGame(g);
   const saved = JSON.parse(localStorage.getItem('comeby-save-v1'));
   SV.loadInto(g);
   const back = g.ranch.pens.find((p) => p.w === big1.w && p.h === big1.h);
-  check('a save keeps size, gate, fixtures and stock', back && back.rot === 2 && back.gateStart === 4 && back.has('shelter') && back.has('hayrack') && back.hasTrough && back.animals.length === big1.animals.length, { w: back?.w, h: back?.h, rot: back?.rot });
+  check('a save keeps size, gate, fixtures and stock', back && back.rot === 2 && back.gateStart === 4 && back.has('shelter') && back.has('rack') && back.hasTrough && back.animals.length === big1.animals.length, { w: back?.w, h: back?.h, rot: back?.rot, fixtures: back?.fixtures });
   // An old save: pens with no size, one upgraded, one with a trough.
   const old = JSON.parse(JSON.stringify(saved));
   old.buildings = old.buildings.filter((b) => b.kind !== 'pen');

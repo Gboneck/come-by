@@ -210,13 +210,14 @@ export function fixtureDrawables(game: Game, g: CanvasRenderingContext2D, inView
       const x = f.tx * 8, y = f.ty * 8;
       if (f.kind === 'trough' || !inView(x + 8, y + 8)) continue;
       if (f.kind === 'shelter') {
+        // Three tiles wide, open to the south.
         out.push({ y: y + 15, draw: () => {
-          for (let i = 0; i < 12; i++) px(g, x + 2 + ((i * 5) % 12), y + 10 + (i % 4), C.butter);
+          for (let i = 0; i < 16; i++) px(g, x + 2 + ((i * 5) % 20), y + 9 + (i % 5), C.butter);
+          rect(g, x + 1, y + 3, 22, 4, C.plum);
           rect(g, x + 1, y + 6, 1, 10, C.plum);
-          rect(g, x + 14, y + 6, 1, 10, C.plum);
-          rect(g, x + 1, y + 6, 14, 1, C.plum);
-          for (let i = 0; i < 4; i++) rect(g, x - 1 + i, y + 5 - i, 18 - i * 2, 1, i % 2 ? C.plum : C.teal);
-          snowCap(g, x + 2, y + 1, 12);
+          rect(g, x + 22, y + 6, 1, 10, C.plum);
+          for (let i = 0; i < 4; i++) rect(g, x - 1 + i, y + 5 - i, 26 - i * 2, 1, i % 2 ? C.plum : C.teal);
+          snowCap(g, x + 2, y + 1, 20);
         } });
       } else {
         out.push({ y: y + 7, draw: () => {
