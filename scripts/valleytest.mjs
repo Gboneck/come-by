@@ -70,6 +70,8 @@ const res = await page.evaluate(async () => {
   check('...and reach their cottage door', atDoor < 6, { atDoor: Math.round(atDoor) });
   // Everything else done at once: still one step a morning, in order.
   g.totals.orders = 4;
+  // The square comes with the drover's trust (favour 2), not an order count.
+  if (g.favour) g.favour.pts.drover = Math.max(g.favour.pts.drover, (await import('/src/systems/favour.ts')).buyerDef('drover').at[1]);
   g.totals.ribbons = [1, 0, 0];
   morning(3);
   const after3 = [...vil.built];
@@ -89,7 +91,12 @@ const res = await page.evaluate(async () => {
     a.stress = a.peakStress = 0;
     const coins0 = g.coins;
     step(0.3);
-    const want = Math.round(O.headPrice(ord.species, 0, false) * 1.5);
+    // Market day's half again, then the drover's favour (and any special
+    // order's pay) on top, as favourHead adds it.
+    const v = Math.round(O.headPrice(ord.species, 0, false) * 1.5);
+    const F = await import('/src/systems/favour.ts');
+    const extra = g.favour.pay('drover') / 100 + (ord.special ? F.SPECIAL_PAY[ord.special] - 1 : 0);
+    const want = v + Math.max(0, Math.round(v * extra));
     check('a head delivered on market day pays half again', g.coins - coins0 === want, { paid: g.coins - coins0, want });
   }
   // Goods sell dearer.

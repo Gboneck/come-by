@@ -85,7 +85,7 @@ export const titleOf = (id: BuyerId, level: number) => (level >= maxLevel(id) ? 
 
 // What a filled order earns: filled, all calm, early, and a special order.
 export const PTS = { fill: 3, calm: 2, early: 1, special: 1, missed: -2, short: -1 };
-const SPECIAL_PAY: Record<Special, number> = { rush: 2, show: 2, drove: 1.5 };
+export const SPECIAL_PAY: Record<Special, number> = { rush: 2, show: 2, drove: 1.5 };
 export const SPECIAL_WORD: Record<Special, string> = { rush: 'RUSH', show: 'SHOW', drove: 'BIG DROVE' };
 const MEAL = 6; // bales the miller sends at the start of winter
 
