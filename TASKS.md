@@ -1354,8 +1354,8 @@ valley thrives on days 8, 10, 9, 10, 6, 7 before (mean 8.3) and 8, 10, 8,
 (The rest of the income is legacy prizes, places found and stock sold to
 make room. The bot never digs, does no valley projects and passes up the
 shed, dairy and agility yard while land is short, so a player who does
-them earns a little more; those pay for herding work too, but for the
-loot.)
+them earns a little more. All of those but the loot pay for herding
+work.)
 
 **Two years** (`--year --days=34`, three seeds):
 
