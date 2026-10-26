@@ -8,7 +8,7 @@ import { makeDogSprites, type DogSprites } from './dog';
 
 export type Speckle = 'light' | 'classic' | 'heavy';
 export type Mask = 'both' | 'one' | 'none';
-export type Neck = 'bandana' | 'neckerchief' | 'collar';
+export type Neck = 'bandana' | 'neckerchief' | 'collar' | 'spotted';
 export type Tag = 'none' | 'brass' | 'bone' | 'gold';
 
 export interface DogLook {

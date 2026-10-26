@@ -18,7 +18,8 @@ import { PING_KINDS, Pings, pingHelp, type PingKind, type PingNet } from './ping
 import { atPost, braceReady, classLabel, currentClass, trialNip } from '../systems/trials';
 import { Link, createRoom, relayBase } from './link';
 import { allPens, animalRec, encodeSnap, sameAnimal, worldRecs, type AnimalRec, type DogRec } from './snapshot';
-import { D_BARK, D_LYING, D_SPRINT } from './snapshot';
+import { D_BARK, D_DIG, D_LYING, D_SNIFF, D_SPRINT } from './snapshot';
+import { puppetAct } from '../systems/loot';
 import { FACES, K_DOG, K_JSON, MAX_DOGS, Reader, SNAP_HZ, Writer, colourId, faceId, jsonFrame, readDog, type DogEvent, type DogState, type HostMode } from './protocol';
 
 // Hosting co-op: this browser runs the ranch exactly as in single player,
@@ -321,6 +322,9 @@ export class HostNet implements PingNet {
         }
         return;
       }
+      // E on a dig spot (no animal at the nose): the guest dug it (theirs,
+      // on their screen); it is gone for everyone.
+      if (!e.target && game.loot.digBy(game, e.x, e.y)) return;
       // E does for a friend all it does for the host: the trial post, a pen
       // gate, a breed for sale, the agility post, a field. Played with their
       // dog as "the dog", where they saw it; runs it starts stay theirs.
@@ -559,11 +563,11 @@ export class HostNet implements PingNet {
   private dogRecs(): DogRec[] {
     const q = (v: number) => Math.round(v * 8);
     const d = this.game.dog;
-    const out: DogRec[] = [{ slot: 0, x: q(d.x), y: q(d.y), vx: q(d.vx), vy: q(d.vy), fl: faceId(d.face) | (d.lying ? D_LYING : 0) | (d.sprinting ? D_SPRINT : 0) | (d.barkAnim > 0 ? D_BARK : 0) }];
+    const out: DogRec[] = [{ slot: 0, x: q(d.x), y: q(d.y), vx: q(d.vx), vy: q(d.vy), fl: faceId(d.face) | (d.lying ? D_LYING : 0) | (d.sprinting ? D_SPRINT : 0) | (d.barkAnim > 0 ? D_BARK : 0) | (d.sniff > 0.4 ? D_SNIFF : 0) | (d.dig > 0 ? D_DIG : 0) }];
     for (const s of this.seats.values()) {
       const g = s.dog;
       if (!g || s.leaving > 0) continue;
-      out.push({ slot: s.slot, x: q(g.x), y: q(g.y), vx: q(g.vx), vy: q(g.vy), fl: faceId(g.face) | (g.lying ? D_LYING : 0) | (g.sprinting ? D_SPRINT : 0) | (g.barkAnim > 0 ? D_BARK : 0) });
+      out.push({ slot: s.slot, x: q(g.x), y: q(g.y), vx: q(g.vx), vy: q(g.vy), fl: faceId(g.face) | (g.lying ? D_LYING : 0) | (g.sprinting ? D_SPRINT : 0) | (g.barkAnim > 0 ? D_BARK : 0) | (g.sniff > 0.4 ? D_SNIFF : 0) | (g.dig > 0 ? D_DIG : 0) });
     }
     return out.slice(0, MAX_DOGS);
   }
@@ -696,6 +700,7 @@ export class HostNet implements PingNet {
         y += (ty - y) * k;
       }
       d.puppet(dt, { x, y, vx: w.vx, vy: w.vy, face: FACES[w.face], lying: w.lying, sprint: w.sprint }, game.map, game.fx);
+      puppetAct(d, !!w.sniff, !!w.dig, dt);
       d.hx = w.hx;
       d.hy = w.hy;
     }

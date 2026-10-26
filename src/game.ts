@@ -54,6 +54,8 @@ import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
 import { Projects } from './systems/projects';
 import { projectDrawables } from './art/projects';
+import { Loot } from './systems/loot';
+import { lootDrawables } from './art/loot';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
 import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
@@ -185,6 +187,7 @@ export class Game {
   herds = new Herds(); // the sale yard's lot, big droves
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   projects = new Projects(); // valley projects: herding work that changes a place for good
+  loot = new Loot(); // sniffing and digging up loot
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
   private idleT = 0;
@@ -265,6 +268,7 @@ export class Game {
 
   applyUpgrades() {
     this.dog.stats = dogStatsFor(this.upgrades);
+    this.loot.tuneDog(this.dog.stats); // a dug-up relic or two
   }
 
   onBuilt(id: string) {
@@ -431,6 +435,7 @@ export class Game {
     jobsMorning(this, spawn);
     this.discovery.morning(this);
     this.projects.morning(this, spawn);
+    this.loot.morning(this);
     saveGame(this);
   }
 
@@ -677,6 +682,7 @@ export class Game {
     this.dog.update(dt, this.input, this.map, this.fx, control);
     for (const ev of this.dog.events) this.onDogEvent(ev);
     this.dog.events.length = 0;
+    this.loot.update(this, dt); // scent, and the dog staying put while it digs
     updateHerd(this.animals, this.herdCtx(), dt);
     const night = this.day.phase === 'night';
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y, this.coop)) this.onRanchEvent(ev);
@@ -887,6 +893,7 @@ export class Game {
       }
     } else {
       if (jobsAction(this)) return; // E at the trial post or a pen gate
+      if (this.loot.dig(this)) return; // E on a scent: dig (or bury a bone)
       for (const p of this.predators) {
         const dx = p.x - d.x, dy = p.y - d.y, dd = Math.hypot(dx, dy);
         if (p.active && dd < 12 && (dx * d.hx + dy * d.hy) / (dd || 1) > 0) p.scare(1.5 * d.stats.nipPower);
@@ -1173,7 +1180,7 @@ export class Game {
 
   // Trial course, buyers' yards and carts, hidden places, valley projects, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...projectDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...projectDrawables(this, g), ...lootDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.

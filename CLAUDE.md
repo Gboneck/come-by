@@ -63,7 +63,9 @@ original and drawn in code. No external art files, ever.
   `scripts/padtest.mjs` plays every screen with a simulated game pad,
   `scripts/paddockuitest.mjs` drives the paddock editor in build mode by
   touch (drag out, handles, gate, build, extend, a trough inside),
-  `scripts/transfertest.mjs` moves a save between two browsers, `scripts/places.mjs` screenshots every hidden place and its way in
+  `scripts/transfertest.mjs` moves a save between two browsers,
+  `scripts/loottest.mjs` sniffing, digging, the old map, relics and co-op
+  finds, `scripts/places.mjs` screenshots every hidden place and its way in
   (`--found`, `--only=circle,hut`, `--half` and `--done` for the valley
   projects before and after),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
@@ -173,7 +175,7 @@ stays unique.
 | Move            | WASD / arrow keys                | virtual stick (left thumb)    | left stick / d-pad        |
 | Sprint          | Shift (hold, uses stamina)       | push stick to the rim         | RT, LT or RB (hold)       |
 | Bark            | Space / K                        | BARK button                   | A                         |
-| Nip             | E / J (also: open a pen gate, start a trial at the post) | NIP button  | B          |
+| Nip             | E / J (also: open a pen gate, start a trial at the post, dig on a scent, bury a bone on the ranch) | NIP button (DIG on a scent) | B |
 | Lie down        | Q / L (hold)                     | DOWN button (hold)            | X (hold)                  |
 | Rest            | lie down on the ranch, no stock near (day passes x12) | same | same               |
 | Build mode      | B (on the ranch)                 | BUILD button                  | LB (on the ranch)         |
@@ -272,7 +274,9 @@ needs a line there.
   changes them for good: `game.projects`; art in `src/art/projects.ts`),
   `favour.ts` (each buyer's favour and what it brings: `game.favour`),
   `achievements.ts` (the badges and the cards that bring them:
-  `game.achievements`).
+  `game.achievements`), `loot.ts` (scent, the day's dig spots, finds and
+  the old map: `game.loot`; drawn in `src/art/loot.ts`, the Ledger's FINDS
+  page in `src/ui/loot.ts`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `achievements.ts` the badge card and the Ledger's BUYERS and BADGES pages;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
