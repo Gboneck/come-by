@@ -689,7 +689,7 @@ export class BuildMode {
       const fx = paddockRules()!.fixtureNames(pd);
       if (fx.length) lines.push(fx.join(', '));
       if (!game.input.touchMode) lines.push('U: EXTEND  X: REMOVE');
-    } else if (under && ud && this.def.id !== 'trough') {
+    } else if (under && ud && !fixTool && this.def.id !== 'trough') {
       title = `${ud.name}${under.level > 1 ? ' II' : ''}`;
       if (under instanceof Pen) {
         const sp = under.species ? SPECIES[under.species] : null;
