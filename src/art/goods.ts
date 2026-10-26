@@ -154,19 +154,13 @@ interface PenLike {
   goods: number;
   goodsBy: Partial<Record<string, number>>;
   species: string | null;
-  items?: { sp: string }[]; // goods as laid (Gameplay's), which reach a co-op guest
 }
 
-// What a paddock holds, by kind: its own count, else (on a friend's copy
-// of the ranch) counted from the goods laid, else all of its first kind.
+// What a paddock holds, by kind (a co-op guest is sent the same counts);
+// an older pen that never said by whom: all of its first kind.
 export function goodsByKind(p: PenLike): [string, number][] {
   const by = Object.entries(p.goodsBy ?? {}).filter(([, n]) => (n ?? 0) > 0) as [string, number][];
   if (by.length || !p.goods) return by;
-  if (p.items?.length) {
-    const m = new Map<string, number>();
-    for (const it of p.items) m.set(it.sp, (m.get(it.sp) ?? 0) + 1);
-    return [...m];
-  }
   return p.species ? [[p.species, p.goods]] : [];
 }
 
