@@ -77,10 +77,10 @@ export interface UpgradeDef {
 }
 
 export const UPGRADES: UpgradeDef[] = [
-  { key: 'stamina', name: 'STAMINA', costs: [15, 35, 110], desc: (l) => `${[100, 130, 165, 200][l - 1]} WIND` },
-  { key: 'speed', name: 'SPEED', costs: [20, 45, 120], desc: (l) => `${[46, 49, 52, 55][l - 1]} PACE` },
-  { key: 'bark', name: 'BARK', costs: [15, 35, 110], desc: (l) => `${[54, 64, 74, 86][l - 1]} REACH` },
-  { key: 'nip', name: 'NIP', costs: [15, 30, 100], desc: (l) => `X${[1, 1.3, 1.6, 2][l - 1]} SHOVE` },
+  { key: 'stamina', name: 'STAMINA', costs: [15, 35, 150], desc: (l) => `${[100, 130, 165, 200][l - 1]} WIND` },
+  { key: 'speed', name: 'SPEED', costs: [20, 45, 160], desc: (l) => `${[46, 49, 52, 55][l - 1]} PACE` },
+  { key: 'bark', name: 'BARK', costs: [15, 35, 150], desc: (l) => `${[54, 64, 74, 86][l - 1]} REACH` },
+  { key: 'nip', name: 'NIP', costs: [15, 30, 140], desc: (l) => `X${[1, 1.3, 1.6, 2][l - 1]} SHOVE` },
 ];
 
 export const MAX_UP = 4;

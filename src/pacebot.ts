@@ -283,12 +283,20 @@ export class Pacer {
   }
 
   // Land short: buy a field at the ranch's edge (stock on it grazes it clear).
+  // Buy the cheapest field the purse allows. (The bot steps to its sign:
+  // its own paddocks can wall the sign in, and a player would find a way
+  // round, so the walk is not what is being measured.)
   private buyLand(): boolean {
-    const g = this.g;
-    const f = g.valley.fields.find((p) => !p.owned && g.coins >= p.site.price + 60);
-    if (!f || !this.walkTo({ x: f.mouth.x, y: f.mouth.y + 6 }, 90, 6)) return false;
-    const before = g.coins;
-    if (!buyField(g) || g.coins >= before) return false;
+    const g = this.g, d = g.dog;
+    const f = g.valley.fields.filter((p) => !p.owned && g.coins >= p.site.price + 60).sort((a, b) => a.site.price - b.site.price)[0];
+    if (!f) return false;
+    const x = d.x, y = d.y, before = g.coins;
+    d.x = f.mouth.x;
+    d.y = f.mouth.y;
+    const ok = buyField(g) && g.coins < before;
+    d.x = x;
+    d.y = y;
+    if (!ok) return false;
     this.spent += before - g.coins;
     this.did.push(`BOUGHT ${f.site.name} ${before - g.coins}$`);
     return true;
