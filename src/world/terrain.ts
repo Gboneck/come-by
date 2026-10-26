@@ -1,7 +1,7 @@
 import { C, U32 } from '../palette';
 import { fbm, hash2, mulberry32, vnoise } from '../rng';
 import { makeCanvas } from '../gfx/screen';
-import { stampCrown, stampPine, pineCovers, type CanopyBuf } from '../art/trees';
+import { stampCrown, stampPine, stampWillow, pineCovers, type CanopyBuf } from '../art/trees';
 import { makeWaterAnim, type WaterAnim } from '../art/water';
 import { COURSE, FORD_Y0, FORD_Y1, MH, MW, REGIONS, TS, Ter, WORLD_H, WORLD_W, riverX, type RegionDef, type WorldMap } from './map';
 
@@ -210,7 +210,7 @@ function bakeWorld(map: WorldMap): Baked {
   const path = edgeMask(tileField(map, (_t, i) => map.path[i] === 1), 0.42, 41, 0.25, 0.45, 0.22);
 
   // ---- Canopy ----
-  const cb = bakeCanopy(map, forest);
+  const cb = bakeCanopy(map, forest, water);
   const cm = cb.cm;
 
   // ---- Ground ----
@@ -349,6 +349,65 @@ function bakeWorld(map: WorldMap): Baked {
         else if (d < d2) { d2 = d; k2 = id; }
       }
     return { lit: hash2(k1, 0, 72), seam: d2 - d1, crack: hash2(Math.min(k1, k2), Math.max(k1, k2), 73) < 0.3 };
+  }
+
+  // Depth at the forest edge: the trunks under the crowns (only the part
+  // below the canopy shows), roots flaring at their foot. And each region's
+  // own plants: flowering gorse among the rocks, sheep tracks winding over
+  // the hills.
+  function trunksAndShrubs() {
+    const put = (x: number, y: number, c: number) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return;
+      const i = y * W + x;
+      if (!cm[i] && !water[i] && !rock[i]) gp[i] = c;
+    };
+    const trunkAt = (x: number, y: number, h: number) => {
+      for (let k = 0; k < h; k++) {
+        put(x, y + k, U32.plum);
+        put(x + 1, y + k, k < h - 1 ? U32.teal : U32.plum);
+      }
+      put(x - 1, y + h - 1, U32.plum);
+      put(x + 2, y + h - 1, U32.plum);
+      put(x - 1, y + h, U32.sage);
+    };
+    for (const t of cb.trunks) trunkAt(t.x - 1, t.y, 3 + (t.x & 1));
+    // Along the forest mass's lower edge, a trunk every few paces.
+    for (let y = 1; y < H - 4; y++)
+      for (let x = 2; x < W - 3; x++) {
+        const i = y * W + x;
+        if (!cm[i] || cm[i + W] || cb.kind[i] !== 1) continue;
+        if (hash2(x, y, 170) < 0.09) trunkAt(x, y + 1, 2 + (hash2(x, y, 171) < 0.5 ? 1 : 0));
+      }
+    // Gorse: low teal bushes starred with buttercup, among the rocks.
+    for (let gy = 0; gy * 13 < H; gy++)
+      for (let gx = 0; gx * 17 < W; gx++) {
+        const x = gx * 17 + Math.floor(hash2(gx, gy, 172) * 12), y = gy * 13 + Math.floor(hash2(gx, gy, 173) * 9);
+        if (x < 4 || y < 4 || x >= W - 8 || y >= H - 6) continue;
+        if (map.regionAt(x, y)?.id !== 'rocky' || hash2(gx, gy, 174) > 0.12) continue;
+        let ok = true;
+        for (let yy = -2; yy < 3 && ok; yy++) for (let xx = -1; xx < 7 && ok; xx++) if (!isGround(x + xx, y + yy) || path[(y + yy) * W + x + xx]) ok = false;
+        if (!ok) continue;
+        ['.ttt..', 'ttttt.', 'tttttt', '.pppp.'].forEach((r, yy) => [...r].forEach((ch, xx) => {
+          if (ch === '.') return;
+          const c = ch === 'p' ? U32.plum : hash2(x + xx, y + yy, 175) < 0.3 ? U32.butter : xx > 3 && yy < 2 ? U32.sage : U32.teal;
+          put(x + xx, y + yy - 2, c);
+        }));
+      }
+    // Sheep tracks: narrow trodden lines wandering across the hills.
+    const R = mulberry32(77);
+    const hl = REGIONS.find((r) => r.id === 'hills')!;
+    for (let k = 0; k < 7; k++) {
+      let x = (hl.cx - hl.rx * 0.8 + R() * hl.rx * 1.6) * TS, y = (hl.cy - hl.ry * 0.8 + R() * hl.ry * 1.6) * TS;
+      let a = R() * Math.PI * 2;
+      for (let step = 0; step < 220; step++) {
+        a += (R() - 0.5) * 0.35;
+        x += Math.cos(a);
+        y += Math.sin(a) * 0.7;
+        const xi = Math.round(x), yi = Math.round(y);
+        if (map.regionAt(xi, yi)?.id !== 'hills') break;
+        if (gp[yi * W + xi] === U32.meadow && hash2(xi, yi, 176) < 0.8 && !cm[yi * W + xi]) gp[yi * W + xi] = U32.moss;
+      }
+    }
   }
 
   // Small things on the ground, by kind of ground rather than by place, so
@@ -548,6 +607,7 @@ function bakeWorld(map: WorldMap): Baked {
   }
 
   groundDetail();
+  trunksAndShrubs();
 
   // River Ford: stepping stones along the path where it crosses.
   const stones: { x: number; y: number }[] = [];
@@ -724,7 +784,7 @@ function makeSwayGrid(W: number, H: number): SwayGrid {
 // and specks, getting denser on the shaded lower-left side of each mass.
 // Round crowns bulge from its edges and make up the small groves; towards
 // the High Range it turns to pines.
-function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HTMLCanvasElement } {
+function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): CanopyBuf & { canvas: HTMLCanvasElement; trunks: { x: number; y: number }[] } {
   const W = WORLD_W, H = WORLD_H;
   const [canvas, cg] = makeCanvas(W, H);
   const cimg = cg.createImageData(W, H);
@@ -766,7 +826,20 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HT
     }
   }
   crowns.sort((p, q) => p.y - q.y);
-  for (const c of crowns) stampCrown(b, c.x, c.y, c.r, 210 + (c.x & 15), c.light);
+  // By the water the broadleaves are willows, trailing their strands.
+  const nearWater = (x: number, y: number) => {
+    for (const [dx, dy] of [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -10], [10, 10], [-10, 10]]) {
+      const xx = x + dx, yy = y + dy;
+      if (xx >= 0 && yy >= 0 && xx < W && yy < H && water[yy * W + xx]) return true;
+    }
+    return false;
+  };
+  const trunks: { x: number; y: number }[] = [];
+  for (const c of crowns) {
+    if (nearWater(c.x, c.y)) stampWillow(b, c.x, c.y, c.r + 0.5, 240 + (c.x & 15));
+    else stampCrown(b, c.x, c.y, c.r, 210 + (c.x & 15), c.light);
+    trunks.push({ x: c.x, y: c.y + Math.round(c.r * 0.85) });
+  }
 
   // Pines packed in rows over the northern forest, back to front; any gap
   // left gets a pine of its own.
@@ -792,6 +865,7 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HT
     }
   pines.sort((p, q) => p.y - q.y);
   for (const p of pines) stampPine(b, p.x, p.y, p.h);
+  for (const p of pines) trunks.push({ x: p.x, y: p.y });
 
   // Edges and the shaded side.
   for (let y = 0; y < H; y++) {
@@ -844,5 +918,5 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HT
     }
   }
   cg.putImageData(cimg, 0, 0);
-  return { ...b, canvas };
+  return { ...b, canvas, trunks };
 }
