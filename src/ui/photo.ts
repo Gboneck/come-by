@@ -2,7 +2,7 @@ import { C } from '../palette';
 import { BAYER4, rect, ring } from '../gfx/draw';
 import { heading, headingWidth, text, textWidth } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
-import { makeCanvas } from '../gfx/screen';
+import { PX, makeCanvas } from '../gfx/screen';
 import type { Game } from '../game';
 import { WORLD_H, WORLD_W } from '../world/map';
 import { tierOf } from '../systems/progression';
@@ -116,7 +116,7 @@ export function drawPhoto(game: Game, g: CanvasRenderingContext2D, W: number, H:
   if (st.snap) {
     // The card exactly as it is now, before any button is drawn on it.
     st.snap = false;
-    save(game, g.canvas, W, H);
+    save(game, g.canvas, W * PX, H * PX); // the canvas is in fine pixels
     st.flash = 0.18;
   }
   // The shutter: a quick wool flash, dithered.

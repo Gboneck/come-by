@@ -14,6 +14,8 @@
 // (sails turning) is played straight to the screen for a while before a
 // picture of it is tried again.
 
+import { PX } from './screen';
+
 const FILL = 0;
 const IMG = 1;
 
@@ -42,12 +44,16 @@ interface Entry {
   replayUntil: number; // changing every frame: draw the calls, keep no bitmap
 }
 
+// Records in world pixels. Its transform is a uniform scale and a
+// translation (user = what the art passes; world = k * user + t), enough for
+// translate() and for fine() (src/gfx/screen.ts), which draws in fine pixels.
 class Recorder {
   ops: number[] = [];
   imgs: CanvasImageSource[] = [];
   bad = false;
   imageSmoothingEnabled = false;
   private fill = 0;
+  private k = 1;
   private tx = 0;
   private ty = 0;
   private stack: number[] = [];
@@ -57,6 +63,7 @@ class Recorder {
     this.ops.length = 0;
     this.imgs.length = 0;
     this.bad = false;
+    this.k = 1;
     this.tx = this.ty = 0;
     this.stack.length = 0;
   }
@@ -73,7 +80,8 @@ class Recorder {
     if (w < 0) { x += w; w = -w; }
     if (h < 0) { y += h; h = -h; }
     if (!w || !h) return;
-    this.ops.push(FILL, this.fill, x + this.tx, y + this.ty, w, h);
+    const k = this.k;
+    this.ops.push(FILL, this.fill, x * k + this.tx, y * k + this.ty, w * k, h * k);
   }
 
   drawImage(img: CanvasImageSource, ...a: number[]) {
@@ -83,23 +91,41 @@ class Recorder {
     }
     let id = imgIds.get(img);
     if (id === undefined) imgIds.set(img, (id = nextImg++));
-    const sw = (img as HTMLCanvasElement).width, sh = (img as HTMLCanvasElement).height;
-    this.ops.push(IMG, id, a[0] + this.tx, a[1] + this.ty, a.length === 4 ? a[2] : sw, a.length === 4 ? a[3] : sh);
+    const sw = (img as HTMLCanvasElement).width, sh = (img as HTMLCanvasElement).height, k = this.k;
+    this.ops.push(IMG, id, a[0] * k + this.tx, a[1] * k + this.ty, (a.length === 4 ? a[2] : sw) * k, (a.length === 4 ? a[3] : sh) * k);
     this.imgs.push(img);
   }
 
   save() {
-    this.stack.push(this.tx, this.ty, this.fill);
+    this.stack.push(this.k, this.tx, this.ty, this.fill);
   }
   restore() {
-    if (this.stack.length < 3) return;
+    if (this.stack.length < 4) return;
     this.fill = this.stack.pop()!;
     this.ty = this.stack.pop()!;
     this.tx = this.stack.pop()!;
+    this.k = this.stack.pop()!;
   }
   translate(x: number, y: number) {
-    this.tx += x;
-    this.ty += y;
+    this.tx += x * this.k;
+    this.ty += y * this.k;
+  }
+  scale(a: number, b: number) {
+    if (a !== b || a <= 0) this.bad = true; // flips and stretches: draw directly
+    else this.k *= a;
+  }
+  // As the screen's context reports it: scale(PX) under everything.
+  getTransform() {
+    return { a: this.k * PX, b: 0, c: 0, d: this.k * PX, e: this.tx * PX, f: this.ty * PX };
+  }
+  setTransform(a: number, b: number, c: number, d: number, e: number, f: number) {
+    if (b || c || a !== d || a <= 0) {
+      this.bad = true;
+      return;
+    }
+    this.k = a / PX;
+    this.tx = e / PX;
+    this.ty = f / PX;
   }
 }
 
@@ -181,7 +207,7 @@ function drawCached(g: CanvasRenderingContext2D, base: string, i: number, d: Dra
   if (same(e.ops, ops)) {
     pictureStats.hit++;
     e.misses = 0;
-    if (e.canvas) g.drawImage(e.canvas, e.x, e.y);
+    if (e.canvas) blit(g, e);
     return;
   }
   pictureStats.miss++;
@@ -213,9 +239,9 @@ function drawCached(g: CanvasRenderingContext2D, base: string, i: number, d: Dra
     e.canvas = null;
     return;
   }
-  x0 = Math.floor(x0);
-  y0 = Math.floor(y0);
-  const w = Math.ceil(x1) - x0, h = Math.ceil(y1) - y0;
+  // A bitmap of fine pixels: whatever the art drew finely stays fine.
+  const fx0 = Math.floor(x0 * PX), fy0 = Math.floor(y0 * PX);
+  const w = Math.ceil(x1 * PX) - fx0, h = Math.ceil(y1 * PX) - fy0;
   if (!e.canvas) e.canvas = document.createElement('canvas');
   const c = e.canvas;
   if (c.width !== w || c.height !== h) {
@@ -223,12 +249,19 @@ function drawCached(g: CanvasRenderingContext2D, base: string, i: number, d: Dra
     c.height = h;
   }
   const cg = c.getContext('2d')!;
+  cg.setTransform(1, 0, 0, 1, 0, 0);
   cg.clearRect(0, 0, w, h);
+  cg.setTransform(PX, 0, 0, PX, -fx0, -fy0);
   cg.imageSmoothingEnabled = false;
-  replay(cg, e.ops, e.imgs, x0, y0);
-  e.x = x0;
-  e.y = y0;
-  g.drawImage(c, x0, y0);
+  replay(cg, e.ops, e.imgs, 0, 0);
+  e.x = fx0 / PX;
+  e.y = fy0 / PX;
+  blit(g, e);
+}
+
+function blit(g: CanvasRenderingContext2D, e: Entry) {
+  const c = e.canvas!;
+  g.drawImage(c, e.x, e.y, c.width / PX, c.height / PX);
 }
 
 function same(a: number[], b: number[]) {
