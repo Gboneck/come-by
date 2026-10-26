@@ -20,9 +20,10 @@ import { finePixels, spr2, toFinePx } from './hd';
 // Template letters, resolved per look in dressFine (dogstyle.ts):
 //   t coat  w muzzle and blaze  p plum (ear tips, nose, mouth, feet)
 //   r neck band  k bandana bulk  K a fold in it  f the loose ends
-//   n a neckerchief's point  i the eye  j its glint  h H the mask round
-//   the near and far eye  a the tail tip  v a fleck  x a heavy coat's
-//   fleck  d the saddle  q a far leg
+//   n a neckerchief's longer point  u where a collar's tag hangs  i the
+//   eye  j its glint  h H the mask round the near and far eye  b a blaze
+//   up the face  a the tail tip  v a fleck  x a heavy coat's fleck  d the
+//   saddle  c a sock (the leg just above the paw)  q a far leg
 
 type Grid = string[];
 type Layer = readonly [rows: Grid, dx: number, dy: number];
@@ -108,10 +109,10 @@ const F_EARS = {
   pinned: ['............', '.pppp.......'], // flat back at a gallop
 };
 const F_FACE = {
-  n: ['..pttttp....', '.tttttttt...', 'tttthhtttt..', 'tttjihtwww..', 'ttthhitwwwpp', '.ttttwwwwwpp', '..tttwwppp..', '...tttt.....'],
-  bark: ['..pttttp....', '.tttttttt...', 'tttthhtttt..', 'tttjihtwwwpp', 'ttthhitwwwpp', '.ttttwww....', '..tttwwwww..', '...tttwwww..'],
-  pant: ['..pttttp....', '.tttttttt...', 'tttthhtttt..', 'tttjihtwww..', 'ttthhitwwwpp', '.ttttwwwwwpp', '..tttwpppp..', '...ttttwwp..'],
-  pantShut: ['..pttttp....', '.tttttttt...', 'tttthhtttt..', 'tttjihtwww..', 'ttthhitwwwpp', '.ttttwwwwwpp', '..tttwwppp..', '...tttww....'],
+  n: ['..pttttp....', '.ttttttbt...', 'tttthhtbtt..', 'tttjihtwww..', 'ttthhitwwwpp', '.ttttwwwwwpp', '..tttwwppp..', '...tttt.....'],
+  bark: ['..pttttp....', '.ttttttbt...', 'tttthhtbtt..', 'tttjihtwwwpp', 'ttthhitwwwpp', '.ttttwww....', '..tttwwwww..', '...tttwwww..'],
+  pant: ['..pttttp....', '.ttttttbt...', 'tttthhtbtt..', 'tttjihtwww..', 'ttthhitwwwpp', '.ttttwwwwwpp', '..tttwpppp..', '...ttttwwp..'],
+  pantShut: ['..pttttp....', '.ttttttbt...', 'tttthhtbtt..', 'tttjihtwww..', 'ttthhitwwwpp', '.ttttwwwwwpp', '..tttwwppp..', '...tttww....'],
 };
 const F_HEAD = {
   n: fh(F_EARS.up, F_FACE.n),
@@ -125,8 +126,8 @@ const F_HEAD = {
 const fHead = (rows: Grid, dy = 0): Layer => [rows, 15, dy];
 // The bandana: a band round the neck and its point hanging at the chest
 // with a fold down it; the loose ends lift off the nape at speed.
-const F_BAND: Layer = [['.rr.', 'rrrr', 'krrr', 'kKkr', '.kKk', '..kk', '...k'], 13, 4];
-const F_BAND_RAISED: Layer = [['.rr.', 'rrrr', 'krrr', 'kKkr', '.kKk', '..kk', '...k'], 13, 3];
+const F_BAND: Layer = [['.rr.', 'rrrr', 'krrr', 'kKur', '.kKk', '..kk', '...k', '...n', '...n'], 13, 4];
+const F_BAND_RAISED: Layer = [['.rr.', 'rrrr', 'krrr', 'kKur', '.kKk', '..kk', '...k', '...n', '...n'], 13, 3];
 const F_TAIL = {
   up: [['a..', 'tt.', '.tt', '..t'], 1, 2] as Layer,
   back: [['att..', '.ttt.', '...tt'], 0, 4] as Layer,
@@ -147,12 +148,12 @@ function fineLegs(w: number, legs: FLeg[], top = 12): Layer {
     const c = l.far ? 'q' : 't';
     if (l.up) {
       // Folded: the leg reaches, the paw tucked a row up.
-      for (let j = 0; j < 2; j++) { const x = l.hip + Math.round((l.o * (j + 1)) / 3); put(x, j, c); put(x + 1, j, c); }
+      for (let j = 0; j < 2; j++) { const x = l.hip + Math.round((l.o * (j + 1)) / 3), cj = j === 1 ? 'c' : c; put(x, j, cj); put(x + 1, j, cj); }
       const px0 = l.hip + l.o;
       put(px0, 2, 'p'); put(px0 + 1, 2, 'p');
       continue;
     }
-    for (let j = 0; j < 3; j++) { const x = l.hip + Math.round((l.o * (j + 1)) / 4); put(x, j, c); put(x + 1, j, c); }
+    for (let j = 0; j < 3; j++) { const x = l.hip + Math.round((l.o * (j + 1)) / 4), cj = j === 2 ? 'c' : c; put(x, j, cj); put(x + 1, j, cj); }
     const px0 = l.hip + l.o;
     put(px0, 3, 'p'); put(px0 + 1, 3, 'p'); put(px0 + 2, 3, 'p');
   }
@@ -216,17 +217,17 @@ const FD_EARS = {
   tall: mirrorHalf(['..p....', '.ptp...', '.ptp...', '.pttp..', '.ptttpt']),
 };
 const FD_FACE = {
-  n: eyes(mirrorHalf(['..ttttt', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwww', '..twwpp', '..ttwwp', '...ttww']), 3),
-  bark: eyes(mirrorHalf(['..ttttt', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwpp', '..twwwp', '..twppp', '...twpp']), 3),
-  pant: eyes(mirrorHalf(['..ttttt', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwww', '..twwpp', '..twwpw', '...twpp']), 3),
+  n: eyes(mirrorHalf(['..ttttb', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwww', '..twwpp', '..ttwwp', '...ttww']), 3),
+  bark: eyes(mirrorHalf(['..ttttb', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwpp', '..twwwp', '..twppp', '...twpp']), 3),
+  pant: eyes(mirrorHalf(['..ttttb', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwww', '..twwpp', '..twwpw', '...twpp']), 3),
 };
-const FD_BAND = mirrorHalf(['.trrrrr', '.twwkkk', '.ttwwkk', '..tt..k']).map((r, j) => (j === 1 ? r.slice(0, 8) + 'K' + r.slice(9) : r));
+const FD_BAND = mirrorHalf(['.trrrrr', '.twwkku', '.ttwwkk', '..tt..k', '......n']).map((r, j) => (j === 1 ? r.slice(0, 8) + 'K' + r.slice(9) : r));
 const FD_LEGS = {
-  stand: mirrorHalf(['..tt...', '..tt...', '.ppp...']),
-  liftL: ['..tt....tt....', '..pp....tt....', '.......ppp....'],
-  liftR: ['....tt..tt....', '....tt..pp....', '...ppp........'].map((r) => [...r].reverse().join('')),
-  wide: mirrorHalf(['.tt....', 'tt.....', 'pp.....']),
-  tuck: mirrorHalf(['...tt..', '...pp..', '.......']),
+  stand: mirrorHalf(['..tt...', '..cc...', '.ppp...']),
+  liftL: ['..cc....tt....', '..pp....cc....', '.......ppp....'],
+  liftR: ['....cc..tt....', '....cc..pp....', '...ppp........'].map((r) => [...r].reverse().join('')),
+  wide: mirrorHalf(['.tt....', 'cc.....', 'pp.....']),
+  tuck: mirrorHalf(['...cc..', '...pp..', '.......']),
 };
 const fdown = (ears: Grid, face: Grid, legs: Grid, extra: Layer[] = [], dy = 0) =>
   compose(14, 22, [[[...ears, ...face], 0, 2 + dy - (ears.length - 4)], [FD_BAND, 0, 16 + dy], [legs, 0, 19], ...extra]);
@@ -254,11 +255,11 @@ const FU_HEAD = {
 const FU_BACK = mirrorPlain(['...rrrr', '...tttt', '..ttttt', '..ttttt', '..ttttt', '...tttt', '...tttt', '..ttttt', '..ttttt', '..ttttt', '...tttt']);
 const FU_COAT = ['......kk......', '.....dkfd.....', '....dvdddv....', '....vv.dd.....', '.........vv...', '....x.........', '.....v...x....', '.........vx...'];
 const FU_LEGS = {
-  stand: mirrorPlain(['...tt..', '...tt..', '...tt..', '..ppp..']),
-  liftL: ['...tt....tt...', '...pp....tt...', '.........tt...', '........ppp...'],
-  liftR: ['...tt....tt...', '...tt....pp...', '...tt.........', '..ppp.........'],
-  wide: mirrorPlain(['..tt...', '..tt...', '.tt....', '.pp....']),
-  tuck: mirrorPlain(['....tt.', '....tt.', '....pp.', '.......']),
+  stand: mirrorPlain(['...tt..', '...tt..', '...cc..', '..ppp..']),
+  liftL: ['...tt....tt...', '...pp....tt...', '.........cc...', '........ppp...'],
+  liftR: ['...tt....tt...', '...tt....pp...', '...cc.........', '..ppp.........'],
+  wide: mirrorPlain(['..tt...', '..tt...', '.cc....', '.pp....']),
+  tuck: mirrorPlain(['....tt.', '....cc.', '....pp.', '.......']),
 };
 const FU_TAIL = {
   down: [['tp', 'tp', 'tp', 'a.'], 6, 17] as Layer,
@@ -289,9 +290,9 @@ const FD3_EARS = {
   pinned: ['...........', 'ppp..ppp...', '.ptttttttp.'],
 };
 const FD3_FACE = {
-  n: ['.ttttttttt.', 'tthhtwthhtt', 'thijtwtijtt', 'thiitwwiitt', '.tttwwwwwtt', '..ttwwpppt.', '...twwwpp..', '....ttw....'],
-  bark: ['.ttttttttt.', 'tthhtwthhtt', 'thijtwtijtt', 'thiitwwiitt', '.tttwwwpppt', '..ttwwwwpt.', '...twpppp..', '....twww...'],
-  pant: ['.ttttttttt.', 'tthhtwthhtt', 'thijtwtijtt', 'thiitwwiitt', '.tttwwwwwtt', '..ttwwpppt.', '...twppww..', '....tpww...'],
+  n: ['.ttttbtttt.', 'tthhtwthhtt', 'thijtwtijtt', 'thiitwwiitt', '.tttwwwwwtt', '..ttwwpppt.', '...twwwpp..', '....ttw....'],
+  bark: ['.ttttbtttt.', 'tthhtwthhtt', 'thijtwtijtt', 'thiitwwiitt', '.tttwwwpppt', '..ttwwwwpt.', '...twpppp..', '....twww...'],
+  pant: ['.ttttbtttt.', 'tthhtwthhtt', 'thijtwtijtt', 'thiitwwiitt', '.tttwwwwwtt', '..ttwwpppt.', '...twppww..', '....tpww...'],
 };
 const FD3_HEAD = {
   n: [...FD3_EARS.up, ...FD3_FACE.n],
@@ -303,7 +304,7 @@ const FD3_HEAD = {
   pinned: [...FD3_EARS.pinned, ...FD3_FACE.n],
 };
 const fd3Head = (rows: Grid, dy = 0): Layer => [rows, 15, dy - (rows.length - 11)];
-const FD3_BAND: Layer = [['.rr.', 'rrrr', 'krrr', 'kKkr', '.kkk', '..kk'], 14, 4];
+const FD3_BAND: Layer = [['.rr.', 'rrrr', 'krrr', 'kKur', '.kkk', '..kk', '...n'], 14, 4];
 const FD3_HIPS = [5, 7, 15, 17];
 const fd3Legs = (hind: FLeg[], fore: FLeg[]): Layer[] => [
   fineLegs(FW, hind, 12),
@@ -408,7 +409,7 @@ const FL_TORSO_BREATH: Layer = [['....tttdddddttt.....', '.ttttttvvtddttttttt.',
 const FL_HIND: Layer = [['..ttttt.', '.tttttt.', 'ttttttt.', 'ppppppp.'], 2, 10];
 const FL_PAWS: Layer = [['tttttttt..', 'pppppppp..'], 16, 13];
 const FL_TAIL = { rest: [['att.', '.ttt'], 0, 12] as Layer, up: [['a...', '.t..', '.ttt'], 0, 11] as Layer };
-const FL_BAND: Layer = [['.rr.', 'rrrr', 'krrr', 'kKkr', '.kkk'], 13, 6];
+const FL_BAND: Layer = [['.rr.', 'rrrr', 'krrr', 'kKur', '.kkk'], 13, 6];
 const fLie = (torso: Layer, tail: Layer) => fside(tail, torso, FL_HIND, fHead(F_HEAD.n, 2), FL_BAND, FL_PAWS);
 // Settling: a crouch, then sinking with the forefeet sliding out.
 const F_SETTLE = [
@@ -432,7 +433,7 @@ const fDig = (f: number) =>
 // Lying down facing us: head on the forepaws, the haunches either side.
 const fdLie = (breath: boolean, wag: boolean) => compose(14, 22, [
   [mirrorHalf(['.......', '.......', '.......', '..p....', '.ptp...', '.pttp..', '.ptttpt']), 0, 0],
-  [eyes(mirrorHalf(['..ttttt', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwww', '..twwpp', '..ttwwp']), 3), 0, 7],
+  [eyes(mirrorHalf(['..ttttb', '.ttttwt', '.tthhtw', '.thtttw', '.thtttw', '.ttttww', '.ttwwww', '..twwpp', '..ttwwp']), 3), 0, 7],
   [mirrorHalf([breath ? 'tttttwr' : '.ttttwr', 'tttttww', 'tttttww', 'ttt.ttt', '.ppp.pp']), 0, 15],
   ...(wag ? [[['a', 't'], 13, 15] as Layer] : []),
 ]);
