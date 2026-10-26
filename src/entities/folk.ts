@@ -1,7 +1,8 @@
 import { C } from '../palette';
 import { ellipse, line, rect } from '../gfx/draw';
-import { drawSpr, type Sprite } from '../gfx/sprite';
-import { peopleSprites, type Look, type PeopleSprites } from '../art/people';
+import { drawSpr } from '../gfx/sprite';
+import { dressed, peopleSprites, type Dress, type PeopleSprites, type Pic, type VillagerSpec } from '../art/people';
+import { seasonLook } from '../art/seasonlook';
 import type { Drawable } from '../art/buildings';
 import type { Light } from '../render/night';
 import { calmRating, type Game } from '../game';
@@ -14,6 +15,7 @@ import { PathFollower } from '../world/path';
 import { SPECIES } from './species';
 import { tToClock } from '../systems/orders';
 import { defOf } from '../ranch/catalog';
+import { isVillager, villageBrain, villageCast } from './villagers';
 
 // The townsfolk. The rancher (your handler) lives in the farmhouse: out in
 // the morning, helping at the pen gate when you bring a flock home, doing
@@ -27,18 +29,36 @@ import { defOf } from '../ranch/catalog';
 // Everything here reads game state and changes nothing in the sim, except
 // the rancher at a pen gate: a mild pressure source the flock turns from.
 
-export type FolkId = 'rancher' | 'carpenter' | 'miller' | 'drover' | 'auctioneer' | 'judge' | 'shepherd';
+export type FolkId = 'rancher' | 'carpenter' | 'miller' | 'drover' | 'auctioneer' | 'judge' | 'shepherd' | VillageId;
+// Ready-made villagers for the village green: the smith, three stallholders,
+// six cottagers (two of them children) and the hall's warden. Their looks
+// are in CAST; whoever builds the village spawns them (new Person(id, x, y)
+// into game.folk.people) and gives them their day with go(steps).
+export type VillageId = 'smith' | 'baker' | 'grocer' | 'weaver' | 'cottager1' | 'cottager2' | 'cottager3' | 'cottager4' | 'cottager5' | 'cottager6' | 'warden';
 type Facing = 'd' | 'u' | 'l' | 'r';
 type Pose = 'stand' | 'walk' | 'carry' | 'work' | 'crouch' | 'sit' | 'wave';
 
-const CAST: Record<FolkId, { look: Look; pitch: number; speed: number }> = {
-  rancher: { look: { H: 'y', C: 't', L: 'p' }, pitch: 330, speed: 24 },
-  carpenter: { look: { H: 'o', C: 'w', L: 't' }, pitch: 210, speed: 26 },
-  miller: { look: { H: 'w', C: 'w', L: 's' }, pitch: 270, speed: 20 },
-  drover: { look: { H: 'p', C: 's', L: 'p' }, pitch: 170, speed: 22 },
-  auctioneer: { look: { H: 'y', C: 's', L: 't' }, pitch: 300, speed: 22 },
-  judge: { look: { H: 'p', C: 't', L: 's', R: 'w' }, pitch: 240, speed: 18 },
-  shepherd: { look: { H: 's', C: 'o', L: 'p' }, pitch: 190, speed: 20 },
+// Who looks like what (see villager() in art/people.ts). `crook`: carries
+// a shepherd's crook.
+const CAST: Record<FolkId, { look: VillagerSpec; pitch: number; speed: number; crook?: boolean }> = {
+  rancher: { look: { hat: 'brim', hatColor: 'y', coat: 't', legs: 's', summerHat: 'straw' }, pitch: 330, speed: 24 },
+  carpenter: { look: { hat: 'cap', hatColor: 'o', coat: 'w', legs: 't', apron: 's', winterCoat: 't' }, pitch: 210, speed: 26 },
+  miller: { look: { hat: 'cap', hatColor: 's', coat: 'w', legs: 't', build: 'stout', beard: 's' }, pitch: 270, speed: 20 },
+  drover: { look: { hat: 'brim', hatColor: 'p', coat: 's', legs: 't', build: 'tall' }, pitch: 170, speed: 22 },
+  auctioneer: { look: { hat: 'straw', hatColor: 'y', coat: 's', legs: 't', apron: 'y' }, pitch: 300, speed: 22 },
+  judge: { look: { hat: 'bowler', hatColor: 'p', coat: 't', legs: 's', hair: 'w', beard: 'w', build: 'tall' }, pitch: 240, speed: 18 },
+  shepherd: { look: { hat: 'hood', coat: 'o', legs: 't', beard: true }, pitch: 190, speed: 20, crook: true },
+  smith: { look: { hat: 'cap', hatColor: 's', coat: 'w', legs: 't', apron: 'p', build: 'stout', beard: true }, pitch: 160, speed: 20 },
+  baker: { look: { hat: 'bonnet', hatColor: 's', coat: 'w', legs: 't', skirt: true, apron: 'y' }, pitch: 350, speed: 21 },
+  grocer: { look: { hat: 'straw', hatColor: 'y', coat: 'o', legs: 's', apron: 'w' }, pitch: 250, speed: 22 },
+  weaver: { look: { hat: 'none', hair: 'p', coat: 't', legs: 'o', skirt: true, scarf: 'y' }, pitch: 320, speed: 21 },
+  cottager1: { look: { hat: 'cap', hatColor: 't', coat: 'o', legs: 't' }, pitch: 220, speed: 23 },
+  cottager2: { look: { hat: 'bonnet', hatColor: 'y', coat: 's', legs: 'w', skirt: true }, pitch: 340, speed: 22 },
+  cottager3: { look: { hat: 'none', hair: 'y', coat: 'w', legs: 's', build: 'short' }, pitch: 420, speed: 27 },
+  cottager4: { look: { hat: 'brim', hatColor: 's', coat: 't', legs: 'o', beard: true }, pitch: 200, speed: 22 },
+  cottager5: { look: { hat: 'bonnet', hatColor: 't', coat: 'o', legs: 'y', skirt: true }, pitch: 310, speed: 21 },
+  cottager6: { look: { hat: 'none', hair: 'p', coat: 's', legs: 'w', build: 'short' }, pitch: 440, speed: 28 },
+  warden: { look: { hat: 'bowler', hatColor: 't', coat: 'w', legs: 't', build: 'tall', scarf: 'y' }, pitch: 230, speed: 19 },
 };
 const BUYER: Partial<Record<YardId, FolkId>> = { mill: 'miller', drover: 'drover', sale: 'auctioneer' };
 
@@ -215,6 +235,7 @@ export class Folk {
     for (const p of this.people) {
       if (p === this.rancher) continue;
       if (p.id === 'carpenter') this.carpenterBrain(game, p, dt);
+      else if (isVillager(p.id)) villageBrain(game, this, p, dt);
       else this.valleyBrain(game, p, dt);
     }
     // Footsteps for anyone walking on screen; a blow on every downstroke
@@ -401,6 +422,8 @@ export class Folk {
       const e = this.roadIn();
       this.people.push(new Person('carpenter', e.x, e.y));
     }
+    // The village's people (entities/villagers.ts).
+    villageCast(game, this);
   }
 
   // Where visitors arrive at the ranch: the track in from the east.
@@ -708,52 +731,99 @@ export class Folk {
 
   drawables(g: CanvasRenderingContext2D, inView: (x: number, y: number) => boolean): Drawable[] {
     const out: Drawable[] = [];
-    for (const p of this.people) if (p.shown && inView(p.x, p.y)) out.push({ y: p.y, draw: () => drawPerson(g, p) });
+    for (const p of this.people) if (p.shown && inView(p.x, p.y)) out.push({ y: p.y, draw: () => drawPerson(g, p, this.jobs) });
     for (const j of this.jobs) if (inView(j.b.cx, j.b.cy)) out.push({ y: j.b.y1 + 1, draw: () => drawSite(g, j) });
     return out;
   }
 
+  // Everyone carrying a lantern lights their way.
   lights(ox: number, oy: number): Light[] {
-    const r = this.rancher;
-    return r.shown && r.lantern ? [{ x: r.x - ox, y: r.y - 4 - oy, r: 30 }] : [];
+    const out: Light[] = [];
+    for (const p of this.people) if (p.shown && p.lantern) out.push({ x: p.x - ox, y: p.y - 4 - oy, r: 30 });
+    return out;
   }
 }
 
 // ---- Drawing ----
 
-function drawPerson(g: CanvasRenderingContext2D, p: Person) {
-  const s = p.spr;
+// What the season has everyone wearing (from the art's view of the season,
+// which guests in co-op have too): whichever look is strongest.
+function dressNow(): Dress {
+  const { snow, leaves, bloom } = seasonLook;
+  let best: Dress = 'summer', v = 1 - snow - leaves - bloom;
+  if (bloom > v) (best = 'spring'), (v = bloom);
+  if (leaves > v) (best = 'autumn'), (v = leaves);
+  if (snow > v) best = 'winter';
+  return best;
+}
+
+// A small per-person offset so folk do not blink and gesture in step.
+const SEED: Partial<Record<FolkId, number>> = { rancher: 0, carpenter: 1.3, miller: 2.1, drover: 0.7, auctioneer: 1.9, judge: 2.6, shepherd: 0.4, smith: 1.1, baker: 2.4, grocer: 0.2, weaver: 1.7, cottager1: 0.9, cottager2: 2.2, cottager3: 0.5, cottager4: 1.5, cottager5: 2.8, cottager6: 0.3, warden: 1.0 };
+
+// Talking: frames of the gesture loop (hand up, palm out and a nod, a
+// point, a nod) at five a second.
+const TALK = [0, 0, 0, 1, 1, 1, 3, 3, 0, 0, 2, 2, 2, 2, 3, 3, 1, 1];
+// Crouching: reach, pick, lift, rest, at six a second.
+const CROUCH = [0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 3];
+
+// Is this person at a building job (a hammer) rather than the woodpile (an
+// axe)? Guests do not get `tool`, but they do get the sites.
+function hammering(p: Person, jobs: Job[]): boolean {
+  if (p.tool === 'hammer' || p.id === 'smith') return true;
+  for (const j of jobs) {
+    if (Math.abs(p.x - j.b.cx) < (j.b.x1 - j.b.x0) / 2 + 12 && Math.abs(p.y - j.b.cy) < (j.b.y1 - j.b.y0) / 2 + 12) return true;
+  }
+  return false;
+}
+
+function drawPerson(g: CanvasRenderingContext2D, p: Person, jobs: Job[]) {
+  const s: PeopleSprites = dressed(p.spr, dressNow());
   const f = p.face === 'l' ? 'r' : p.face;
-  const step = Math.floor(p.phase) & 3;
-  let sp: Sprite;
+  const seed = SEED[p.id] ?? 0;
+  const crook = !!CAST[p.id]?.crook;
+  // Something held out on one side: the lantern, or the shepherd's crook.
+  const holding = p.lantern || crook;
   let flip = p.face === 'l';
+  let sp: Pic;
   switch (p.pose) {
-    case 'walk': sp = s.walk[f][step]; break;
-    case 'carry': sp = s.carry[f][step]; break;
-    case 'work': sp = s.work[Math.floor(p.anim * 2.4) % 2]; break;
-    case 'crouch': sp = s.crouch[Math.floor(p.anim * 1.6) % 2]; flip = false; break;
-    case 'sit': sp = s.sit; flip = false; break;
-    case 'wave': sp = s.wave[Math.floor(p.anim * 4) % 2]; flip = false; break;
-    default: sp = s.stand[f];
+    case 'walk': sp = (holding ? s.lamp : s.walk)[f][Math.floor(p.phase * 2) & 7]; break;
+    case 'carry': sp = (s.carry[p.item ?? 'w'] ?? s.carry.w)[f][Math.floor(p.phase * 2) & 7]; break;
+    case 'work': {
+      // The blow lands as the strike frame starts (the sound is on it).
+      const u = (p.anim * 2.4) % 2;
+      sp = (hammering(p, jobs) ? s.hammer : s.axe)[u < 0.5 ? 0 : u < 1 ? 1 : u < 1.35 ? 2 : 3];
+      if (f !== 'r') flip = false;
+      break;
+    }
+    case 'crouch': sp = s.crouch[f][CROUCH[Math.floor((p.anim + seed) * 6) % CROUCH.length]]; break;
+    case 'sit':
+      flip = false;
+      if (p.bubble) sp = s.sit[2 + (Math.floor(p.bubble.t * 3) & 1)];
+      else sp = s.sit[(p.anim + seed * 3) % 5 > 4.3 ? 1 : 0];
+      break;
+    case 'wave': sp = s.wave[f][Math.floor(p.anim * 4) & 1]; break;
+    default:
+      if (holding) sp = s.lampStand[f];
+      else if (p.bubble) sp = s.talk[f][TALK[Math.floor((p.bubble.t + seed) * 5) % TALK.length]];
+      else if (p.anim > 5 && (p.anim + seed * 4) % 11 > 8) sp = s.idle[f];
+      else if (f === 'd' && (p.anim + seed) % 3.7 < 0.14) sp = s.blink;
+      else sp = s.stand[f];
   }
-  const x = Math.round(p.x), y = Math.round(p.y) + ((p.pose === 'walk' || p.pose === 'carry') && step & 1 ? -1 : 0);
-  // A load held in front (behind them when walking away).
-  const load = p.pose === 'carry' && p.item ? p.item : null;
-  const lx = p.face === 'r' ? x + 1 : p.face === 'l' ? x - 3 : x - 1;
-  if (load && p.face === 'u') box(g, lx, y - 8, 3, 2, load);
+  const x = Math.round(p.x), y = Math.round(p.y);
+  const held = p.pose === 'stand' || p.pose === 'walk';
+  const hx = x + (flip ? -sp.hx : sp.hx), hy = y + sp.hy;
+  if (crook && held) {
+    // The crook in the hand (behind the body, the hand round it), its hook
+    // turned outwards.
+    const out = f === 'u' ? -1 : f === 'd' ? 1 : flip ? -1 : 1;
+    const top = y - 14;
+    line(g, hx, y, hx, top + 1, C.plum);
+    rect(g, hx + out, top, 1, 1, C.plum);
+    rect(g, hx + out * 2, top + 1, 1, 2, C.plum);
+  }
   drawSpr(g, sp, x, y, flip);
-  if (load && p.face !== 'u') box(g, lx, y - 6, 3, 2, load);
-  if (p.lantern) {
-    const hx = p.face === 'l' ? x - 3 : x + 3;
-    box(g, hx, y - 5, 1, 2, 'y');
-    rect(g, hx, y - 7, 1, 1, C.plum);
-  }
-  if (p.id === 'shepherd') {
-    // The crook.
-    const cx = p.face === 'l' ? x - 4 : x + 4;
-    line(g, cx, y, cx, y - 13, C.plum);
-    rect(g, cx + (p.face === 'l' ? -1 : 1), y - 14, 1, 2, C.plum);
-  }
+  // The lantern hangs from the hand: the bail, and the glass glowing.
+  if (p.lantern && held) box(g, hx, hy + 2, 1, 2, 'y');
 }
 
 const COLOR: Record<string, string> = { y: C.butter, w: C.wool, o: C.moss, s: C.sage, t: C.teal };

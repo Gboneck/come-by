@@ -1,7 +1,7 @@
 import { C, U32 } from '../palette';
 import { fbm, hash2, mulberry32, vnoise } from '../rng';
 import { makeCanvas } from '../gfx/screen';
-import { stampCrown, stampPine, pineCovers, type CanopyBuf } from '../art/trees';
+import { stampCrown, stampPine, stampWillow, pineCovers, type CanopyBuf } from '../art/trees';
 import { makeWaterAnim, type WaterAnim } from '../art/water';
 import { COURSE, FORD_Y0, FORD_Y1, MH, MW, REGIONS, TS, Ter, WORLD_H, WORLD_W, riverX, type RegionDef, type WorldMap } from './map';
 
@@ -48,6 +48,12 @@ export interface Baked {
   canopyPx: Uint32Array;
   canopyKind: Uint8Array;
   waterDist: Uint8Array;
+  // The water as a plum mask over its bounding box, so a shadow falling on
+  // water can be drawn plum rather than sage.
+  waterMask: { c: HTMLCanvasElement; x: number; y: number };
+  // The canopy's silhouette in sage: the trees' shadow, drawn offset by the
+  // sun each frame (render/light.ts).
+  canopyShadow: HTMLCanvasElement;
 }
 
 function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32Array {
@@ -207,7 +213,7 @@ function bakeWorld(map: WorldMap): Baked {
   const path = edgeMask(tileField(map, (_t, i) => map.path[i] === 1), 0.42, 41, 0.25, 0.45, 0.22);
 
   // ---- Canopy ----
-  const cb = bakeCanopy(map, forest);
+  const cb = bakeCanopy(map, forest, water);
   const cm = cb.cm;
 
   // ---- Ground ----
@@ -302,8 +308,11 @@ function bakeWorld(map: WorldMap): Baked {
           if (!at(water, x, y - 1)) c = U32.plum;
         }
       } else if (!rock[i]) {
-        // Banks: a wet sage line where grass meets water, mud beyond it.
-        if (atw(x, y - 1) || atw(x - 1, y) || atw(x + 1, y)) c = U32.sage;
+        // Banks: a wet sage line where grass meets water, mud beyond it; the
+        // far bank shows a face of earth dropping to the water.
+        if (atw(x, y + 1)) c = ((x + y) & 3) === 0 ? U32.plum : U32.sage;
+        else if (atw(x, y + 2) && ((x + y) & 1) === 0) c = U32.moss;
+        else if (atw(x, y - 1) || atw(x - 1, y) || atw(x + 1, y)) c = U32.sage;
         else if ((atw(x, y - 2) || atw(x - 2, y) || atw(x + 2, y)) && ((x + y) & 1) === 0) c = U32.moss;
       }
       if (rock[i]) c = rockColor(x, y);
@@ -315,10 +324,14 @@ function bakeWorld(map: WorldMap): Baked {
     const i = y * W + x;
     if (!at(rock, x, y + 1) || !at(rock, x - 1, y)) return U32.plum;
     // The south face of the outcrop, seen a little from the front.
-    const faceH = rh[i] > 0.55 ? 3 : 2;
+    // The big outcrops stand taller: a cliff with a pale band of strata.
+    const faceH = rh[i] > 0.8 ? 5 : rh[i] > 0.55 ? 3 : 2;
     let fd = 1;
     while (fd <= faceH && at(rock, x, y + fd + 1)) fd++;
-    if (fd <= faceH) return hash2(x, 0, 63) < 0.25 ? U32.plum : U32.sage;
+    if (fd <= faceH) {
+      if (faceH === 5 && fd === 3 && hash2(x >> 2, y, 64) < 0.7) return U32.wool;
+      return hash2(x, 0, 63) < 0.25 ? U32.plum : U32.sage;
+    }
     if (!at(rock, x, y - 1) || !at(rock, x + 1, y)) return U32.wool;
     // The top, lit from the upper right, broken into facets that each catch
     // the light differently, with cracks along some of their seams.
@@ -346,6 +359,86 @@ function bakeWorld(map: WorldMap): Baked {
         else if (d < d2) { d2 = d; k2 = id; }
       }
     return { lit: hash2(k1, 0, 72), seam: d2 - d1, crack: hash2(Math.min(k1, k2), Math.max(k1, k2), 73) < 0.3 };
+  }
+
+  // Trees on the far bank reflected in still and slow water: the canopy
+  // mirrored below the bank line, broken up by ripples (a teal-plum dither).
+  function reflections() {
+    for (let y = 1; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (!water[i] || gp[i] === U32.plum) continue;
+        let k = 1;
+        while (k <= 12 && water[i - k * W]) k++;
+        if (k > 12) continue;
+        const y0 = y - k; // the last bank row above
+        const my = y0 - (y - y0) + 1;
+        if (my < 0) continue;
+        const mi = my * W + x;
+        if (!cm[mi]) continue;
+        const fade = k <= 6 ? 0.85 : 0.45;
+        if (hash2(x, y, 180) > fade) continue;
+        gp[i] = cb.cp[mi] === U32.plum || ((x + (y >> 1)) & 1) === 0 ? U32.plum : U32.teal;
+      }
+  }
+
+  // Depth at the forest edge: the trunks under the crowns (only the part
+  // below the canopy shows), roots flaring at their foot. And each region's
+  // own plants: flowering gorse among the rocks, sheep tracks winding over
+  // the hills.
+  function trunksAndShrubs() {
+    const put = (x: number, y: number, c: number) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return;
+      const i = y * W + x;
+      if (!cm[i] && !water[i] && !rock[i]) gp[i] = c;
+    };
+    const trunkAt = (x: number, y: number, h: number) => {
+      for (let k = 0; k < h; k++) {
+        put(x, y + k, U32.plum);
+        put(x + 1, y + k, k < h - 1 ? U32.teal : U32.plum);
+      }
+      put(x - 1, y + h - 1, U32.plum);
+      put(x + 2, y + h - 1, U32.plum);
+      put(x - 1, y + h, U32.sage);
+    };
+    for (const t of cb.trunks) trunkAt(t.x - 1, t.y, 3 + (t.x & 1));
+    // Along the forest mass's lower edge, a trunk every few paces.
+    for (let y = 1; y < H - 4; y++)
+      for (let x = 2; x < W - 3; x++) {
+        const i = y * W + x;
+        if (!cm[i] || cm[i + W] || cb.kind[i] !== 1) continue;
+        if (hash2(x, y, 170) < 0.09) trunkAt(x, y + 1, 2 + (hash2(x, y, 171) < 0.5 ? 1 : 0));
+      }
+    // Gorse: low teal bushes starred with buttercup, among the rocks.
+    for (let gy = 0; gy * 13 < H; gy++)
+      for (let gx = 0; gx * 17 < W; gx++) {
+        const x = gx * 17 + Math.floor(hash2(gx, gy, 172) * 12), y = gy * 13 + Math.floor(hash2(gx, gy, 173) * 9);
+        if (x < 4 || y < 4 || x >= W - 8 || y >= H - 6) continue;
+        if (map.regionAt(x, y)?.id !== 'rocky' || hash2(gx, gy, 174) > 0.12) continue;
+        let ok = true;
+        for (let yy = -2; yy < 3 && ok; yy++) for (let xx = -1; xx < 7 && ok; xx++) if (!isGround(x + xx, y + yy) || path[(y + yy) * W + x + xx]) ok = false;
+        if (!ok) continue;
+        ['.ttt..', 'ttttt.', 'tttttt', '.pppp.'].forEach((r, yy) => [...r].forEach((ch, xx) => {
+          if (ch === '.') return;
+          const c = ch === 'p' ? U32.plum : hash2(x + xx, y + yy, 175) < 0.3 ? U32.butter : xx > 3 && yy < 2 ? U32.sage : U32.teal;
+          put(x + xx, y + yy - 2, c);
+        }));
+      }
+    // Sheep tracks: narrow trodden lines wandering across the hills.
+    const R = mulberry32(77);
+    const hl = REGIONS.find((r) => r.id === 'hills')!;
+    for (let k = 0; k < 7; k++) {
+      let x = (hl.cx - hl.rx * 0.8 + R() * hl.rx * 1.6) * TS, y = (hl.cy - hl.ry * 0.8 + R() * hl.ry * 1.6) * TS;
+      let a = R() * Math.PI * 2;
+      for (let step = 0; step < 220; step++) {
+        a += (R() - 0.5) * 0.35;
+        x += Math.cos(a);
+        y += Math.sin(a) * 0.7;
+        const xi = Math.round(x), yi = Math.round(y);
+        if (map.regionAt(xi, yi)?.id !== 'hills') break;
+        if (gp[yi * W + xi] === U32.meadow && hash2(xi, yi, 176) < 0.8 && !cm[yi * W + xi]) gp[yi * W + xi] = U32.moss;
+      }
+    }
   }
 
   // Small things on the ground, by kind of ground rather than by place, so
@@ -481,17 +574,17 @@ function bakeWorld(map: WorldMap): Baked {
       }
   }
 
-  // Canopy and rock shadows (down-left), sage on grass, plum on water.
+  // Rock shadows (down-left), sage on grass, plum on water. The trees'
+  // shadows are not baked: they move with the sun (render/light.ts). The
+  // mask still marks where the shade usually lies, for the ferns and such.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
       if (cm[i]) continue;
       const fromTree = at(cm, x - SHADOW_DX, y - SHADOW_DY) === 1;
       const fromRock = !rock[i] && (at(rock, x + 2, y - 3) === 1 || (y >= 3 && x < W - 3 && rh[i - 3 * W + 3] > 0.62));
-      if (fromTree || fromRock) {
-        shadow[i] = 1;
-        gp[i] = water[i] ? U32.plum : U32.sage;
-      }
+      if (fromTree || fromRock) shadow[i] = 1;
+      if (fromRock) gp[i] = water[i] ? U32.plum : U32.sage;
     }
   }
 
@@ -545,6 +638,8 @@ function bakeWorld(map: WorldMap): Baked {
   }
 
   groundDetail();
+  reflections();
+  trunksAndShrubs();
 
   // River Ford: stepping stones along the path where it crosses.
   const stones: { x: number; y: number }[] = [];
@@ -700,7 +795,17 @@ function bakeWorld(map: WorldMap): Baked {
     waterAnims.push(makeWaterAnim(src, x0, y0, x1 - x0, y1 - y0, flowing, flowing ? stones : []));
   });
 
-  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist };
+  let wx0 = W, wy0 = H, wx1 = 0, wy1 = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (water[y * W + x]) { if (x < wx0) wx0 = x; if (x > wx1) wx1 = x; if (y < wy0) wy0 = y; if (y > wy1) wy1 = y; }
+  const [wmc, wmg] = makeCanvas(Math.max(1, wx1 - wx0 + 1), Math.max(1, wy1 - wy0 + 1));
+  const wmi = wmg.createImageData(wmc.width, wmc.height), wmp = new Uint32Array(wmi.data.buffer);
+  for (let y = wy0; y <= wy1; y++) for (let x = wx0; x <= wx1; x++) if (water[y * W + x]) wmp[(y - wy0) * wmc.width + x - wx0] = U32.plum;
+  wmg.putImageData(wmi, 0, 0);
+  const [csc, csg] = makeCanvas(W, H);
+  const csi = csg.createImageData(W, H), csp = new Uint32Array(csi.data.buffer);
+  for (let i = 0; i < W * H; i++) if (cm[i]) csp[i] = U32.sage;
+  csg.putImageData(csi, 0, 0);
+  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist, waterMask: { c: wmc, x: wx0, y: wy0 }, canopyShadow: csc };
 }
 
 function makeSwayGrid(W: number, H: number): SwayGrid {
@@ -715,7 +820,7 @@ function makeSwayGrid(W: number, H: number): SwayGrid {
 // and specks, getting denser on the shaded lower-left side of each mass.
 // Round crowns bulge from its edges and make up the small groves; towards
 // the High Range it turns to pines.
-function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HTMLCanvasElement } {
+function bakeCanopy(map: WorldMap, forest: Uint8Array, water: Uint8Array): CanopyBuf & { canvas: HTMLCanvasElement; trunks: { x: number; y: number }[] } {
   const W = WORLD_W, H = WORLD_H;
   const [canvas, cg] = makeCanvas(W, H);
   const cimg = cg.createImageData(W, H);
@@ -757,7 +862,20 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HT
     }
   }
   crowns.sort((p, q) => p.y - q.y);
-  for (const c of crowns) stampCrown(b, c.x, c.y, c.r, 210 + (c.x & 15), c.light);
+  // By the water the broadleaves are willows, trailing their strands.
+  const nearWater = (x: number, y: number) => {
+    for (const [dx, dy] of [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -10], [10, 10], [-10, 10]]) {
+      const xx = x + dx, yy = y + dy;
+      if (xx >= 0 && yy >= 0 && xx < W && yy < H && water[yy * W + xx]) return true;
+    }
+    return false;
+  };
+  const trunks: { x: number; y: number }[] = [];
+  for (const c of crowns) {
+    if (nearWater(c.x, c.y)) stampWillow(b, c.x, c.y, c.r + 0.5, 240 + (c.x & 15));
+    else stampCrown(b, c.x, c.y, c.r, 210 + (c.x & 15), c.light);
+    trunks.push({ x: c.x, y: c.y + Math.round(c.r * 0.85) });
+  }
 
   // Pines packed in rows over the northern forest, back to front; any gap
   // left gets a pine of its own.
@@ -783,6 +901,7 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HT
     }
   pines.sort((p, q) => p.y - q.y);
   for (const p of pines) stampPine(b, p.x, p.y, p.h);
+  for (const p of pines) trunks.push({ x: p.x, y: p.y });
 
   // Edges and the shaded side.
   for (let y = 0; y < H; y++) {
@@ -835,5 +954,5 @@ function bakeCanopy(map: WorldMap, forest: Uint8Array): CanopyBuf & { canvas: HT
     }
   }
   cg.putImageData(cimg, 0, 0);
-  return { ...b, canvas };
+  return { ...b, canvas, trunks };
 }

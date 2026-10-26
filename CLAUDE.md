@@ -48,7 +48,8 @@ original and drawn in code. No external art files, ever.
   `scripts/resttest.mjs`, `scripts/daytest.mjs` (day one affords the kennel
   however the first drive goes), `scripts/weathertest.mjs`, `scripts/transittest.mjs`
   (an order's flock across a built-up ranch to each yard)
-  `scripts/discoverytest.mjs` and `scripts/tour.mjs` check the loops end to
+  `scripts/discoverytest.mjs`, `scripts/projecttest.mjs` (the valley
+  projects) and `scripts/tour.mjs` check the loops end to
   end, `scripts/perftest.mjs` measures each frame's work at a phone size
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
@@ -58,8 +59,11 @@ original and drawn in code. No external art files, ever.
   serves the game twice (installable, offline with the server off, a new
   deploy picked up), `scripts/installtest.mjs` the install card,
   `scripts/padtest.mjs` plays every screen with a simulated game pad,
+  `scripts/paddockuitest.mjs` drives the paddock editor in build mode by
+  touch (drag out, handles, gate, build, extend, a trough inside),
   `scripts/transfertest.mjs` moves a save between two browsers, `scripts/places.mjs` screenshots every hidden place and its way in
-  (`--found`, `--only=circle,hut`),
+  (`--found`, `--only=circle,hut`, `--half` and `--done` for the valley
+  projects before and after),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
   from day one to the valley thriving and logs each tier (days, minutes,
   coin in and out, where it got stuck; `--seeds=1,2,3 --map --verbose`;
@@ -68,6 +72,11 @@ original and drawn in code. No external art files, ever.
   `scripts/seasontest.mjs` checks the calendar, winter hay, lambing, the
   shearer, the fair, rare breeds and seasons in the save (old saves load),
   `scripts/lambtest.mjs` drives ewes with lambs calm against barking,
+  `scripts/paddocktest.mjs` checks paddocks you size yourself (room, price,
+  placing, gates, extending, mixed flocks, fixtures, old saves' pens),
+  `scripts/valleytest.mjs` checks the valley growing: the village's steps,
+  market day, the festival parade, grazing a paddock clear, timber for the
+  old bridge, the shearing shed, the dairy, the agility course, saves,
   `scripts/regions.mjs` screenshots every region at real scale (`--night`,
   `--dusk`, `--tier=N`, `--weather=rain|fog|wind|storm`, `--rest`; spots
   include `show`, `sale`, `drover`, `nap`), `scripts/uitour.mjs` screenshots every screen at
@@ -77,6 +86,10 @@ original and drawn in code. No external art files, ever.
   and pile-ups; shots in `shots/play/`), `scripts/audiotest.mjs` renders the music, stingers and
   soundscape offline and prints levels, peaks, tuning, theory checks and
   CPU (we cannot listen, so we measure; `AUDIO_PORT` moves its server),
+  `scripts/favourtest.mjs` buyers' favour (levels, pay, special orders,
+  gifts, the yards, saving, co-op; shots in `shots/favour/`),
+  `scripts/achievetest.mjs` achievements (badges, the card, old saves,
+  guests, the Ledger pages, the postcard, the board; `shots/achieve/`),
   `scripts/cooptest.mjs` starts the
   relay (`wrangler dev`) and two browsers, a host and a guest, and plays
   co-op end to end (`--shots` into `shots/coop/`, `--lag=150`). `SHOT_PORT=52xx` (or `PORT`) gives `shot.mjs` /
@@ -134,6 +147,7 @@ stays unique.
 | Rest            | lie down on the ranch, no stock near (day passes x12) | same | same               |
 | Build mode      | B (on the ranch)                 | BUILD button                  | LB (on the ranch)         |
 | Ranch Ledger    | Tab / G                          | LEDGER button                 | SELECT                    |
+| Ledger pages    | Q/E (arrows on BADGES, Enter opens, SHARE) | tap the tabs, tap a badge | LB/RB, d-pad, A, B  |
 | Helper command  | H                                | HELP button                   | Y                         |
 | Pause           | Esc / P                          | pause button                  | START                     |
 | Menus           | arrows, Enter, Esc               | tap                           | d-pad / stick, A, B       |
@@ -181,30 +195,62 @@ needs a line there.
   Snow (winter) slows everyone a little. The calendar is in
   `src/systems/season.ts`, what each season brings in
   `src/systems/seasonal.ts`.
+- Grazing: a calm flock left on an overgrown paddock eats its scrub down
+  (goats fastest); a cow driven through the woodpile drags a log, a little
+  slower. The valley's projects are in `src/systems/valley.ts`, the ranch
+  buildings with work of their own in `src/systems/farmwork.ts`.
 
 ## Code map
 
 - `src/main.ts` boot + loop; `src/game.ts` state machine and orchestration.
 - `src/gfx/` screen scaling, sprites, font, pixel primitives.
 - `src/art/` sprite grids and procedural art (trees, rocks, buildings);
+  the dog's frames are put together from parts in `dog.ts` (`pickDogFrame`),
+  townsfolk from `villager()` in `people.ts`;
   the player's choices: `dogstyle.ts` (markings, neck piece),
-  `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
+  `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor);
+  `badges.ts` (achievement badges), `trophies.ts` (the board by the door),
+  `favour.ts` (buyers' yards dressing up, their gift decor).
 - `src/world/` tile map, regions, terrain/canopy baking; `places.ts` the
   hidden places (pockets, ways, landmarks, strays and wild flocks).
-- `src/entities/` dog, animals + species, predators, helpers.
-- `src/ranch/` buildings, pens, gates, build mode.
+- `src/entities/` dog, animals + species, predators, helpers; `folk.ts` the
+  townsfolk, `villagers.ts` the village's people and their days.
+- `src/ranch/` buildings, paddocks, gates; `paddock.ts` the rules for
+  paddocks you size yourself (place, extend, move the gate, fixtures,
+  price by fence, room by area), `village.ts` the village at the
+  crossroads. Kinds that get along share a paddock (`getsAlong` in
+  `buildings.ts`).
 - `src/systems/` day cycle, economy, progression, save, audio (mixer and
   sound effects), music (generative score), soundscape, synth (sample bank),
   particles, spawner; `trials.ts` (Show Ground trials), `orders.ts` (buyers'
   orders), `jobs.ts` (where the game hooks into both), `weather.ts` (the
   weather state everything else reads: `game.weather`), `season.ts` (the
   season state everything else reads: `game.season`), `discovery.ts`
-  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`).
+  (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`),
+  `valley.ts` (the village's steps, the paddocks, the old bridge, market
+  day and festivals: `game.valley`, the village itself in
+  `game.ranch.village`), `farmwork.ts` (the shearing shed, the dairy, the
+  agility yard: `game.farmwork`),
+  `projects.ts` (valley projects: herding work in the hidden places that
+  changes them for good: `game.projects`; art in `src/art/projects.ts`),
+  `favour.ts` (each buyer's favour and what it brings: `game.favour`),
+  `achievements.ts` (the badges and the cards that bring them:
+  `game.achievements`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
+  `achievements.ts` the badge card and the Ledger's BUYERS and BADGES pages;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
-  pieces, `textfield.ts` typed names.
+  pieces, `textfield.ts` typed names; `frame.ts` the UI's frames (panel,
+  paper, stamp, ribbon), `hudart.ts` the dial, coin, stamina bone and icons,
+  `emotes.ts` the flock's notes, hearts and stress lines, `photo.ts` photo
+  mode (`sharePng()` saves or shares any canvas), `feel.ts` kicks, coins,
+  fireworks and the iris, `paddockbuild.ts` the paddock editor in build
+  mode (it asks the ranch's rules through `PaddockRules`). Ledger pages
+  beyond the first go in `LEDGER_PAGES` (`ledger.ts`). `src/gfx/font.ts`
+  has two faces: text() (5px, proportional) and heading() (7px, bold).
 - `src/render/` world drawing and the night dither; `animals.ts` animal
-  poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
+  poses (gaits, startles, wide eyes, ducks afloat), `dogpose.ts` every
+  dog's poses (eight-way turning, watching the stock, skids, panting, the
+  proud stance, soaked), `dogidle.ts` its idles, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
   wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.
 - `src/bot.ts` the herding bot used for tuning, the attract mode and as
   the model for helper dogs.

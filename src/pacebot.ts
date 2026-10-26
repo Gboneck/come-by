@@ -16,7 +16,10 @@ import { HELPER_COSTS } from './entities/helper';
 import { calendar } from './systems/season';
 import { RARE_BREEDS } from './entities/species';
 import { buyBreed, hayHeld, hayNeed, isFairDay, shelteredSpot, HAY_SPOIL } from './systems/seasonal';
-import { Barn } from './ranch/structures';
+import { AGILITY, AgilityYard, Barn, Dairy, ShearingShed } from './ranch/structures';
+import { bridgeLanding, buyField, woodpile } from './systems/valley';
+import { extendPaddock, extendPrice, extendProblem, extendRect } from './ranch/paddock';
+import { agilityPostNear, dairyOpen, startAgility } from './systems/farmwork';
 
 // A "decent player" for pacing runs (scripts/pacetest.mjs). Each day it
 // runs the trial if it is a trial day, fills orders it can, drives the
@@ -25,7 +28,11 @@ import { Barn } from './ranch/structures';
 // what the goals ask for. It logs what it did and where it got stuck.
 // Through the year it stocks hay before winter (in a barn's ring), takes
 // its sheep to the shearer and walks them home, and at the autumn fair buys
-// a rare breed and shows it in the ring.
+// a rare breed and shows it in the ring. As the valley grows it grazes an
+// overgrown paddock clear with its own flock once land runs short, hauls
+// timber to the old bridge with wild cattle once there is a smith, and uses
+// what it builds: the shearing shed in summer, the dairy mornings, a run
+// round the agility course each day.
 
 const DT = 1 / 60;
 type P = { x: number; y: number };
@@ -47,6 +54,7 @@ export interface DayLog {
   choice: number; // things affordable on the end-of-day card
   income: { stock: number; goods: number; orders: number; trials: number }; // where the day's coin came from
   penned: number; // head of stock in pens at the day's end
+  paddocks?: number; // enclosures (paddocks) on the ranch at the day's end
   did: string[];
   stuck: string[]; // open goals that could not move today, and why
 }
@@ -237,8 +245,53 @@ export class Pacer {
   // ---- Pens and building ----
 
   private room(p: Pen, sp: SpeciesId) {
-    if (p.letOut || (p.species && p.species !== sp)) return 0;
+    if (p.letOut || !p.canHold(sp)) return 0;
     return Math.floor((p.capacity - p.used) / SPECIES[sp].space);
+  }
+
+  paddocksExtended = 0;
+  // Room for `n` more of a kind by extending a paddock that holds (or can
+  // hold) them: the cheapest side that fits, paying only for new fence.
+  private extendFor(sp: SpeciesId, n: number): boolean {
+    const g = this.g;
+    const pens = g.ranch.pens.filter((p) => !p.letOut && p.canHold(sp)).sort((a, b) => (b.species === sp ? 1 : 0) - (a.species === sp ? 1 : 0) || b.animals.length - a.animals.length);
+    const perTile = 16 / 56; // capacity a tile (8x7 holds 16)
+    for (const p of pens) {
+      const need = n * SPECIES[sp].space - Math.max(0, p.capacity - p.used);
+      if (need <= 0) continue;
+      let best: { side: Rot; k: number; cost: number } | null = null;
+      for (const side of [0, 1, 2, 3] as Rot[]) {
+        const across = side % 2 === 0 ? p.w : p.h;
+        const k0 = Math.max(2, Math.ceil(need / (across * perTile)));
+        for (let k = k0; k <= k0 + 6; k++) {
+          const r = extendRect(p, side, k);
+          if (extendProblem(g, p, r)) continue;
+          const cost = extendPrice(p, r);
+          if (cost <= g.coins && (!best || cost < best.cost)) best = { side, k, cost };
+          break;
+        }
+      }
+      if (!best) continue;
+      const before = g.coins;
+      if (!extendPaddock(g, p, extendRect(p, best.side, best.k))) continue;
+      this.spent += before - g.coins;
+      this.paddocksExtended++;
+      this.did.push(`EXTENDED A PADDOCK ${best.k} ${['SOUTH', 'WEST', 'NORTH', 'EAST'][best.side]} ${before - g.coins}$ (${p.w}X${p.h})`);
+      return true;
+    }
+    return false;
+  }
+
+  // Land short: buy a field at the ranch's edge (stock on it grazes it clear).
+  private buyLand(): boolean {
+    const g = this.g;
+    const f = g.valley.fields.find((p) => !p.owned && g.coins >= p.site.price + 60);
+    if (!f || !this.walkTo({ x: f.mouth.x, y: f.mouth.y + 6 }, 60, 6)) return false;
+    const before = g.coins;
+    if (!buyField(g) || g.coins >= before) return false;
+    this.spent += before - g.coins;
+    this.did.push(`BOUGHT ${f.site.name} ${before - g.coins}$`);
+    return true;
   }
 
   private penFor(sp: SpeciesId, n: number): Pen | null {
@@ -274,9 +327,10 @@ export class Pacer {
     const g = this.g, b = g.build, def = defOf(id), r = regionById('ranch');
     b.item = CATALOG.indexOf(def);
     let best: { cx: number; cy: number; rot: Rot } | null = null, bs = 1e9;
+    // The ranch and the fields at its edge.
     for (const rot of (def.rotates ? [0, 1, 2, 3] : [0]) as Rot[])
-      for (let cy = r.cy - r.ry; cy <= r.cy + r.ry; cy++)
-        for (let cx = r.cx - r.rx; cx <= r.cx + r.rx; cx++) {
+      for (let cy = r.cy - r.ry; cy <= r.cy + r.ry + 6; cy++)
+        for (let cx = r.cx - r.rx - 4; cx <= r.cx + r.rx + 4; cx++) {
           b.cx = cx;
           b.cy = cy;
           b.rot = rot;
@@ -318,6 +372,7 @@ export class Pacer {
     const s = this.site(id);
     if (!s) {
       this.stuck.push(`NO ROOM FOR A ${def.name}`);
+      if (id === 'pen') this.landShort = true;
       return false;
     }
     const b = g.build;
@@ -374,6 +429,15 @@ export class Pacer {
     if (this.roomFor(sp) < SPECIES[sp].spawnGroup[1] && g.coins >= defOf('pen').cost + 5) this.buy('pen');
     if (g.tier >= 2 && !g.ranch.buildings.some((b) => b.kind === 'barn') && g.coins >= 95) this.buy('barn');
     this.stockHay();
+    // What the valley offers, once the purse allows (the land first).
+    const has = (k: string) => g.ranch.buildings.some((b) => b.kind === k);
+    const kinds = new Set(g.ranch.pens.map((p) => p.species));
+    // (Not while land is short: stock comes first.)
+    if (!this.landShort) {
+      if (!has('agility') && g.tier >= 2 && g.coins >= 300) this.buy('agility');
+      if (!has('shed') && kinds.has('sheep') && g.coins >= 250) this.buy('shed');
+      if (!has('dairy') && kinds.has('cow') && g.coins >= 300) this.buy('dairy');
+    }
     while (g.coins > 150 && this.train()) { /* spare coin into the dog */ }
   }
 
@@ -463,16 +527,9 @@ export class Pacer {
   private makeRoom(sp: SpeciesId, n: number) {
     const g = this.g;
     if (this.roomFor(sp) >= n) return;
-    const own = g.ranch.pens.filter((p) => p.species === sp && p.level < 2 && !p.letOut);
-    if (own.length && g.tier >= 3 && g.coins >= (defOf('pen').upgrade?.cost ?? 40)) {
-      const before = g.coins;
-      g.build['upgrade'](g, own[0]);
-      if (g.coins < before) {
-        this.spent += before - g.coins;
-        this.did.push(`UPGRADED A ${SPECIES[sp].name.toUpperCase()} PEN ${before - g.coins}$`);
-        if (this.roomFor(sp) >= n) return;
-      }
-    }
+    // Grow a paddock that can take them before building another.
+    if (this.extendFor(sp, n - this.roomFor(sp)) && this.roomFor(sp) >= n) return;
+    if (this.landShort && this.buyLand() && this.extendFor(sp, n - this.roomFor(sp)) && this.roomFor(sp) >= n) return;
     // Land is short: a species a goal names gets a new pen first; others
     // only once every named one has room.
     const named = this.goalSpecies(true);
@@ -504,6 +561,7 @@ export class Pacer {
   }
 
   bringHome(members: Animal[]) {
+    if (!members.length) return;
     const sp = members[0].sp.id, n = members.length;
     this.makeRoom(sp, n);
     const pen = this.penFor(sp, n);
@@ -591,6 +649,86 @@ export class Pacer {
       this.frame({ x: (dx / l) * 0.5, y: (dy / l) * 0.5, sprint: false, lie: false });
     }
     return false;
+  }
+
+  // ---- The valley ----
+
+  landShort = false; // a new paddock found no room on the ranch
+  valley = { logs: 0, shorn: 0, milked: 0, agility: 0 };
+
+  // Timber for the old bridge: a wild herd of cattle through the woodpile,
+  // then to the bridge.
+  private doTimber() {
+    const g = this.g, v = g.valley;
+    if (v.bridge || !g.ranch.village.has('smithy') || this.daylight() < 120) return;
+    const pile = woodpile(), land = bridgeLanding(g);
+    const herd = this.groupsOut().filter((m) => m[0].sp.id === 'cow').sort((a, b) => dist(centroid(a), pile) - dist(centroid(b), pile))[0];
+    if (!herd || dist(centroid(herd), pile) > 400) return;
+    const logs0 = v.logs;
+    this.drive(herd, pile, null, STYLE.cow, 120, () => herd.filter(loose).every((a) => a.load));
+    const loaded = herd.filter((a) => loose(a) && a.load);
+    if (loaded.length) this.drive(loaded, land, null, STYLE.cow, 120, () => v.bridge || loaded.every((a) => !a.load));
+    this.valley.logs += v.logs - logs0;
+    this.did.push(v.bridge ? 'MENDED THE OLD BRIDGE' : `TIMBER: ${v.logs - logs0} LOG${v.logs - logs0 === 1 ? '' : 'S'} TO THE OLD BRIDGE (${v.logs}/6)`);
+    for (const a of herd) this.skip.add(a);
+  }
+
+  // Summer: a pen of sheep along the shearing shed's chute and home.
+  private doShed() {
+    const g = this.g;
+    const shed = g.ranch.buildings.find((b): b is ShearingShed => b instanceof ShearingShed);
+    if (!shed || g.season.season !== 'summer' || this.daylight() < 90) return;
+    const year = g.season.year;
+    const pen = g.ranch.pens.find((p) => p.species === 'sheep' && p.animals.filter((a) => !a.young && a.shorn !== year).length >= 3);
+    if (!pen) return;
+    const herd = this.letOut(pen, pen.animals.length);
+    if (!herd.length) return;
+    const l = shed.lane, mid = (l.y0 + l.y1) / 2;
+    const n0 = g.farmwork.shorn;
+    this.drive(herd, { x: l.x0 - 26, y: mid + 6 }, null, STYLE.sheep, 60);
+    this.drive(herd, { x: l.x1 + 30, y: mid }, null, STYLE.sheep, 60);
+    const n = g.farmwork.shorn - n0;
+    this.valley.shorn += n;
+    this.did.push(`SHED: ${n}/${herd.length} SHEEP SHORN`);
+    this.bringHome(herd.filter(loose));
+  }
+
+  // Mornings: the cows to the dairy and home again.
+  private doDairy() {
+    const g = this.g;
+    const d = g.ranch.buildings.find((b): b is Dairy => b instanceof Dairy);
+    if (!d || !dairyOpen(g) || g.day.t > 80) return;
+    const pen = g.ranch.pens.find((p) => p.species === 'cow' && p.animals.filter((a) => a.milkedDay !== g.day.day).length >= 2);
+    if (!pen) return;
+    const herd = this.letOut(pen, pen.animals.length);
+    if (!herd.length) return;
+    const m0 = g.farmwork.milked;
+    this.drive(herd, d.yard.gatePoint(24), d.yard.gatePoint(-12), STYLE.cow, 120, () => herd.every((a) => a.pen === d.yard || a.milkedDay === g.day.day));
+    for (let i = 0; i < 60 * 15 && this.playing && d.yard.animals.length; i++) this.frame(STILL);
+    const n = g.farmwork.milked - m0;
+    this.valley.milked += n;
+    this.did.push(`DAIRY: ${n} COW${n === 1 ? '' : 'S'} MILKED`);
+    this.bringHome(herd.filter(loose));
+  }
+
+  // Once a day, a run round the agility course.
+  private doAgility() {
+    const g = this.g;
+    const y = g.ranch.buildings.find((b): b is AgilityYard => b instanceof AgilityYard);
+    if (!y || g.farmwork.trainedDay === g.day.day || this.daylight() < 40) return;
+    const post = y.at(AGILITY.post);
+    if (!this.walkTo({ x: post.x, y: post.y + 4 }, 60, 3) || !agilityPostNear(g) || !startAgility(g)) return;
+    const route = [{ x: 24, y: 47 }, { x: 36, y: 47 }, { x: 83, y: 47 }, { x: 83, y: 28 }, { x: 86, y: 16 }, { x: 50, y: 16 }, { x: 24, y: 16 }, { x: 14, y: 30 }, AGILITY.post].map((p) => y.at(p));
+    let i = 0;
+    for (let k = 0; k < 60 * 20 && g.farmwork.run && i < route.length; k++) {
+      const to = { x: route[i].x, y: route[i].y + (i === route.length - 1 ? 4 : 0) };
+      const d = g.dog, dx = to.x - d.x, dy = to.y - d.y, dl = Math.hypot(dx, dy);
+      if (dl < 3) { i++; continue; }
+      this.frame({ x: dx / dl, y: dy / dl, sprint: d.stamina > 30, lie: false });
+    }
+    const r = g.farmwork.result;
+    this.valley.agility++;
+    this.did.push(r ? `AGILITY ${r.t}S${r.clean ? ' CLEAN' : `, ${r.faults} FAULTS`}` : 'AGILITY: RUN ABANDONED');
   }
 
   // ---- Trials ----
@@ -692,8 +830,12 @@ export class Pacer {
       this.doTrial();
       prize = g.totals.earned - before;
     }
+    if (this.playing) this.doDairy();
     for (const o of [...g.orders.open].sort((a, b) => a.due - b.due)) if (this.playing) this.doOrder(o);
     if (isFairDay(g) && this.playing) this.doFair();
+    if (this.playing) this.doTimber();
+    if (this.playing) this.doShed();
+    if (this.playing) this.doAgility();
     for (let k = 0; k < 10 && this.playing && this.daylight() > 35; k++) {
       const m = this.pickGroup();
       if (!m) break;
@@ -711,7 +853,7 @@ export class Pacer {
       this.shop();
       g.startDay();
     }
-    return { day, tier, sky: g.weather.sky, real: Math.round(this.real), rested: Math.round(this.rested), earned: g.totals.earned - earned0, spent: this.spent, coins: g.coins, choice, income, penned: g.ranch.pens.reduce((s, p) => s + p.animals.length, 0), did: this.did, stuck: this.stuck };
+    return { day, tier, sky: g.weather.sky, real: Math.round(this.real), rested: Math.round(this.rested), earned: g.totals.earned - earned0, spent: this.spent, coins: g.coins, choice, income, penned: g.ranch.pens.reduce((s, p) => s + p.animals.length, 0), paddocks: g.ranch.pens.length, did: this.did, stuck: this.stuck };
   }
 }
 

@@ -1,9 +1,11 @@
 import type { Game } from '../game';
 import type { Animal } from '../entities/animal';
 import type { Pen } from '../ranch/buildings';
+import { Dairy } from '../ranch/structures';
 import { SPECIES_ORDER } from '../entities/species';
 import { SKIES } from '../systems/weather';
 import { SEASON_LIST } from '../systems/season';
+import { LOAD_OF, blessed, loaded, setLoad } from '../systems/projects';
 import { FACES, HOST_MODES, K_SNAP, Reader, Writer, faceId, type HostMode } from './protocol';
 
 // One moment of the host's world, as the guests see it. Everything is kept
@@ -64,7 +66,8 @@ export const D_LYING = 4, D_SPRINT = 8, D_BARK = 16;
 
 export const PHASES = ['day', 'dusk', 'night'] as const;
 export const PRED_STATES = ['wait', 'hunt', 'dig', 'carry', 'flee', 'gone'] as const;
-export const FOLK_IDS = ['rancher', 'carpenter', 'miller', 'drover', 'auctioneer', 'judge', 'shepherd'] as const;
+// Appended to, never reordered (the index travels): the village's people after the cast.
+export const FOLK_IDS = ['rancher', 'carpenter', 'miller', 'drover', 'auctioneer', 'judge', 'shepherd', 'smith', 'baker', 'grocer', 'weaver', 'cottager1', 'cottager2', 'cottager3', 'cottager4', 'cottager5', 'cottager6', 'warden'] as const;
 export const POSES = ['stand', 'walk', 'carry', 'work', 'crouch', 'sit', 'wave'] as const;
 
 const q8 = (v: number) => Math.round(v * 8);
@@ -73,19 +76,26 @@ const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
 // Every pen an animal can be in: the ranch's, the buyers' yards', the trial
 // pen, the fair's show ring.
 export function allPens(game: Game): Pen[] {
-  return [...game.ranch.pens, ...game.ranch.yards.map((y) => y.pen), game.ranch.course.pen, game.ranch.ring.pen];
+  return [...game.ranch.pens, ...game.ranch.yards.map((y) => y.pen), game.ranch.course.pen, game.ranch.ring.pen, ...game.ranch.buildings.filter((b): b is Dairy => b instanceof Dairy).map((d) => d.yard)];
 }
 
 // Round three's per-animal state (a lamb, an age band, a breed beyond the
 // coat): one byte, filled in here by whoever adds it and read back on a
 // guest's screen in applyAnimalExtra (guest.ts). Zero means nothing extra.
-// Bit 0: a lamb (drawn small, at its mother's side).
+// Bit 0: a lamb (drawn small, at its mother's side). Bit 1: a cow dragging
+// a log to the old bridge. Bit 2: carrying a valley project's load (a slate,
+// a stone: by its kind). Bit 3: blessed at midsummer (systems/projects.ts).
 export function animalExtra(a: Animal): number {
-  return a.young ? 1 : 0;
+  return (a.young ? 1 : 0) | (a.load === 'log' ? 2 : 0) | (loaded.has(a) ? 4 : 0) | (blessed.has(a) ? 8 : 0);
 }
 
 export function applyAnimalExtra(a: Animal, v: number) {
   a.young = (v & 1) !== 0;
+  a.load = v & 2 ? 'log' : null;
+  if (v & 4) setLoad(a, LOAD_OF[a.sp.id] ?? null);
+  else if (loaded.has(a)) setLoad(a, null);
+  if (v & 8) blessed.add(a);
+  else blessed.delete(a);
 }
 
 export function animalRec(a: Animal, pens: Pen[]): AnimalRec {

@@ -1,5 +1,5 @@
 import { fbm, hash2, mulberry32, type Rng } from '../rng';
-import { PLACES, PROPS } from './places';
+import { PLACES, PROPS, WORKS, propBlocks, type ProjectView } from './places';
 
 // Terrain is authored on 8px tiles; collision runs on 4px cells so fences can
 // be thin.
@@ -98,6 +98,22 @@ export const YARDS: YardSite[] = [
 ];
 export const YARD_W = 6;
 export const YARD_H = 5;
+
+// ---- The valley grows (src/systems/valley.ts) ----
+// The village green south-west of the crossroads, west of the north road
+// (tiles). The village is built on it one step at a time.
+export const VILLAGE = { cx: 86, cy: 78.5, rx: 11.5, ry: 6.5 };
+// Fields past the clearing, off the ranch's south side: land to buy, under
+// scrub until stock has grazed it clear (src/systems/valley.ts).
+export interface FieldSite { id: 'southwest' | 'southeast'; name: string; price: number; cx: number; cy: number; rx: number; ry: number }
+export const FIELDS: FieldSite[] = [
+  { id: 'southwest', name: 'THE SOUTH-WEST FIELD', price: 200, cx: 78, cy: 119, rx: 8, ry: 5 },
+  { id: 'southeast', name: 'THE SOUTH-EAST FIELD', price: 300, cx: 116, cy: 118, rx: 8, ry: 5 },
+];
+// The old bridge over the ford (tiles across the river on the ford road),
+// and the woodpile in the ford meadow its timber comes from.
+export const BRIDGE = { y0: 103, y1: 106 };
+export const WOODPILE = { tx: 31, ty: 100 };
 
 export const regionById = (id: RegionId) => REGIONS.find((r) => r.id === id)!;
 
@@ -215,6 +231,10 @@ export class WorldMap {
     // crossroads road.
     this.carveCorridor([[140, 104], [140, 124], [140, 138]], 3.4);
     this.carveEllipse(107, 77, 8, 5, 0, 0.12, 98);
+    // The village green, and the overgrown paddocks (ranch ground). No RNG,
+    // so everything after comes out as before.
+    this.carveEllipse(VILLAGE.cx, VILLAGE.cy, VILLAGE.rx, VILLAGE.ry, 0, 0.1, 96);
+    for (const [i, p] of FIELDS.entries()) this.carveEllipse(p.cx, p.cy, p.rx, p.ry, regionById('ranch').index, 0.1, 90 + i);
 
     // Home Meadow: a pond and a few groves.
     this.pond(158, 112, 4.2, 2.8);
@@ -320,10 +340,28 @@ export class WorldMap {
   hurdleCells: number[] = [];
   hurdleOpen = false;
   hurdleY = 0; // px: its foot
+  // How the valley projects stand (src/systems/projects.ts): which of their
+  // walls, stones and gates are up. Call setProjects again when that changes.
+  // Only the projects' own props' cells are touched, so anything else set
+  // on the flags since (the hurdle, the old bridge's deck) stays as it is.
+  projects: ProjectView | null = null;
+  setProjects(v: ProjectView) {
+    this.projects = v;
+    const cells = new Set<number>();
+    const each = (p: (typeof PROPS)[number], f: (i: number) => void) => {
+      const [dx, dy, w, h] = p.solid!;
+      for (let cy = Math.max(0, Math.floor((p.y + dy) / CS)); cy < Math.min(CH, Math.ceil((p.y + dy + h) / CS)); cy++)
+        for (let cx = Math.max(0, Math.floor((p.x + dx) / CS)); cx < Math.min(CW, Math.ceil((p.x + dx + w) / CS)); cx++) f(cy * CW + cx);
+    };
+    for (const p of [...PROPS, ...WORKS]) if (p.project && p.solid) each(p, (i) => cells.add(i));
+    for (const i of cells) this.terFlags[i] = this.bareFlags(i % CW, Math.floor(i / CW));
+    for (const p of [...PROPS, ...WORKS]) if (propBlocks(p, v)) each(p, (i) => { if (cells.has(i)) this.terFlags[i] |= SOLID; });
+  }
+
   private stampProps() {
-    for (const p of PROPS) {
-      if (!p.solid) continue;
-      const [dx, dy, w, h] = p.solid;
+    for (const p of [...PROPS, ...WORKS]) {
+      if (!propBlocks(p, this.projects)) continue;
+      const [dx, dy, w, h] = p.solid!;
       for (let cy = Math.floor((p.y + dy) / CS); cy < Math.ceil((p.y + dy + h) / CS); cy++)
         for (let cx = Math.floor((p.x + dx) / CS); cx < Math.ceil((p.x + dx + w) / CS); cx++)
           if (cx >= 0 && cy >= 0 && cx < CW && cy < CH) this.terFlags[cy * CW + cx] |= SOLID;
@@ -397,18 +435,39 @@ export class WorldMap {
   }
 
   computeTerFlags() {
-    for (let cy = 0; cy < CH; cy++) {
-      for (let cx = 0; cx < CW; cx++) {
-        const t = this.t(cx >> 1, cy >> 1);
-        let f = 0;
-        if (t === Ter.Forest) f = SOLID;
-        else if (t === Ter.Rock) f = ROCK;
-        else if (t === Ter.Water) f = DEEP;
-        else if (t === Ter.Shallow) f = SHALLOW;
-        this.terFlags[cy * CW + cx] = f;
-      }
-    }
+    for (let cy = 0; cy < CH; cy++)
+      for (let cx = 0; cx < CW; cx++) this.terFlags[cy * CW + cx] = this.bareFlags(cx, cy);
     this.stampProps();
+  }
+
+  // The old bridge across the ford (src/systems/valley.ts mends it): under
+  // its deck the shallows are dry going, so cattle no longer balk there.
+  bridgeOn = false;
+  bridgeSpan(): { x0: number; x1: number; y0: number; y1: number } {
+    let x0 = MW, x1 = 0;
+    for (let y = BRIDGE.y0; y < BRIDGE.y1; y++)
+      for (let x = 40; x < 70; x++)
+        if (this.t(x, y) === Ter.Shallow) {
+          x0 = Math.min(x0, x);
+          x1 = Math.max(x1, x + 1);
+        }
+    return { x0, x1, y0: BRIDGE.y0, y1: BRIDGE.y1 };
+  }
+  setBridge(on: boolean) {
+    this.bridgeOn = on;
+    const b = this.bridgeSpan();
+    for (let cy = b.y0 * 2; cy < b.y1 * 2; cy++)
+      for (let cx = b.x0 * 2; cx < b.x1 * 2; cx++) {
+        if (this.t(cx >> 1, cy >> 1) !== Ter.Shallow) continue;
+        if (on) this.terFlags[cy * CW + cx] &= ~SHALLOW;
+        else this.terFlags[cy * CW + cx] |= SHALLOW;
+      }
+  }
+
+  // A collision cell's flags from its terrain alone.
+  private bareFlags(cx: number, cy: number): number {
+    const t = this.t(cx >> 1, cy >> 1);
+    return t === Ter.Forest ? SOLID : t === Ter.Rock ? ROCK : t === Ter.Water ? DEEP : t === Ter.Shallow ? SHALLOW : 0;
   }
 
   // Combined flags for a collision cell.

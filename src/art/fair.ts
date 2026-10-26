@@ -1,7 +1,8 @@
 import { C } from '../palette';
 import { px, rect } from '../gfx/draw';
 import { text, textWidth } from '../gfx/font';
-import { penDrawables, type Drawable } from './buildings';
+import type { Drawable } from './buildings';
+import { penDrawables } from './paddock';
 import type { Game } from '../game';
 import { isFairDay } from '../systems/seasonal';
 

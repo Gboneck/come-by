@@ -1,5 +1,6 @@
 import { C } from '../palette';
-import { panel, rect } from '../gfx/draw';
+import { rect } from '../gfx/draw';
+import { panel } from './frame';
 import { text, textWidth, wrap } from '../gfx/font';
 import type { Game } from '../game';
 import { edgeArrow, type Margins } from './hud';
@@ -8,6 +9,7 @@ import { dimView } from './feel';
 import { buzz } from './settings';
 import { SPECIES } from '../entities/species';
 import { tToClock, yardOf, type Order } from '../systems/orders';
+import { orderTag } from '../systems/favour';
 import { CLASSES, PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, prizeToday, type TrialResult } from '../systems/trials';
 import { LEGACY, goalDone } from '../systems/progression';
 
@@ -53,7 +55,7 @@ export function jobCard(game: Game, g: CanvasRenderingContext2D, x: number, y: n
   const compact = W < 300;
   for (const o of game.orders.open) {
     const soon = o.due - game.day.t < 25 && blink;
-    lines.push({ tag: YARD_SHORT[o.yard], s: orderLine(o, compact), c: soon ? C.butter : C.wool });
+    lines.push({ tag: orderTag(o, YARD_SHORT[o.yard]), s: orderLine(o, compact), c: soon ? C.butter : C.wool });
   }
   if (prizeToday(game) && currentClass(game) && game.day.phase !== 'night')
     lines.push({ tag: 'TRIAL DAY', s: compact ? 'SHOW GROUND' : 'AT THE SHOW GROUND', c: C.wool });
@@ -246,7 +248,7 @@ export function jobsLedger(game: Game, w: number): { s: string; c: string; x?: n
   if (won.length) add(`WON: ${won.join(', ')}`, C.sage);
   out.push({ s: '', c: C.wool });
   add('ORDERS', C.butter);
-  for (const o of game.orders.open) add(`${YARD_SHORT[o.yard]}: ${orderLine(o, false)} (${yardOf(game, o.yard).site.place})`, C.wool);
+  for (const o of game.orders.open) add(`${orderTag(o, YARD_SHORT[o.yard])}: ${orderLine(o, false)} (${yardOf(game, o.yard).site.place})`, C.wool);
   if (!game.orders.open.length) add('NONE TODAY. NEW ONES EACH MORNING', C.sage);
   add(`FILLED ${game.totals.orders}${game.totals.calmOrders ? `, ${game.totals.calmOrders} ALL CALM` : ''}`, C.sage);
   return out;

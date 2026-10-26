@@ -1,7 +1,7 @@
 import { spr, type Sprite } from '../gfx/sprite';
 import type { BuildingKind, Rot } from './buildings';
 
-export type ItemId = 'pen' | 'fence' | 'trough' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill' | 'hay';
+export type ItemId = 'pen' | 'fence' | 'trough' | 'shelter' | 'rack' | 'kennel' | 'gate' | 'market' | 'barn' | 'windmill' | 'hay' | 'shed' | 'dairy' | 'agility';
 
 export interface BuildDef {
   id: ItemId;
@@ -23,9 +23,8 @@ const icon = (id: string, rows: string[]) => () => (icons[id] ??= spr(rows, 0, 0
 
 export const CATALOG: BuildDef[] = [
   {
-    id: 'pen', kind: 'pen', name: 'PEN', cost: 25, tier: 1, w: 8, h: 7, rotates: true,
-    upgrade: { cost: 40, tier: 3, desc: 'BIGGER, STURDIER' },
-    desc: 'HOLDS ONE KIND. THE GATE SHUTS BEHIND THEM.',
+    id: 'pen', kind: 'pen', name: 'PADDOCK', cost: 25, tier: 1, w: 8, h: 7, rotates: true,
+    desc: 'SIZE IT AS YOU LIKE, EXTEND IT LATER. DUCKS GO WITH ANYONE, SHEEP WITH GOATS, CATTLE WITH PONIES.',
     icon: icon('pen', ['p.p.p.p.p', 'wwwwwwwww', 'p.......p', 'w.......w', 'p.......p', 'wwww..www', 'p.p...p.p']),
   },
   {
@@ -35,8 +34,18 @@ export const CATALOG: BuildDef[] = [
   },
   {
     id: 'trough', kind: 'trough', name: 'TROUGH', cost: 12, tier: 1, w: 2, h: 1, rotates: false,
-    desc: 'PUT IN A PEN: MORE GOODS, CALMER ANIMALS.',
+    desc: 'PUT IN A PADDOCK: MORE GOODS, CALMER ANIMALS.',
     icon: icon('trough', ['.........', '.........', 'ptttttttp', 'pwtwtwtwp', '.ppppppp.', '.p.....p.']),
+  },
+  {
+    id: 'shelter', kind: 'shelter', name: 'FIELD SHELTER', cost: 45, tier: 2, w: 3, h: 2, rotates: false,
+    desc: 'PUT IN A PADDOCK: ITS STOCK IS SAFE AT NIGHT, AS IN A BARN\'S RING.',
+    icon: icon('shelter', ['....p....', '..ppppp..', '.ppppppp.', 'ppppppppp', '.w.....w.', '.w.yyy.w.', '.wyyyyyw.']),
+  },
+  {
+    id: 'rack', kind: 'rack', name: 'HAY RACK', cost: 20, tier: 2, w: 2, h: 1, rotates: false,
+    desc: 'PUT IN A PADDOCK: ITS STOCK EATS A THIRD LESS HAY IN WINTER.',
+    icon: icon('rack', ['.........', 'p.p.p.p.p', 'pyyyyyyyp', 'pyyyyyyyp', 'ppppppppp', '.p.....p.']),
   },
   {
     id: 'kennel', kind: 'kennel', name: 'KENNEL', cost: 15, tier: 1, w: 3, h: 3, rotates: false, max: 1,
@@ -60,6 +69,21 @@ export const CATALOG: BuildDef[] = [
     icon: icon('hay', ['.........', '...yyy...', '..yyyyy..', '.yyoyyoy.', '.yoyyyoy.', 'yyyyyyyyy', 'sssssssss']),
   },
   {
+    id: 'shed', kind: 'shed', name: 'SHEARING SHED', cost: 60, tier: 2, w: 8, h: 6, rotates: false, max: 1,
+    desc: 'IN SUMMER, WALK SHEEP THROUGH ITS CHUTE: EACH IS SHORN FOR A WOOL BONUS.',
+    icon: icon('shed', ['.........', '..ppppp..', '.ppppppp.', 'ppppppppp', 'wwpwwwpww', '.........', 'w.w.w.w.w']),
+  },
+  {
+    id: 'agility', kind: 'agility', name: 'AGILITY YARD', cost: 45, tier: 2, w: 12, h: 8, rotates: false, max: 1,
+    desc: 'RUN THE COURSE CLEAN AND QUICK: FREE SPEED AND STAMINA TRAINING.',
+    icon: icon('agility', ['p.......p', 'p.y...y.p', 'pwyw.wywp', 'p.y...y.p', 'p...t...p', 'p..ttt..p', 'ppp...ppp']),
+  },
+  {
+    id: 'dairy', kind: 'dairy', name: 'DAIRY', cost: 110, tier: 4, w: 7, h: 7, rotates: false, max: 1,
+    desc: 'MORNINGS, WALK COWS INTO ITS YARD TO BE MILKED. CALM COWS GIVE MORE.',
+    icon: icon('dairy', ['..ppppp..', '.ppppppp.', '.wwwwwww.', '.wwpwpww.', 'p.......p', 'p.......p', 'ppp...ppp']),
+  },
+  {
     id: 'gate', kind: 'gate', name: 'GATE', cost: 6, tier: 3, w: 2, h: 1, rotates: true,
     desc: 'OPENS FOR YOU AND A DRIVEN FLOCK.',
     icon: icon('gate', ['.........', 'p.......p', 'pwwwwwwwp', 'p.w.w.w.p', 'pwwwwwwwp', 'p.......p']),
@@ -73,10 +97,10 @@ export const CATALOG: BuildDef[] = [
 
 export const defOf = (id: ItemId) => CATALOG.find((d) => d.id === id)!;
 
-// Pens get dearer as the ranch fills: the first two you build cost 25$,
-// then each one 15$ more. `pens` counts the starter pen.
-export function setPenPrice(pens: number) {
-  defOf('pen').cost = 25 + 15 * Math.max(0, pens - 2);
+// The default paddock (8x7) costs its fence; bigger ones are priced as they
+// are dragged out (src/ranch/paddock.ts). Kept for old callers.
+export function setPenPrice(_pens: number) {
+  defOf('pen').cost = 25;
 }
 export const defOfKind = (k: BuildingKind) => CATALOG.find((d) => d.kind === k);
 

@@ -5,7 +5,7 @@ import { hash2 } from '../rng';
 import { gust } from '../render/wind';
 import type { Game } from '../game';
 import type { Drawable } from './buildings';
-import { PLACES, PROPS, type KeepsakeId, type Prop } from '../world/places';
+import { PLACES, PROPS, propShown, type KeepsakeId, type Prop } from '../world/places';
 
 // The hidden places' furniture, drawn in code: standing stones, cairns, old
 // fruit trees, a willow, the ruined hut and its fold, the showman's wagon,
@@ -19,7 +19,7 @@ const ground = (draw: () => void, k = 0): Drawable => ({ y: -1e8 + k, draw });
 // ---- Stones ----
 
 // A rounded stone: plum rim, wool face, sage on the shaded (left, lower) side.
-function pebble(g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, moss = false) {
+export function pebble(g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, moss = false) {
   ellipse(g, x, y, rx + 1, ry + 1, C.plum);
   ellipse(g, x, y, rx, ry, C.wool);
   px(g, x - rx, y, C.sage);
@@ -44,7 +44,7 @@ function standingStone(g: CanvasRenderingContext2D, x: number, y: number, v: num
   drawSpr(g, stoneSprites[v % STONES.length], x, y, v % 3 === 2);
 }
 
-function fallenStone(g: CanvasRenderingContext2D, x: number, y: number) {
+export function fallenStone(g: CanvasRenderingContext2D, x: number, y: number) {
   fallenSprite ??= spr(FALLEN);
   drawSpr(g, fallenSprite, x, y);
 }
@@ -119,7 +119,7 @@ function willow(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
 
 // Drystone: rows of rough stones with plum joints, each lit along its top,
 // some in shade (sage), the odd one green with moss.
-function stones(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, seed: number, shade: number) {
+export function stones(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, seed: number, shade: number) {
   rect(g, x, y, w, h, C.plum);
   for (let r = 0; r < h; r += 3) {
     let i = -Math.floor(hash2(seed, r, 31) * 3);
@@ -139,7 +139,7 @@ function stones(g: CanvasRenderingContext2D, x: number, y: number, w: number, h:
 
 // A wall running east-west seen from the front: a lit top and a shaded
 // face. Ruins have a ragged top where stones have fallen off.
-function hWall(g: CanvasRenderingContext2D, x: number, base: number, w: number, face: number, seed: number, ruined: boolean) {
+export function hWall(g: CanvasRenderingContext2D, x: number, base: number, w: number, face: number, seed: number, ruined: boolean) {
   const top = base - face - 2;
   const drop = (i: number) => (ruined ? Math.floor(hash2(Math.floor((x + i) / 3), base, seed) * 2.4) : 0);
   g.save();
@@ -156,7 +156,7 @@ function hWall(g: CanvasRenderingContext2D, x: number, base: number, w: number, 
 
 // A wall running north-south, seen from above: its cobbled top, and the
 // face of its south end.
-function vWall(g: CanvasRenderingContext2D, x: number, base: number, len: number, face: number, seed: number) {
+export function vWall(g: CanvasRenderingContext2D, x: number, base: number, len: number, face: number, seed: number) {
   rect(g, x - 1, base - len - 1, 6, len + 1, C.plum);
   stones(g, x, base - len, 4, len - face, seed, 0.2);
   rect(g, x, base - len, 1, len - face, C.sage); // the shaded west lip
@@ -395,9 +395,9 @@ export function landmarkDrawables(game: Game, g: CanvasRenderingContext2D): Draw
     }
   }
 
-  let floor = false;
+  let floor = game.projects.isDone('hut'); // the mended hut has a floor of its own
   for (const pr of PROPS) {
-    if (!seen(pr.x, pr.y, 60)) continue;
+    if (!seen(pr.x, pr.y, 60) || !propShown(pr, game.projects)) continue;
     const d = propDrawable(g, pr, t, game);
     if (d) out.push(d);
     if (pr.place === 'hut' && !floor) {

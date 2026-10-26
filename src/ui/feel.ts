@@ -3,6 +3,7 @@ import { BAYER4 } from '../gfx/draw';
 import { text } from '../gfx/font';
 import { makeCanvas } from '../gfx/screen';
 import { settings } from './settings';
+import { quality } from '../gfx/quality';
 
 // Game feel that lives outside the simulation: camera kicks and shake (in
 // whole pixels), hit-pause, the coin counter that ticks up as coins fly in,
@@ -10,6 +11,8 @@ import { settings } from './settings';
 
 interface FlyCoin { x0: number; y0: number; t: number; max: number; value: number; arc: number }
 interface Bit { x: number; y: number; vx: number; vy: number; c: string; ph: number }
+interface Rocket { x: number; y: number; vy: number; fuse: number; wait: number; c: string }
+interface Spark { x: number; y: number; vx: number; vy: number; t: number; max: number; c: string; g: number; big?: number }
 
 export interface TierCard { n: number; name: string; blurb: string; brings: string[]; t: number; max: number }
 
@@ -48,6 +51,38 @@ export function drawCover(g: CanvasRenderingContext2D, W: number, H: number, lev
   g.restore();
 }
 
+// The iris: the screen closes to a circle on (cx, cy) as `level` goes from
+// 0 to 16, with a dithered rim a few pixels deep; outside it, solid plum.
+export function drawIris(g: CanvasRenderingContext2D, W: number, H: number, cx: number, cy: number, level: number) {
+  cx = Math.round(cx); cy = Math.round(cy);
+  const far = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) + 8;
+  const r = far * (1 - level / 16);
+  const rim = 6;
+  g.fillStyle = C.plum;
+  for (let y = 0; y < H; y++) {
+    const dy = y - cy;
+    const outer = r + rim;
+    if (Math.abs(dy) >= outer) {
+      g.fillRect(0, y, W, 1);
+      continue;
+    }
+    const a = Math.sqrt(Math.max(0, r * r - dy * dy));
+    const b = Math.sqrt(outer * outer - dy * dy);
+    // Solid beyond the rim on both sides.
+    const l = Math.max(0, Math.floor(cx - b)), rr = Math.min(W, Math.ceil(cx + b));
+    if (l > 0) g.fillRect(0, y, l, 1);
+    if (rr < W) g.fillRect(rr, y, W - rr, 1);
+    // The rim: dithered, denser towards the outside.
+    for (const [x0, x1] of [[Math.max(0, Math.floor(cx - b)), Math.min(W, Math.ceil(cx - a))], [Math.max(0, Math.floor(cx + a)), Math.min(W, Math.ceil(cx + b))]]) {
+      for (let x = x0; x < x1; x++) {
+        const d = Math.hypot(x - cx, dy) - r;
+        if (d <= 0) continue;
+        if (BAYER4[((y & 3) << 2) | (x & 3)] < (d / rim) * 16) g.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+}
+
 // The dim behind a menu or card.
 export function dimView(g: CanvasRenderingContext2D, view: { ox: number; oy: number; W: number; H: number }, level = 8) {
   drawCover(g, view.W, view.H, level, view.ox, view.oy);
@@ -75,7 +110,12 @@ export class Feel {
   private flying: FlyCoin[] = [];
 
   private bits: Bit[] = [];
+  private rockets: Rocket[] = [];
+  private sparks: Spark[] = [];
   tierCard: TierCard | null = null;
+  // Where a screen change closes its iris (screen pixels), asked each frame
+  // so it can follow the dog to its new spot as the next scene opens.
+  iris: (() => { x: number; y: number }) | null = null;
 
   // Starts covered, so every new game (and the title) dissolves in.
   cover = 16;
@@ -128,10 +168,31 @@ export class Feel {
 
   // ---- Celebrations ----
 
-  confetti(W: number, n = 70) {
+  // A tier-up: fireworks over the valley, and paper scraps on the breeze.
+  confetti(W: number, n = 40, H = 240) {
     const cols = [C.butter, C.wool, C.butter, C.teal, C.moss];
-    for (let i = 0; i < n; i++)
+    const k = Math.max(0.35, quality.fx);
+    for (let i = 0; i < Math.round(n * k); i++)
       this.bits.push({ x: Math.random() * W, y: -Math.random() * 60 - 2, vx: (Math.random() - 0.5) * 20, vy: 22 + Math.random() * 30, c: cols[i % cols.length], ph: Math.random() * 6 });
+    this.fireworks(W, H, Math.max(2, Math.round(6 * k)));
+  }
+
+  // Rockets that climb from the bottom of the screen, staggered, and burst.
+  fireworks(W: number, H: number, n = 6) {
+    for (let i = 0; i < n; i++) {
+      const x = W * (0.15 + 0.7 * ((i * 0.61803) % 1));
+      this.rockets.push({ x, y: H + 2, vy: -(H * 0.9 + Math.random() * H * 0.3), fuse: 0.55 + Math.random() * 0.35, wait: i * 0.28, c: [C.butter, C.wool, C.teal, C.moss][i % 4] });
+    }
+  }
+
+  // A puff of dust either side of a stamp as it lands.
+  stampDust(cx: number, cy: number, w: number, h: number) {
+    const n = Math.round(14 * Math.max(0.4, quality.fx));
+    for (let i = 0; i < n; i++) {
+      const side = i % 2 ? 1 : -1;
+      const y = cy + (Math.random() - 0.5) * h;
+      this.sparks.push({ x: cx + (side * w) / 2, y, vx: side * (20 + Math.random() * 40), vy: (Math.random() - 0.5) * 20, t: 0, max: 0.3 + Math.random() * 0.2, c: Math.random() < 0.5 ? C.wool : C.sage, g: 0 });
+    }
   }
 
   // ---- Transitions ----
@@ -141,9 +202,12 @@ export class Feel {
   }
 
   // Cover the screen, run `act` (switch screens), then uncover.
-  fadeTo(act: () => void, outDur = 0.22, inDur = 0.32) {
+  // With `at` (screen pixels), the screen closes as an iris on that point
+  // and opens out from it again.
+  fadeTo(act: () => void, outDur = 0.22, inDur = 0.32, at: (() => { x: number; y: number }) | null = null) {
     if (this.fade?.phase === 'out') return false;
     this.fade = { phase: 'out', act, outRate: 16 / outDur, inRate: 16 / inDur };
+    this.iris = at;
     return true;
   }
 
@@ -186,6 +250,34 @@ export class Feel {
     }
     this.bits = this.bits.filter((b) => b.y < H + 2);
 
+    // Rockets climb, slowing, then burst into a ring of falling sparks.
+    for (const r of this.rockets) {
+      if ((r.wait -= dt) > 0) continue;
+      r.fuse -= dt;
+      r.y += r.vy * dt;
+      r.vy *= Math.pow(0.18, dt);
+      if (r.fuse <= 0) {
+        // Two rings, an outer one in the rocket's colour and a quicker
+        // inner one in wool, then a flash at the heart of the burst.
+        const n = 24;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          this.sparks.push({ x: r.x, y: r.y, vx: Math.cos(a) * 62, vy: Math.sin(a) * 62, t: 0, max: 1 + Math.random() * 0.35, c: r.c, g: 36 });
+          if (i % 2 === 0) this.sparks.push({ x: r.x, y: r.y, vx: Math.cos(a + 0.13) * 34, vy: Math.sin(a + 0.13) * 34, t: 0, max: 0.8 + Math.random() * 0.3, c: C.wool, g: 30 });
+        }
+        this.sparks.push({ x: r.x, y: r.y, vx: 0, vy: 0, t: 0, max: 0.12, c: C.wool, g: 0, big: 3 });
+      }
+    }
+    this.rockets = this.rockets.filter((r) => r.fuse > 0);
+    for (const s of this.sparks) {
+      s.t += dt;
+      s.vx *= Math.pow(0.35, dt);
+      s.vy = s.vy * Math.pow(0.35, dt) + s.g * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+    }
+    this.sparks = this.sparks.filter((s) => s.t < s.max);
+
     if (this.tierCard && (this.tierCard.t -= dt) <= 0) this.tierCard = null;
 
     const f = this.fade;
@@ -205,24 +297,64 @@ export class Feel {
     }
   }
 
-  // Screen-space effects above the UI (confetti, coins in flight).
+  // Screen-space effects above the UI (confetti, fireworks, coins in flight).
   drawTop(g: CanvasRenderingContext2D) {
     for (const b of this.bits) {
       g.fillStyle = b.c;
       // Flutter: the scrap is edge-on (1px) half the time.
       g.fillRect(Math.round(b.x), Math.round(b.y), Math.cos(b.ph) > 0 ? 2 : 1, 1);
     }
+    for (const r of this.rockets) {
+      if (r.wait > 0) continue;
+      // The rocket and a short trail of sparks behind it.
+      g.fillStyle = C.wool;
+      g.fillRect(Math.round(r.x), Math.round(r.y), 1, 2);
+      g.fillStyle = r.c;
+      g.fillRect(Math.round(r.x), Math.round(r.y + 3 + (Math.floor(r.fuse * 30) % 2)), 1, 1);
+    }
+    for (const s of this.sparks) {
+      const k = s.t / s.max;
+      // Twinkle as they die: more and more of the frames skipped.
+      if (k > 0.55 && Math.floor(s.t * 24 + s.x) % (k > 0.8 ? 3 : 2) === 0) continue;
+      g.fillStyle = s.c;
+      const sz = s.big ?? (k < 0.3 ? 2 : 1);
+      g.fillRect(Math.round(s.x - (sz >> 1)), Math.round(s.y - (sz >> 1)), sz, sz);
+      if (k < 0.45 && s.g) {
+        // A short trail back towards the burst.
+        g.fillStyle = k < 0.2 ? C.wool : s.c;
+        g.fillRect(Math.round(s.x - s.vx * 0.04), Math.round(s.y - s.vy * 0.04), 1, 1);
+        g.fillRect(Math.round(s.x - s.vx * 0.08), Math.round(s.y - s.vy * 0.08), 1, 1);
+      }
+    }
     for (const c of this.flying) {
       if (c.t < 0) continue;
+      const pos = (k: number) => {
+        const e = k * k * (3 - 2 * k);
+        return [c.x0 + (this.purse.x - c.x0) * e, c.y0 + (this.purse.y - c.y0) * e - Math.sin(k * Math.PI) * c.arc] as const;
+      };
       const k = c.t / c.max;
-      const e = k * k * (3 - 2 * k);
-      const x = c.x0 + (this.purse.x - c.x0) * e;
-      const y = c.y0 + (this.purse.y - c.y0) * e - Math.sin(k * Math.PI) * c.arc;
+      // A trail that glints behind the coin.
+      for (let i = 1; i <= 3; i++) {
+        const kk = k - i * 0.05;
+        if (kk <= 0) break;
+        const [tx, ty] = pos(kk);
+        g.fillStyle = i === 1 ? C.butter : (Math.floor(c.t * 20) + i) % 2 ? C.wool : C.moss;
+        g.fillRect(Math.round(tx), Math.round(ty), 1, 1);
+      }
+      const [x, y] = pos(k);
       text(g, '$', x, y - 2, C.butter, { align: 'center', shadow: C.plum });
+      if (Math.floor(c.t * 12) % 3 === 0) {
+        g.fillStyle = C.wool;
+        g.fillRect(Math.round(x) - 1, Math.round(y) - 2, 1, 1);
+      }
     }
   }
 
   drawCover(g: CanvasRenderingContext2D, W: number, H: number) {
-    drawCover(g, W, H, this.cover);
+    if (this.iris && this.cover > 0 && this.cover < 16) {
+      const p = this.iris();
+      drawIris(g, W, H, p.x, p.y, this.cover);
+    }
+    else drawCover(g, W, H, this.cover);
   }
 }

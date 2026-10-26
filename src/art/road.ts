@@ -28,8 +28,11 @@ export function drawRoad(g: CanvasRenderingContext2D, ranch: Ranch, t0x: number,
 }
 
 // An arrow just outside a pen's gate, pointing the way the stock walks out.
-export function drawGateMark(g: CanvasRenderingContext2D, tx: number, ty: number, rot: Rot, ok: boolean, t: number) {
-  const p = new Pen(tx, ty, rot);
+// `size`: a paddock's size and its gate's place along the side (`at`, as in
+// ranch/paddock.ts); the old 8x7 pen with a centred gate if left out.
+export function drawGateMark(g: CanvasRenderingContext2D, tx: number, ty: number, rot: Rot, ok: boolean, t: number, size?: { w: number; h: number; at?: number }) {
+  const p = new Pen(tx, ty, rot, size?.w, size?.h);
+  if (size?.at !== undefined) p.gateAt = size.at;
   const a = p.gatePoint(5), b = p.gatePoint(11);
   const dx = Math.sign(Math.round(b.x - a.x)), dy = Math.sign(Math.round(b.y - a.y));
   const bob = Math.floor(t * 3) % 2;

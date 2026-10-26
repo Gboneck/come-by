@@ -31,6 +31,7 @@ interface TravelsData {
   coins: number; // found-place rewards still to pay into our own ranch
   ribbons: number; // brace placings as a guest
   seen?: string[]; // first-time co-op hints shown
+  badges?: string[]; // achievements earned while visiting (systems/achievements.ts)
 }
 
 function store(): Storage | null {
@@ -40,6 +41,17 @@ function store(): Storage | null {
     return null;
   }
 }
+
+// Read often (the achievements check stamps and ribbons), so kept a moment.
+let cache: { d: TravelsData; t: number } | null = null;
+function readCached(): TravelsData {
+  const now = Date.now();
+  if (!cache || now - cache.t > 5000) cache = { d: readData(), t: now };
+  return cache.d;
+}
+export const travelStamps = () => readCached().stamps;
+export const travelRibbons = () => readCached().ribbons;
+export const travelBadges = () => readCached().badges ?? [];
 
 function readData(): TravelsData {
   const empty: TravelsData = { v: 1, stamps: [], found: [], keep: [], fog: '', coins: 0, ribbons: 0 };
@@ -84,6 +96,7 @@ export class Travels {
   }
 
   private save() {
+    cache = null;
     this.d.found = [...this.found];
     this.d.keep = [...this.keep];
     this.d.fog = packFog(this.fog);
@@ -111,6 +124,13 @@ export class Travels {
 
   ribbon() {
     this.d.ribbons++;
+    this.save();
+  }
+
+  // An achievement earned here, for our own save.
+  badge(id: string) {
+    const b = (this.d.badges ??= []);
+    if (!b.includes(id)) b.push(id);
     this.save();
   }
 
@@ -211,6 +231,7 @@ export function mergeTravels(game: Game) {
     disc.fogVer++;
   }
   const places = disc.found.size - before.found, keeps = disc.keepsakes.size - before.keep;
+  for (const id of d.badges ?? []) game.achievements.grant(game, id); // badges earned visiting
   if (d.coins > 0) game.earn(d.coins);
   if (places || keeps || d.coins > 0) {
     const bits = [places ? `${places} HIDDEN PLACE${places > 1 ? 'S' : ''}` : '', keeps ? `${keeps} KEEPSAKE${keeps > 1 ? 'S' : ''}` : '', d.coins ? `+${d.coins}$` : ''].filter(Boolean);

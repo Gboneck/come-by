@@ -1,11 +1,12 @@
 import { C } from '../palette';
-import { ditherRect, panel, rect, ring } from '../gfx/draw';
-import { text, textWidth, wrap } from '../gfx/font';
+import { ditherRect, rect, ring } from '../gfx/draw';
+import { panel } from './frame';
+import { heading, text, textWidth, wrap } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
-import { Barn, FieldGate, Fence, Haystack, Kennel, Market, Windmill } from '../ranch/structures';
+import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
 import { SPECIES } from '../entities/species';
@@ -19,6 +20,8 @@ import { cycle, optionRow } from './rows';
 import { focusField, isTyping, stopTyping, textField } from './textfield';
 import { ROOFS, TRIMS, type Roof, type Trim } from '../art/ranchstyle';
 import { drawGateMark, drawRoad } from '../art/road';
+import { PaddockEditor, paddockRules, type PaddockLike, type PaddockRules } from './paddockbuild';
+import './paddockrules'; // the ranch's paddock rules, when this build has them
 
 // The ranch tab's paint rows (the name field sits above them).
 const ROOF_IDS = Object.keys(ROOFS) as Roof[];
@@ -44,6 +47,9 @@ export function makeBuilding(def: BuildDef, tx: number, ty: number, rot: Rot): B
     case 'barn': return new Barn(tx, ty);
     case 'windmill': return new Windmill(tx, ty);
     case 'hay': return new Haystack(tx, ty);
+    case 'shed': return new ShearingShed(tx, ty);
+    case 'dairy': return new Dairy(tx, ty);
+    case 'agility': return new AgilityYard(tx, ty);
     default: return new Building(def.kind, tx, ty, def.w, def.h, rot);
   }
 }
@@ -57,6 +63,7 @@ interface Ghost {
   ok: boolean;
   reason: string;
   pen?: Pen;
+  paddock?: PaddockLike; // a fixture's paddock
 }
 
 // The catalog item a "BUILD A ..." goal asks for, or -1.
@@ -77,6 +84,7 @@ export class BuildMode {
   rot: Rot = 0;
   row = 0;
   msg: { text: string; t: number; good: boolean } | null = null;
+  paddock = new PaddockEditor();
   private rep: Record<string, number> = {};
   private paintKey = '';
 
@@ -98,6 +106,78 @@ export class BuildMode {
 
   exit(game: Game) {
     game.input.stickEnabled = true;
+    this.paddock.cancel();
+  }
+
+  // ---- Paddocks ----
+
+  // The rules, when the paddock tool is in hand (or a draft is open).
+  private padRules(): PaddockRules | null {
+    const R = paddockRules();
+    if (!R) return null;
+    return this.paddock.busy || this.def.id === R.tool ? R : null;
+  }
+
+  private paddockAt(game: Game, tx: number, ty: number): PaddockLike | null {
+    const R = paddockRules(), b = this.buildingAt(game, tx, ty);
+    return R && b && R.is(b) ? b : null;
+  }
+
+  // Open a built paddock in the editor, with the paddock tool in hand.
+  private extend(game: Game, p: PaddockLike) {
+    const R = paddockRules();
+    if (!R) return;
+    const i = CATALOG.findIndex((d) => d.id === R.tool);
+    if (i >= 0) this.item = i;
+    this.paddock.extendFrom(R, p);
+  }
+
+  private commitPaddock(game: Game, R: PaddockRules) {
+    const res = this.paddock.commit(game, R, (x, y) => this.buildable(game, x, y));
+    this.say(res.say, res.good);
+    if (!res.good) {
+      game.audio?.play('deny');
+      return;
+    }
+    const b = res.built!; // the rules count it built
+    clearDecorUnder(game, b.tx, b.ty, b.w, b.h);
+    game.audio?.play('build');
+    for (let i = 0; i < 12; i++)
+      game.fx.dust(b.tx * TS + Math.random() * b.w * TS, (b.ty + b.h) * TS - 1, (Math.random() - 0.5) * 20, 0);
+  }
+
+  // Keys while a paddock is being marked out; true when they were used.
+  private paddockKeys(game: Game, R: PaddockRules, dt: number): boolean {
+    const inp = game.input, ed = this.paddock;
+    if (!ed.draft) return false;
+    for (const [dir, keys] of [['left', ['KeyA', 'ArrowLeft']], ['right', ['KeyD', 'ArrowRight']], ['up', ['KeyW', 'ArrowUp']], ['down', ['KeyS', 'ArrowDown']]] as const)
+      if (this.repeat(game, dir, [...keys], dt)) ed.nudge(R, dir);
+    if (inp.pressed('rotate') || inp.pressed('upgrade')) {
+      ed.nextHandle();
+      game.audio?.play('click');
+    }
+    if (inp.pressed('confirm')) this.commitPaddock(game, R);
+    // Keep the view on the handle in hand (the view follows the cursor),
+    // and, while it fits, on the whole of the paddock.
+    const r = ed.draft?.r;
+    if (r) {
+      const h = ed.handle;
+      this.cx = h === 'e' ? r.tx + r.w : h === 'w' ? r.tx - 1 : Math.floor(r.tx + r.w / 2);
+      this.cy = h === 's' ? r.ty + r.h : h === 'n' ? r.ty - 1 : Math.floor(r.ty + r.h / 2);
+      // The view keeps the cursor 76px clear of the bottom; the card and
+      // the bar need more, so the cursor goes a few tiles past the edge.
+      const { ox, oy, W, H } = game.view();
+      const m = 12, top = 34, foot = 120;
+      if (h !== 'e' && h !== 'w' && r.w * TS < W - 2 * m) {
+        if ((r.tx + r.w) * TS > ox + W - m) this.cx = r.tx + r.w;
+        else if (r.tx * TS < ox + m) this.cx = r.tx - 1;
+      }
+      if (r.h * TS < H - top - foot) {
+        if ((r.ty + r.h) * TS + 8 > oy + H - foot) this.cy = r.ty + r.h + Math.ceil((foot - 76) / TS);
+        else if (r.ty * TS - 8 < oy + top) this.cy = r.ty - 1;
+      }
+    }
+    return true;
   }
 
   get def(): BuildDef {
@@ -114,6 +194,8 @@ export class BuildMode {
     if (tx < 0 || ty < 0 || tx >= MW) return false;
     const r = regionById('ranch');
     if (game.map.region[ty * MW + tx] !== r.index || game.map.t(tx, ty) !== Ter.Grass) return false;
+    const land = game.valley.landAt(tx, ty); // a paddock: land once grazed clear
+    if (land !== null) return land;
     const f = REACH[Math.min(REACH.length, game.tier) - 1];
     const dx = (tx + 0.5 - r.cx) / (r.rx * f), dy = (ty + 0.5 - r.cy) / (r.ry * f);
     if (dx * dx + dy * dy > 1) return false;
@@ -138,12 +220,16 @@ export class BuildMode {
     const count = game.ranch.buildings.filter((b) => b.kind === def.kind).length;
     if (def.tier > game.tier) return { ...gh, reason: `UNLOCKS AT TIER ${def.tier}` };
     if (def.max && count >= def.max) return { ...gh, reason: 'YOU HAVE ONE ALREADY' };
-    if (def.id === 'trough') {
-      const b = this.buildingAt(game, this.cx, this.cy);
-      if (!(b instanceof Pen)) return { ...gh, reason: 'PLACE IT IN A PEN' };
-      if (b.hasTrough) return { ...gh, pen: b, reason: 'THIS PEN HAS ONE' };
-      if (game.coins < def.cost) return { ...gh, pen: b, reason: `NEED ${def.cost}$` };
-      return { ...gh, pen: b, ok: true };
+    // Troughs, shelters and hay racks go inside a paddock, where the
+    // cursor puts them.
+    const PR = paddockRules();
+    if (PR?.fixtures?.includes(def.id)) {
+      const pd = this.paddockAt(game, this.cx, this.cy);
+      if (!pd) return { ...gh, reason: 'PLACE IT IN A PADDOCK' };
+      const why = PR.fixtureProblem?.(game, pd, def.id, tx, ty) ?? null;
+      if (why) return { ...gh, paddock: pd, reason: why };
+      if (game.coins < def.cost) return { ...gh, paddock: pd, reason: `NEED ${def.cost}$` };
+      return { ...gh, paddock: pd, ok: true };
     }
     for (let y = ty; y < ty + h; y++)
       for (let x = tx; x < tx + w; x++) if (!this.buildable(game, x, y)) return { ...gh, reason: 'NOT ON RANCH LAND' };
@@ -166,8 +252,8 @@ export class BuildMode {
       return;
     }
     game.coins -= gh.def.cost;
-    if (gh.pen) {
-      gh.pen.hasTrough = true;
+    if (gh.paddock) {
+      paddockRules()!.placeFixture!(game, gh.paddock, gh.def.id, gh.tx, gh.ty);
     } else {
       game.ranch.add(makeBuilding(gh.def, gh.tx, gh.ty, this.rot));
       clearDecorUnder(game, gh.tx, gh.ty, gh.w, gh.h);
@@ -179,6 +265,7 @@ export class BuildMode {
     for (let i = 0; i < 8; i++)
       game.fx.dust(gh.tx * TS + Math.random() * gh.w * TS, (gh.ty + gh.h) * TS - 1, (Math.random() - 0.5) * 20, 0);
   }
+
 
   private upgrade(game: Game, b: Building) {
     const d = defOfKind(b.kind);
@@ -194,6 +281,13 @@ export class BuildMode {
   }
 
   private remove(game: Game, b: Building) {
+    const R = paddockRules();
+    if (R && R.is(b)) {
+      const err = R.remove(game, b);
+      if (err) this.say(err);
+      else this.say('PADDOCK TAKEN DOWN');
+      return;
+    }
     const d = defOfKind(b.kind);
     if (!d || b.kind === 'farmhouse') return this.say('THAT STAYS');
     if (b instanceof Pen && b.animals.length) return this.say('SELL OR MOVE THEM FIRST');
@@ -219,6 +313,10 @@ export class BuildMode {
   update(game: Game, dt: number): 'exit' | null {
     const inp = game.input;
     if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
+    if (this.paddock.busy && inp.pressed('cancel')) {
+      this.paddock.cancel();
+      return null;
+    }
     if (inp.pressed('cancel') || inp.pressed('build')) return 'exit';
     (['tab1', 'tab2', 'tab3', 'tab4', 'tab5'] as const).forEach((k, i) => { if (inp.pressed(k)) this.setTab(game, TABS[i][0]); });
 
@@ -242,12 +340,21 @@ export class BuildMode {
         }
       }
     } else if (this.tab === 'build') {
-      this.moveCursor(game, dt);
+      const item = this.item;
       if (inp.pressed('prev') || inp.wheel < 0) this.item = (this.item + CATALOG.length - 1) % CATALOG.length;
       if (inp.pressed('next') || inp.wheel > 0) this.item = (this.item + 1) % CATALOG.length;
+      if (this.item !== item) this.paddock.cancel();
+      const R = this.padRules();
+      if (R && this.paddockKeys(game, R, dt)) return null;
+      this.moveCursor(game, dt);
       if (inp.pressed('rotate')) this.rot = ((this.rot + 1) % 4) as Rot;
       const under = this.buildingAt(game, this.cx, this.cy);
-      if (inp.pressed('confirm')) {
+      const pd = this.paddockAt(game, this.cx, this.cy);
+      if (pd && inp.pressed('upgrade')) this.extend(game, pd);
+      else if (R && inp.pressed('confirm')) {
+        if (pd) this.extend(game, pd);
+        else this.paddock.start(R, this.cx, this.cy);
+      } else if (inp.pressed('confirm')) {
         this.place(game);
         this.paintKey = `${this.cx},${this.cy}`;
       } else if (this.def.id === 'fence' && inp.key('Space', 'Enter')) {
@@ -259,7 +366,7 @@ export class BuildMode {
         }
       }
       if (inp.pressed('remove') && under) this.remove(game, under);
-      if (inp.pressed('upgrade') && under) this.upgrade(game, under);
+      if (inp.pressed('upgrade') && under && !pd) this.upgrade(game, under);
     } else if (this.tab === 'dog') {
       const rows = UPGRADES.length + 2; // the upgrades, a helper, the dog's look
       if (inp.pressed('up')) this.row = (this.row + rows - 1) % rows;
@@ -293,6 +400,7 @@ export class BuildMode {
 
   setTab(game: Game, tab: Tab) {
     this.tab = tab;
+    this.paddock.cancel();
     this.row = 0;
     if (tab === 'ranch') {
       // Bring the farmhouse into view while it is being painted.
@@ -396,13 +504,27 @@ export class BuildMode {
     drawRoad(g, game.ranch, t0x, t0y, t1x, t1y, game.t);
     if (this.tab === 'decor') return this.drawDecorGhost(game, g);
     for (const b of game.ranch.buildings) if (b instanceof Barn) ring(g, b.cx, b.cy, b.shelterRadius, C.butter, 6);
+    const R = this.padRules();
+    if (R) {
+      // Over a built paddock with nothing drafted: show it can be opened.
+      const pd = !this.paddock.busy ? this.paddockAt(game, this.cx, this.cy) : null;
+      if (pd) outline(g, pd.x0, pd.y0, pd.x1 - pd.x0, pd.y1 - pd.y0, C.butter, game.t);
+      else this.paddock.drawWorld(game, g, R, (x, y) => this.buildable(game, x, y), this.cx, this.cy);
+      return;
+    }
     if (this.def.id === 'barn') ring(g, (this.cx + 0.5) * TS, (this.cy + 0.5) * TS, 84, C.butter, 6);
 
     const gh = this.ghost(game);
     const under = this.buildingAt(game, this.cx, this.cy);
     const X0 = gh.tx * TS, Y0 = gh.ty * TS, Wd = gh.w * TS, Hd = gh.h * TS;
-    if (gh.def.id === 'trough') {
-      if (gh.pen) outline(g, gh.pen.x0, gh.pen.y0, gh.pen.x1 - gh.pen.x0, gh.pen.y1 - gh.pen.y0, gh.ok ? C.butter : C.plum, game.t);
+    if (paddockRules()?.fixtures?.includes(gh.def.id)) {
+      // The paddock it goes in, and the piece itself where it would sit.
+      if (gh.paddock) outline(g, gh.paddock.x0, gh.paddock.y0, gh.paddock.x1 - gh.paddock.x0, gh.paddock.y1 - gh.paddock.y0, gh.ok ? C.butter : C.plum, game.t);
+      if (gh.ok) {
+        const ic = gh.def.icon();
+        drawSpr(g, ic, X0 + Math.floor((Wd - ic.w) / 2), Y0 + Math.floor((Hd - ic.h) / 2));
+      } else ditherRect(g, X0, Y0, Wd, Hd, 8, C.plum);
+      placeMark(g, X0, Y0, Wd, Hd, gh.ok, game.t);
     } else if (under && !gh.ok) {
       outline(g, under.x0, under.y0, under.x1 - under.x0, under.y1 - under.y0, C.wool, game.t);
       ditherRect(g, X0, Y0, Wd, Hd, 6, C.plum);
@@ -412,7 +534,7 @@ export class BuildMode {
         const ds = buildingDrawables(g, temp, game.t, false).sort((a, b) => a.y - b.y);
         for (const d of ds) d.draw();
       } else ditherRect(g, X0, Y0, Wd, Hd, 8, C.plum);
-      outline(g, X0, Y0, Wd, Hd, gh.ok ? C.butter : C.plum, game.t);
+      placeMark(g, X0, Y0, Wd, Hd, gh.ok, game.t);
     }
     if (gh.def.id === 'pen') drawGateMark(g, gh.tx, gh.ty, this.rot, gh.ok, game.t);
     // Cursor tile marker.
@@ -430,7 +552,7 @@ export class BuildMode {
     } else {
       if (ok) pieceDrawable(game, g, p, tx, ty).draw();
       else ditherRect(g, tx * TS, ty * TS, p.w * TS, p.h * TS, 8, C.plum);
-      outline(g, tx * TS, ty * TS, p.w * TS, p.h * TS, ok ? C.butter : C.plum, game.t);
+      placeMark(g, tx * TS, ty * TS, p.w * TS, p.h * TS, ok, game.t);
     }
     rect(g, this.cx * TS + 3, this.cy * TS + 3, 2, 2, C.butter);
   }
@@ -481,16 +603,23 @@ export class BuildMode {
     // World taps / clicks move the cursor (and a mouse click builds).
     if (this.tab === 'build' || this.tab === 'decor') {
       const { ox, oy } = game.view();
+      const PR = this.tab === 'build' ? this.padRules() : null;
+      if (PR)
+        this.paddock.pointers(game, PR, uiTop,
+          (tx, ty) => { this.cx = tx; this.cy = ty; },
+          (tx, ty, touch) => { this.cx = tx; this.cy = ty; if (!touch) inp.push('confirm'); },
+          (tx, ty) => this.paddockAt(game, tx, ty));
       for (const p of inp.ptrs.values()) {
         if (p.justDown && !p.owner && p.y > uiTop) p.owner = 'world';
         if (p.owner === 'world') {
           this.cx = Math.floor((p.x + ox) / TS);
           this.cy = Math.floor((p.y + oy) / TS);
-          if (p.justUp && !p.touch && Math.hypot(p.x - p.downX, p.y - p.downY) < 3) inp.push('confirm');
+          // A click builds, but never a click beside a paddock being drafted.
+          if (p.justUp && !p.touch && Math.hypot(p.x - p.downX, p.y - p.downY) < 3 && !this.paddock.draft) inp.push('confirm');
         }
       }
       const hv = inp.hover;
-      if (hv && !inp.touchMode && hv.y > uiTop && hv.y < H - 44 - S.bottom) {
+      if (hv && !inp.touchMode && hv.y > uiTop && hv.y < H - 44 - S.bottom && !this.paddock.busy) {
         this.cx = Math.floor((hv.x + ox) / TS);
         this.cy = Math.floor((hv.y + oy) / TS);
       }
@@ -502,9 +631,9 @@ export class BuildMode {
     const ui = game.ui;
     const n = CATALOG.length;
     const S = safeArea(game.screen);
-    const L = 2 + S.left, R = W - 2 - S.right;
-    const cw = Math.min(28, Math.floor((R - L) / n));
-    const bx = Math.round((L + R) / 2 - (cw * n) / 2), by = H - 26 - S.bottom;
+    const L = 2 + S.left, R_ = W - 2 - S.right;
+    const cw = Math.min(28, Math.floor((R_ - L) / n));
+    const bx = Math.round((L + R_) / 2 - (cw * n) / 2), by = H - 26 - S.bottom;
     const goalItem = goalBuilding(game);
     panel(g, bx - 2, by - 2, cw * n + 4, 28);
     CATALOG.forEach((d, i) => {
@@ -523,21 +652,40 @@ export class BuildMode {
       } else {
         text(g, `${d.cost}`, x + cw / 2, by + 16, game.coins >= d.cost ? C.butter : C.sage, { align: 'center' });
       }
-      if (ui.click(`item-${i}`, x, by, cw - 1, 24)) this.item = i;
+      if (ui.click(`item-${i}`, x, by, cw - 1, 24)) {
+        if (i !== this.item) this.paddock.cancel();
+        this.item = i;
+      }
     });
 
-    // Info card: the building under the cursor, else the selected item.
+    // Info card: the paddock being marked out, else the building under the
+    // cursor, else the selected item.
     const under = this.buildingAt(game, this.cx, this.cy);
     const ud = under ? defOfKind(under.kind) : null;
+    const R = this.padRules();
+    const fixTool = !!paddockRules()?.fixtures?.includes(this.def.id);
+    const pd = !this.paddock.busy && !fixTool ? this.paddockAt(game, this.cx, this.cy) : null;
+    if (R && !pd) {
+      const iy = this.paddock.drawCard(game, g, R, (x, y) => this.buildable(game, x, y), L, R_, by - 6, (a) => {
+        if (a === 'cancel') this.paddock.cancel();
+        else if (this.paddock.draft) game.input.push('confirm');
+        else this.paddock.start(R, this.cx, this.cy);
+      });
+      if (!game.input.touchMode) text(g, this.paddock.prompt(), W / 2, iy - 8, C.wool, { align: 'center', shadow: C.plum });
+      return;
+    }
     const lines: string[] = [];
     let title = '';
-    if (under && ud && this.def.id !== 'trough') {
+    if (pd) {
+      title = `PADDOCK ${pd.w}x${pd.h}`;
+      const mix = pd.mix().filter((m) => m.n > 0);
+      lines.push(`${pd.used}/${pd.capacity} SPACES${pd.goods ? `, ${pd.goods} GOODS` : ''}`);
+      lines.push(mix.length ? mix.map((m) => `${m.n} ${(m.n === 1 ? SPECIES[m.sp].name : SPECIES[m.sp].plural).toUpperCase()}`).join(', ') : 'EMPTY');
+      const fx = paddockRules()!.fixtureNames(pd);
+      if (fx.length) lines.push(fx.join(', '));
+      if (!game.input.touchMode) lines.push('U: EXTEND  X: REMOVE');
+    } else if (under && ud && !fixTool && this.def.id !== 'trough') {
       title = `${ud.name}${under.level > 1 ? ' II' : ''}`;
-      if (under instanceof Pen) {
-        const sp = under.species ? SPECIES[under.species] : null;
-        lines.push(sp ? `${under.animals.length} ${sp.plural.toUpperCase()}, ${under.goods} GOODS` : 'EMPTY');
-        if (under.hasTrough) lines.push('HAS A TROUGH');
-      }
       if (ud.upgrade && under.level < 2) lines.push(`U: UPGRADE ${ud.upgrade.cost}$ (${ud.upgrade.desc})`);
       lines.push('X: REMOVE');
     } else if (under && under.kind === 'farmhouse') {
@@ -549,15 +697,22 @@ export class BuildMode {
       const gh = this.ghost(game);
       if (!gh.ok && gh.reason) lines.push(gh.reason);
     }
-    const ih = 10 + lines.length * 6;
+    const ih = 13 + lines.length * 6 + (pd ? 6 : 0);
     const iy = by - 6 - ih;
-    panel(g, L, iy, R - L, ih);
-    text(g, title, L + 4, iy + 3, C.butter, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
+    panel(g, L, iy, R_ - L, ih);
+    infoTitle(g, title, L + 4, iy + 3);
+    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
+    if (pd) {
+      // How full it is: a bar of spaces.
+      const bw0 = Math.min(R_ - L - 8, 120), bx0 = L + 4, by0 = iy + 13 + lines.length * 6;
+      rect(g, bx0, by0, bw0, 4, C.sage);
+      rect(g, bx0, by0, Math.round((bw0 * Math.min(pd.used, pd.capacity)) / Math.max(1, pd.capacity)), 4, C.teal);
+      rect(g, bx0, by0, bw0, 1, C.plum);
+    }
 
     // Touch buttons.
     if (game.input.touchMode) {
-      const bw = 40, bh = 15, rx = R - bw;
+      const bw = 40, bh = 15, rx = R_ - bw;
       let y = iy - bh - 3;
       const btn = (id: string, label: string, act: () => void) => {
         panel(g, rx, y, bw, bh, ui.isActive(id) ? C.teal : C.plum, C.butter);
@@ -565,11 +720,16 @@ export class BuildMode {
         if (ui.click(id, rx - 3, y - 1, bw + 4, bh + 2)) act();
         y -= bh + 3;
       };
-      btn('b-place', 'BUILD', () => game.input.push('confirm'));
-      if (this.def.rotates) btn('b-rot', 'TURN', () => game.input.push('rotate'));
-      if (under && ud) {
+      if (pd) {
         btn('b-rm', 'REMOVE', () => game.input.push('remove'));
-        if (ud.upgrade && under.level < 2) btn('b-up', 'UPGRADE', () => game.input.push('upgrade'));
+        btn('b-ext', 'EXTEND', () => this.extend(game, pd));
+      } else {
+        btn('b-place', 'BUILD', () => game.input.push('confirm'));
+        if (this.def.rotates) btn('b-rot', 'TURN', () => game.input.push('rotate'));
+        if (under && ud) {
+          btn('b-rm', 'REMOVE', () => game.input.push('remove'));
+          if (ud.upgrade && under.level < 2) btn('b-up', 'UPGRADE', () => game.input.push('upgrade'));
+        }
       }
     } else {
       text(g, 'ARROWS MOVE  Q/E PICK  R TURN  SPACE BUILD', W / 2, by - ih - 14, C.wool, { align: 'center', shadow: C.plum });
@@ -582,7 +742,7 @@ export class BuildMode {
     const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
     panel(g, x0, y0, pw, ph);
     const hasKennel = game.ranch.buildings.some((b) => b.kind === 'kennel');
-    text(g, hasKennel ? `KENNEL: TRAIN ${game.look.name}` : 'BUILD A KENNEL TO TRAIN', W / 2, y0 + 5, C.butter, { align: 'center' });
+    heading(g, hasKennel ? `TRAIN ${game.look.name}` : 'BUILD A KENNEL', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
     UPGRADES.forEach((u, i) => {
       const y = y0 + 16 + i * 16;
       const lvl = game.upgrades[u.key];
@@ -673,11 +833,11 @@ export class BuildMode {
       if (why) lines.push(why);
       else lines.push('DECOR NEVER GETS IN THE STOCK\'S WAY');
     }
-    const ih = 10 + lines.length * 6;
+    const ih = 13 + lines.length * 6;
     const iy = by - 6 - ih;
     panel(g, L, iy, R - L, ih);
-    text(g, title, L + 4, iy + 3, C.butter, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
+    infoTitle(g, title, L + 4, iy + 3);
+    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
     if (game.input.touchMode) {
       const bw = 40, bh = 15, rx = R - bw;
       let y = iy - bh - 3;
@@ -704,7 +864,7 @@ export class BuildMode {
     const ph = 30 + (RANCH_ROWS.length + 1) * (rh + gap) + 10;
     const x0 = Math.round(W / 2 - pw / 2), y0 = H - S.bottom - 4 - ph;
     panel(g, x0, y0, pw, ph);
-    text(g, 'YOUR RANCH', W / 2, y0 + 5, C.butter, { align: 'center' });
+    heading(g, 'YOUR RANCH', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
     const signName = game.look.ranch || tierOf(game.tier).name;
     text(g, `THE SIGN READS: COME BY ${signName}`, W / 2, y0 + 13, C.sage, { align: 'center' });
     let y = y0 + 22;
@@ -740,7 +900,7 @@ export class BuildMode {
     const pw = Math.min(W - 8, 176), ph = 34 + Math.max(1, pens.length) * 14;
     const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
     panel(g, x0, y0, pw, ph);
-    text(g, hasMarket ? 'MARKET STALL' : 'NO MARKET STALL YET', W / 2, y0 + 5, C.butter, { align: 'center' });
+    heading(g, hasMarket ? 'MARKET STALL' : 'NO MARKET YET', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
     text(g, `GOODS SELL AT DUSK  X${priceMult(game)}`, W / 2, y0 + 13, C.wool, { align: 'center' });
     if (!pens.length) text(g, 'NO STOCK IN YOUR PENS', W / 2, y0 + 26, C.sage, { align: 'center' });
     pens.forEach((p, i) => {
@@ -757,6 +917,41 @@ export class BuildMode {
         if (ui.click(`sell-${p.id}`, bx, y - 1, bw, 11)) { this.row = i; this.sellOne(game, p); }
       }
     });
+  }
+}
+
+// An info card's title: the name in the heading face, a price after it in
+// the body face ("KENNEL  15$").
+function infoTitle(g: CanvasRenderingContext2D, title: string, x: number, y: number) {
+  const m = title.match(/^(.*?)( {2}\d+\$)?$/);
+  const name = m?.[1] ?? title, price = m?.[2] ?? '';
+  const w = heading(g, name, x, y, C.butter, { shade: C.moss });
+  if (price) text(g, price.trim(), x + w + 5, y + 2, C.wool, { iconColor: C.butter });
+}
+
+// Where the piece would go: gilt corner brackets that breathe in and out
+// when it can be built there, a plum cross over the spot when it cannot.
+function placeMark(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, ok: boolean, t: number) {
+  if (!ok) {
+    g.fillStyle = C.plum;
+    const n = Math.min(w, h);
+    for (let i = 0; i < n; i++) {
+      const fx = Math.round((i / n) * w), fy = Math.round((i / n) * h);
+      g.fillRect(x + fx, y + fy, 1, 1);
+      g.fillRect(x + w - 1 - fx, y + fy, 1, 1);
+    }
+    outline(g, x, y, w, h, C.plum, t);
+    return;
+  }
+  const o = Math.floor(t * 3) % 2; // one pixel out, then back
+  const L = 4;
+  for (const [cx, cy, sx, sy] of [[x - o, y - o, 1, 1], [x + w - 1 + o, y - o, -1, 1], [x - o, y + h - 1 + o, 1, -1], [x + w - 1 + o, y + h - 1 + o, -1, -1]]) {
+    g.fillStyle = C.plum;
+    g.fillRect(Math.min(cx, cx + sx * (L - 1)), cy + sy, L, 1);
+    g.fillRect(cx + sx, Math.min(cy, cy + sy * (L - 1)), 1, L);
+    g.fillStyle = C.butter;
+    g.fillRect(Math.min(cx, cx + sx * (L - 1)), cy, L, 1);
+    g.fillRect(cx, Math.min(cy, cy + sy * (L - 1)), 1, L);
   }
 }
 

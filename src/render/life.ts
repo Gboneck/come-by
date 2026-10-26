@@ -4,10 +4,12 @@ import { fxSprites } from '../art/fx';
 import { critterSprites } from '../art/critters';
 import { chimneyTop } from '../art/buildings';
 import { yardFire } from '../art/course';
-import { hash2 } from '../rng';
+import { hash2, mulberry32 } from '../rng';
 import { drift, stepWind } from './wind';
 import { WeatherFx } from './weather';
 import { SeasonLayers } from './seasons';
+import { LitGround } from './light';
+import { Wildlife } from './wildlife';
 import { skyDarkness } from './sky';
 import { SHALLOW, TS, Ter, WORLD_H, WORLD_W, type SpeciesId } from '../world/map';
 import { seasonLook } from '../art/seasonlook';
@@ -23,7 +25,7 @@ interface Fly { x: number; y: number; z: number; a: number; t: number; white: bo
 interface Bird { x: number; y: number; vx: number; vy: number; ph: number }
 interface Glow { x: number; y: number; vx: number; vy: number; ph: number; rate: number }
 interface Print { x: number; y: number; shape: number[][]; col: string; life: number; max: number }
-type FxKind = 'anim' | 'ring' | 'drop' | 'smoke' | 'feather' | 'pebble' | 'leaf' | 'breath';
+type FxKind = 'anim' | 'ring' | 'drop' | 'smoke' | 'feather' | 'pebble' | 'leaf' | 'breath' | 'fish';
 interface Bit {
   kind: FxKind;
   x: number;
@@ -63,10 +65,14 @@ export class Life {
   private prints: Print[] = [];
   private bits: Bit[] = [];
   private smokeT = 0;
+  private fishT = 4;
+  private rnd = mulberry32(9133); // its own stream: the herd's stays untouched
   private track = new WeakMap<object, Track>();
   private t = 0;
   wx = new WeatherFx();
   seasons = new SeasonLayers();
+  lit = new LitGround();
+  wild = new Wildlife();
   vt = 0; // the valley's own clock: runs up to x12 while the dog rests
 
   update(game: Game, dt: number) {
@@ -87,6 +93,18 @@ export class Life {
     this.updateFlies(game, quick, v, fair > 0.5 ? dark : 1, night);
     this.updateBirds(quick, v, fair > 0.3 ? dark : 1);
     this.updateGlows(game, dt, v, w.rain > 0.5 ? 0 : dark, night && w.rain < 0.5);
+    // Now and then a fish jumps in deep water: an arc, a splash, rings.
+    if ((this.fishT -= dt) <= 0 && game.season.snow < 0.5) {
+      this.fishT = 4 + this.rnd() * 7;
+      for (let k = 0; k < 6; k++) {
+        const x = Math.floor(v.ox + this.rnd() * v.W), y = Math.floor(v.oy + this.rnd() * v.H);
+        const i = y * WORLD_W + x;
+        if (game.baked.soil[i] !== 3 || game.baked.waterDist[i] < 4) continue;
+        this.add({ kind: 'fish', x, y, vx: (this.rnd() < 0.5 ? -1 : 1) * 10, z: 0, vz: 34, max: 0.55 });
+        break;
+      }
+    }
+    this.wild.update(game, dt, v, game.day.frac, night || dark > 0.35 || w.rain > 0.6, (x, y) => this.add({ kind: 'ring', x, y, max: 0.8, size: 4 }));
 
     // Chimney smoke, drifting downwind.
     const f = game.ranch.farmhouse;
@@ -145,6 +163,14 @@ export class Life {
           else { b.z = 0; b.vz = 0; b.vx = 0; }
           break;
         case 'breath': b.vx *= 0.96; break;
+        case 'fish':
+          b.vz -= 120 * dt;
+          if (b.z < 0) {
+            b.life = 0;
+            this.add({ kind: 'ring', x: b.x, y: b.y, max: 0.9, size: 5 });
+            for (let i = 0; i < 3; i++) this.add({ kind: 'drop', x: b.x, y: b.y, vx: (this.rnd() - 0.5) * 30, vy: 0, z: 1, vz: 20 + this.rnd() * 15, max: 1 });
+          }
+          break;
       }
     }
     this.bits = this.bits.filter((b) => b.life > 0);
@@ -338,6 +364,7 @@ export class Life {
   // On the ground, under everything that stands: prints, ripples, dust and
   // the shadows of things in the air.
   drawGround(g: CanvasRenderingContext2D) {
+    this.wild.drawGround(g, this.t);
     for (const p of this.prints) {
       const k = p.life / p.max;
       if (k < 0.4 && hash2(p.x, p.y, Math.floor(p.life * 5)) > k / 0.4) continue;
@@ -385,9 +412,21 @@ export class Life {
 
   // Above the canopy: things in the air.
   drawAir(g: CanvasRenderingContext2D) {
+    this.wild.drawAir(g, this.t);
     for (const b of this.bits) {
       const k = b.life / b.max;
       switch (b.kind) {
+        case 'fish': {
+          // A small fish arching out of the water, wool belly flashing.
+          const x = Math.round(b.x), y = Math.round(b.y - b.z);
+          const up = b.vz > 0;
+          g.fillStyle = C.plum;
+          g.fillRect(x, y, 2, 1);
+          g.fillStyle = C.wool;
+          g.fillRect(x + (up ? 0 : 1), y + 1, 1, 1);
+          if (b.max - b.life < 0.12) { g.fillRect(x - 1, Math.round(b.y), 1, 1); g.fillRect(x + 2, Math.round(b.y), 1, 1); }
+          break;
+        }
         case 'leaf': {
           if (b.z <= 0) break;
           // Tumbling: a pixel, then a pair, as it turns over.

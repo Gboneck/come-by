@@ -23,7 +23,7 @@ import { BuildMode } from './ui/build';
 import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
 import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
-import { drawLedger } from './ui/ledger';
+import { LEDGER_PAGES, drawLedger, ledgerKeys, ledgerView } from './ui/ledger';
 import { REGIONS } from './world/map';
 import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
@@ -45,8 +45,13 @@ import { Weather } from './systems/weather';
 import { Seasons } from './systems/season';
 import { Seasonal, seasonalEvening } from './systems/seasonal';
 import { fairDrawables } from './art/fair';
+import { Valley } from './systems/valley';
+import { Farmwork, farmworkEvening } from './systems/farmwork';
+import { valleyDrawables } from './art/valley';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
+import { Projects } from './systems/projects';
+import { projectDrawables } from './art/projects';
 import { Trials, closeResult, trialNip } from './systems/trials';
 import { jobGates, jobsAction, jobsHint, jobsMorning, jobsNight, jobsUpdate } from './systems/jobs';
 import { RESULT_READY, drawJobs, resultAge } from './ui/jobs';
@@ -56,10 +61,13 @@ import type { HostNet } from './net/host';
 import type { GuestNet } from './net/guest';
 import { coopKeys, drawCoop, openCoop } from './ui/coop';
 import { drawTransfer, openTransfer, transferKeys } from './ui/transfer';
+import { drawPhoto, photoKeys } from './ui/photo';
+import { Favour } from './systems/favour';
+import { Achievements } from './systems/achievements';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop' | 'transfer';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop' | 'transfer' | 'photo';
 export type Request = 'new' | 'continue' | 'title' | 'join' | null;
 
 export interface DayStats {
@@ -160,11 +168,16 @@ export class Game {
   private tierCheckT = 0;
   orders = new Orders();
   trials = new Trials();
+  favour = new Favour(); // each buyer's favour (systems/favour.ts)
+  achievements = new Achievements(); // badges, and the cards that bring them
   feel = new Feel();
   weather = new Weather();
   season = new Seasons();
   seasonal = new Seasonal(); // lambs, the shearer, the fair, winter hay
+  valley!: Valley; // the village, the paddocks, the old bridge
+  farmwork = new Farmwork(); // the shearing shed, the dairy, the agility yard
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
+  projects = new Projects(); // valley projects: herding work that changes a place for good
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting
   private restT = 0;
   private idleT = 0;
@@ -189,6 +202,8 @@ export class Game {
     this.map = new WorldMap();
     this.baked = bake(this.map);
     this.ranch = new Ranch(this.map);
+    this.valley = new Valley(this.map);
+    this.ranch.landRule = (kind, tx, ty, w, h) => this.valley.landProblem(kind, tx, ty, w, h);
     this.ranch.setupStarter();
     const door = this.doorPoint();
     this.dog = new Dog(door.x, door.y);
@@ -285,7 +300,7 @@ export class Game {
       const t = tierOf(n);
       // The tier card is the banner; whatever banner was up waits behind it.
       this.feel.tierCard = { n, name: t.name, blurb: t.blurb, brings: t.brings, t: 5.5, max: 5.5 };
-      this.feel.confetti(this.screen.W);
+      this.feel.confetti(this.screen.W, 40, this.screen.H);
       this.feel.shake(1, 0.35);
       buzz(this.input.touchMode, [30, 60, 30, 60, 90]);
       this.audio?.play('tierup');
@@ -296,6 +311,15 @@ export class Game {
   }
 
   ledgerNew = false;
+
+  // Open the Ledger, at one of its pages (a badge's card tapped).
+  openLedger(page?: string) {
+    const i = LEDGER_PAGES.findIndex((p) => p.id === page);
+    if (i >= 0) ledgerView.page = i + 1;
+    this.mode = 'ledger';
+    this.ledgerNew = false;
+    this.input.clearQueue();
+  }
 
   isOnScreen(x: number, y: number, m = 8) {
     const { ox, oy, W, H } = this.view();
@@ -385,6 +409,7 @@ export class Game {
     this.showBanner(`DAY ${this.day.day}`, 'BRING THEM HOME BEFORE DUSK', 2.6);
     jobsMorning(this, spawn);
     this.discovery.morning(this);
+    this.projects.morning(this, spawn);
     saveGame(this);
   }
 
@@ -397,9 +422,11 @@ export class Game {
     }
     this.predators = [];
     seasonalEvening(this); // winter hay, the fair packs up
+    farmworkEvening(this); // the dairy yard empties
     const sale = sellAllGoods(this);
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
+    this.projects.evening(this, sale.value); // the mill at the falls
     this.totals.days++;
     const wild = this.animals.filter((a) => !a.pen && !a.gone);
     const strays = wild.filter((a) => a.stray).length;
@@ -418,8 +445,13 @@ export class Game {
   }
 
   // Day transitions go through a dithered plum fade.
+  // In play it closes as an iris on the dog (and opens on it again).
   fadeTo(act: () => void) {
-    if (this.feel.fadeTo(act)) this.input.clearQueue();
+    const at = () => {
+      const v = this.view();
+      return this.mode === 'play' ? { x: this.dog.x - v.ox, y: this.dog.y - v.oy - 4 } : { x: v.W / 2, y: v.H / 2 };
+    };
+    if (this.feel.fadeTo(act, 0.3, 0.4, at)) this.input.clearQueue();
   }
 
   quitToTitle() {
@@ -447,6 +479,7 @@ export class Game {
     this.feel.update(dt, this.coins, this.screen.H);
     if (this.feel.fading) return;
     if (this.net?.role === 'guest') {
+      this.achievements.guestUpdate(this, dt); // what is ours to earn here
       this.net.update(this, dt);
       return;
     }
@@ -479,6 +512,11 @@ export class Game {
       this.coopWorld(dt);
       return;
     }
+    if (this.mode === 'photo') {
+      photoKeys(this, dt);
+      this.coopWorld(dt);
+      return;
+    }
     if (this.mode === 'transfer') {
       transferKeys(this);
       if (this.demo) this.updateDemo(dt);
@@ -498,7 +536,7 @@ export class Game {
       return;
     }
     if (this.mode === 'ledger') {
-      if (this.input.pressed('ledger') || this.input.pressed('cancel') || this.input.pressed('confirm')) this.mode = 'play';
+      if (ledgerKeys(this)) this.mode = 'play';
       this.coopWorld(dt);
       return;
     }
@@ -600,6 +638,7 @@ export class Game {
     for (const ev of this.ranch.update(dt, this.animals, night, this.dog.x, this.dog.y, this.coop)) this.onRanchEvent(ev);
     jobsUpdate(this, dt);
     this.discovery.update(this, dt);
+    this.projects.update(this, dt);
     if (!night && !this.trials.run) updateProduce(this, dt * this.rest);
     if ((this.groupT -= dt) <= 0) {
       this.groups = findGroups(this.animals);
@@ -614,6 +653,8 @@ export class Game {
     this.fx.update(dt);
     this.life.update(this, dt);
     this.folk.update(this, dt);
+    this.favour.update(this, dt);
+    this.achievements.update(this, dt);
     this.updateCamera(dt);
     this.updateTips(dt);
   }
@@ -644,9 +685,9 @@ export class Game {
   // ends it at once. Never at night or under the bot.
   canRest(): boolean {
     const d = this.dog;
-    if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || !this.inRanch()) return false;
+    if (!d.lying || this.day.phase === 'night' || this.trials.run || this.input.override || (!this.inRanch() && !this.projects.restsHere(d.x, d.y))) return false;
     // Co-op: everyone has to be lying down at home for the day to fly by.
-    if (this.coop.some((o) => !o.lying || this.map.regionAt(o.x, o.y)?.id !== 'ranch')) return false;
+    if (this.coop.some((o) => !o.lying || (this.map.regionAt(o.x, o.y)?.id !== 'ranch' && !this.projects.restsHere(o.x, o.y)))) return false;
     // Anything loose right by the dog stops it; further off, only stock that
     // is moving or upset does (calm strays grazing by the yard do not).
     return !this.animals.some((a) => {
@@ -681,9 +722,12 @@ export class Game {
   // ---- Night ----
 
   sheltered(p: Pen): boolean {
-    if (this.ranch.buildings.some((b) => b instanceof Barn && Math.hypot(b.cx - p.cx, b.cy - p.cy) <= b.shelterRadius)) return true;
+    // A field shelter inside, or a barn's ring reaching its middle or its gate.
+    if (p.has('shelter')) return true;
+    const gp = p.gatePoint(0);
+    if (this.ranch.buildings.some((b) => b instanceof Barn && Math.min(Math.hypot(b.cx - p.cx, b.cy - p.cy), Math.hypot(b.cx - gp.x, b.cy - gp.y)) <= b.shelterRadius)) return true;
     // A helper lying by a pen's gate guards it.
-    return this.day.phase === 'night' && this.helpers.some((h) => h.guardPen === p && Math.hypot(h.x - p.cx, h.y - p.cy) < 60);
+    return this.day.phase === 'night' && this.helpers.some((h) => h.guardPen === p && Math.min(Math.hypot(h.x - p.cx, h.y - p.cy), Math.hypot(h.x - gp.x, h.y - gp.y)) < 60);
   }
 
   startNight() {
@@ -774,11 +818,12 @@ export class Game {
       const gp = p.gatePoint(-6);
       return { x: gp.x, y: gp.y, open: p.swing > 0.8, accepts: (a: Animal) => p.accepts(a) };
     });
-    gates.push(...jobGates(this));
+    gates.push(...jobGates(this), ...this.projects.gates());
     return { map: this.map, sources: this.sources, dogX: d.x, dogY: d.y, dogR: d.r, dogLying: d.lying, gates, weather: this.weather, snow: this.season.snow, dogs: this.coop.length ? this.coop : undefined };
   }
 
   private onDogEvent(ev: 'bark' | 'nip') {
+    this.achievements.dogEvent(this, ev);
     const d = this.dog;
     const [kx, ky] = { r: [1, 0], l: [-1, 0], u: [0, -1], d: [0, 1] }[d.face];
     if (ev === 'bark') {
@@ -809,9 +854,7 @@ export class Game {
       this.feel.kick(Math.round(d.hx * 2), Math.round(d.hy * 2), hit ? 0.14 : 0.08);
       if (hit) this.feel.hitstop = 0.06;
       buzz(this.input.touchMode, hit ? 24 : 10);
-      const nx = d.x + d.hx * 7, ny = d.y + d.hy * 7 - 2;
-      for (let i = 0; i < 4; i++)
-        this.fx.add({ kind: 'spark', x: nx, y: ny, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, max: 0.18, color: hit ? C.butter : C.wool });
+      this.fx.impact(d.x + d.hx * 7, d.y + d.hy * 7 - 2, !!hit);
     }
   }
 
@@ -844,6 +887,7 @@ export class Game {
       const { label } = calmRating(avg);
       this.audio?.thatllDo(label);
       if (label === 'CALM') this.totals.calmBatches++;
+      this.achievements.drive(this, ev.batch, label);
       const value = ev.batch.reduce((s, a) => s + a.deliveryValue, 0);
       const sp = ev.batch[0].sp;
       this.showBanner("THAT'LL DO!", `${n} ${(n === 1 ? sp.name : sp.plural).toUpperCase()}  ${label}${value ? `  +${value}$` : ''}`, 2.8);
@@ -1043,9 +1087,9 @@ export class Game {
     return { ox, oy, W, H };
   }
 
-  // Trial course, buyers' yards and carts, hidden places, for the y-sorted world layer.
+  // Trial course, buyers' yards and carts, hidden places, valley projects, for the y-sorted world layer.
   extraDrawables(g: CanvasRenderingContext2D): Drawable[] {
-    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...fairDrawables(this, g)];
+    return [...courseDrawables(this, g), ...decorDrawables(this, g), ...landmarkDrawables(this, g), ...projectDrawables(this, g), ...fairDrawables(this, g), ...valleyDrawables(this, g)];
   }
 
   // Debug: the whole world as one image.
@@ -1095,6 +1139,8 @@ export class Game {
       drawLook(this, g, v.W, v.H);
     } else if (this.mode === 'transfer') {
       drawTransfer(this, g, v.W, v.H);
+    } else if (this.mode === 'photo') {
+      drawPhoto(this, g, v.W, v.H);
     }
     drawCoop(this, g, v, 'ui');
     this.feel.drawCover(g, v.W, v.H);

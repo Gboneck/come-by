@@ -1,8 +1,9 @@
 import type { Game } from '../game';
 import { Animal } from '../entities/animal';
 import type { Coat } from '../art/animals';
-import { Pen, type BuildingKind, type Rot } from '../ranch/buildings';
+import { Pen, type BuildingKind, type PenFixture, type Rot } from '../ranch/buildings';
 import { defOfKind } from '../ranch/catalog';
+import { valleyLoad, valleySave, type ValleySave } from './valley';
 import { Haystack } from '../ranch/structures';
 import { LOFT_MAX, type FairEntry } from './seasonal';
 import { makeBuilding } from '../ui/build';
@@ -11,11 +12,14 @@ import type { SpeciesId } from '../world/map';
 import { newTotals, type Totals } from './progression';
 import type { UpKey } from './economy';
 import { morningOrders, type Order } from './orders';
+import type { FavourSave } from './favour';
+import type { AchSave } from './achievements';
 import type { ClassId } from './trials';
 import { applyLook, readLook, type Look } from '../ui/look';
 import { PIECES, type PlacedDecor } from '../ui/decorbuild';
 import { SKIES, type Sky } from './weather';
 import type { DiscoverySave } from './discovery';
+import type { ProjectsSave } from './projects';
 import { mergeTravels } from '../net/travels';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
@@ -38,7 +42,9 @@ export interface SaveData {
   totals: Totals;
   upgrades: Record<UpKey, number>;
   owned: string[];
-  buildings: { kind: BuildingKind; tx: number; ty: number; rot: Rot; level: number; trough?: boolean; goods?: number; animals?: SavedAnimal[]; hungry?: boolean; bales?: number }[];
+  buildings: { kind: BuildingKind; tx: number; ty: number; rot: Rot; level: number; trough?: boolean; goods?: number; animals?: SavedAnimal[]; hungry?: boolean; bales?: number;
+    // Paddocks (round four): size, gate, fixtures, goods by kind. Old pens lack them.
+    w?: number; h?: number; gate?: number; fixtures?: PenFixture[]; goodsBy?: Partial<Record<SpeciesId, number>> }[];
   wild: SavedAnimal[];
   helpers: { name: string; mode: HelperMode }[];
   // Added with orders and trials; older saves lack them.
@@ -48,11 +54,19 @@ export interface SaveData {
   // Added with customization; older saves get the defaults.
   look?: Partial<Look>;
   decor?: PlacedDecor[];
+  // Added with buyers' favour and achievements (older saves: worked out on load).
+  favour?: FavourSave;
+  achievements?: AchSave;
   weather?: { sky: Sky; forecast: Sky; dir: [number, number] };
   // Added with exploring.
   discovery?: DiscoverySave;
+  projects?: ProjectsSave; // added with the valley projects
   // Added with seasons (the calendar itself follows from `day`).
   seasonal?: { loft: number; hungryNights: number; fair: FairEntry[] };
+  // Added with the valley growing: the village, paddocks, the old bridge,
+  // and the agility yard's training.
+  valley?: ValleySave;
+  farmwork?: { marks: Partial<Record<UpKey, number>>; trainedDay: number; best: number; cleanRuns: number; shorn: number; milked: number };
 }
 
 function store(): Storage | null {
@@ -121,6 +135,11 @@ export function saveData(game: Game): SaveData {
         if (b instanceof Pen) {
           out.trough = b.hasTrough;
           out.goods = b.goods;
+          out.w = b.w;
+          out.h = b.h;
+          if (b.gateAt !== null) out.gate = b.gateAt;
+          if (b.fixtures.length) out.fixtures = b.fixtures.map((f) => ({ ...f }));
+          if (Object.keys(b.goodsBy).length) out.goodsBy = { ...b.goodsBy };
           out.animals = b.animals.filter((a) => !a.gone).map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), produceT: Math.round(a.produceT), ...seasonFields(a, ks) }));
           if (b.hungry) out.hungry = true;
         }
@@ -140,9 +159,14 @@ export function saveData(game: Game): SaveData {
     trials: { won: game.trials.won, cups: game.trials.cups, last: game.trials.lastPrizeDay },
     look: game.look,
     decor: game.decor,
+    favour: game.favour.save(),
+    achievements: game.achievements.save(),
     weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
     discovery: game.discovery.save(game),
+    projects: game.projects.save(),
     seasonal: { loft: game.seasonal.loft, hungryNights: game.seasonal.hungryNights, fair: game.seasonal.fair },
+    valley: valleySave(game),
+    farmwork: (({ marks, trainedDay, best, cleanRuns, shorn, milked }) => ({ marks, trainedDay, best, cleanRuns, shorn, milked }))(game.farmwork),
   };
 }
 
@@ -184,6 +208,11 @@ export function ownDiscovery(): DiscoverySave | undefined {
   return read()?.discovery;
 }
 
+// Our own achievements (a co-op guest shows them, and earns no others).
+export function ownAchievements(): AchSave | undefined {
+  return read()?.achievements;
+}
+
 export function saveInfo(): { day: number; tier: number; look?: Partial<Look> } | null {
   const d = read();
   return d ? { day: d.day, tier: d.tier, look: d.look } : null;
@@ -207,6 +236,8 @@ export function loadInto(game: Game): boolean {
   game.upgrades = { ...game.upgrades, ...d.upgrades };
   game.applyUpgrades();
   game.owned = new Set(d.owned);
+  game.favour.load(d.favour);
+  game.achievements.load(game, d.achievements);
 
   game.animals = [];
   const ks = new Map<number, Animal>();
@@ -248,7 +279,10 @@ export function loadInto(game: Game): boolean {
   game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery);
+  game.projects.load(game, d.projects);
   mergeTravels(game); // places and keepsakes found visiting friends' ranches
+  valleyLoad(game, d.valley);
+  Object.assign(game.farmwork, d.farmwork ?? {});
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));
@@ -266,6 +300,7 @@ export function loadInto(game: Game): boolean {
     game.orders.list = d.orders.map((o) => ({ ...o }));
     game.orders.nextId = d.nextOrder ?? game.orders.list.length + 1;
   } else morningOrders(game);
+  game.achievements.backfill(game); // badges an older save had already earned
   saveGame(game);
   return true;
 }
@@ -281,8 +316,16 @@ function buildRanch(game: Game, d: SaveData, pen?: (b: Pen, sb: SaveData['buildi
     b.level = sb.level;
     game.ranch.buildings.push(b);
     if (b instanceof Pen) {
-      b.hasTrough = !!sb.trough;
+      // An old save's pen is an 8x7 paddock with its gate in the middle.
+      if (sb.w && sb.h) {
+        b.w = sb.w;
+        b.h = sb.h;
+      }
+      b.gateAt = sb.gate ?? null;
+      if (sb.fixtures) b.fixtures = sb.fixtures.map((f) => ({ ...f }));
+      else b.hasTrough = !!sb.trough;
       b.goods = sb.goods ?? 0;
+      b.goodsBy = { ...(sb.goodsBy ?? {}) };
       b.hungry = !!sb.hungry;
       pen?.(b, sb);
     }
@@ -303,6 +346,7 @@ export function loadWorld(game: Game, d: SaveData, dog: Look) {
   game.upgrades = { ...game.upgrades, ...d.upgrades };
   game.applyUpgrades();
   game.owned = new Set(d.owned);
+  game.favour.load(d.favour);
   buildRanch(game, d);
   const host = readLook(d.look);
   game.look = { ...host, name: dog.name, dog: { ...dog.dog } };
@@ -310,6 +354,8 @@ export function loadWorld(game: Game, d: SaveData, dog: Look) {
   game.decor = (d.decor ?? []).filter((x) => PIECES.some((p) => p.id === x.id));
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery ? { ...d.discovery, out: [] } : undefined);
+  valleyLoad(game, d.valley);
+  game.projects.load(game, d.projects);
   game.ranch.restamp();
   if (d.trials) {
     game.trials.won = [...d.trials.won];

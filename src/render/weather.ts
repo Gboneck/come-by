@@ -4,7 +4,7 @@ import { makeCanvas } from '../gfx/screen';
 import { hash2 } from '../rng';
 import { WORLD_W } from '../world/map';
 import { windStrength } from './wind';
-import { seasonLook } from '../art/seasonlook';
+import { lightLook, seasonLook } from '../art/seasonlook';
 import type { Game } from '../game';
 import { NS, tileNoise, type SkyOpts } from './night';
 import { quality } from '../gfx/quality';
@@ -84,13 +84,16 @@ export class WeatherFx {
     if (seasonLook.snow > 0.3) return; // the snow layer has its own look
     const wetL = this.wet * 5;
     const clouds = 9 * Math.max(0, 1 - w.rain * 2.5) * Math.max(0, 1 - w.fog * 2) * Math.max(0, 1 - dark * 3);
-    if ((wetL < 0.5 && clouds < 0.5) || !quality.shade) return;
+    // The golden hour warms the sunlit grass: a dither of buttercup on the
+    // meadow, the moss lightened (the shadows, drawn after, stay cool).
+    const gold = lightLook.golden * 0.045 * Math.max(0, 1 - w.rain * 3) * Math.max(0, 1 - w.fog * 2);
+    if ((wetL < 0.5 && clouds < 0.5 && gold < 0.01) || !quality.shade) return;
     if (!this.wc || this.wc.width !== W || this.wc.height !== H) {
       [this.wc, this.wg] = makeCanvas(W, H);
       this.wimg = this.wg.createImageData(W, H);
     }
     const buf = new Uint32Array(this.wimg!.data.buffer);
-    const src = game.baked.groundPx, meadow = U32.meadow, moss = U32.moss, sage = U32.sage;
+    const src = game.baked.groundPx, meadow = U32.meadow, moss = U32.moss, sage = U32.sage, butter = U32.butter;
     const CT = this.cloudTex, cx = Math.floor(this.cloudX), cy = Math.floor(this.cloudY);
     for (let y = 0; y < H; y++) {
       const wy = y + oy;
@@ -104,9 +107,13 @@ export class WeatherFx {
           if (n > 160) level += clouds * Math.min(1, (n - 160) / 30);
         }
         let d = 0;
-        if (BAYER4[by + ((x + ox) & 3)] < level) {
+        const thr = BAYER4[by + ((x + ox) & 3)];
+        if (thr < level) {
           const c = src[row + x];
           d = c === meadow ? moss : c === moss ? sage : 0;
+        } else if (gold > 0 && hash2(x + ox, wy, 77) < gold) {
+          const c = src[row + x];
+          d = c === meadow ? butter : c === moss ? meadow : 0;
         }
         buf[y * W + x] = d;
       }
@@ -144,6 +151,18 @@ export class WeatherFx {
             g.fillRect(p.x + r, p.y, 1, 1);
           }
         }
+      }
+    }
+    // After the rain, the wet paths glint where the light catches them.
+    if (w.rain < 0.1 && this.wet > 0.3 && quality.fx >= 0.6) {
+      const n = Math.round((this.wet * W * H) / 2200);
+      g.fillStyle = C.wool;
+      for (let j = 0; j < n; j++) {
+        const s = this.t * 2 + hash2(j, 0, 25) * 7, slot = Math.floor(s);
+        if (s - slot > 0.3) continue;
+        const x = ox + Math.floor(hash2(j, slot, 26) * W), y = oy + Math.floor(hash2(j, slot, 27) * H);
+        const so = game.baked.soil[y * WORLD_W + x];
+        if (so === 1 || so === 2) g.fillRect(x, y, 1, 1);
       }
     }
     if (w.rain < 0.05) return;

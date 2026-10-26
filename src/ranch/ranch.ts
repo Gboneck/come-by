@@ -3,6 +3,7 @@ import { BLOCK_ANIMAL, CW, CH, MH, MW, REGIONS, TS, YARDS, type WorldMap } from 
 import { Building, Farmhouse, Pen, RegionGate, type BuildingKind, type Rot } from './buildings';
 import { FieldGate } from './structures';
 import { Course, Ring, Yard, type Fixture } from './fixtures';
+import { Village } from './village';
 import { setPenPrice } from './catalog';
 import { placementProblem, roadMask } from './road';
 
@@ -19,6 +20,7 @@ export class Ranch {
   yards: Yard[];
   course: Course;
   ring: Ring; // the autumn fair's judging ring
+  village = new Village(); // the village at the crossroads
   fixtures: Fixture[];
   // The drove road through the clearing (tiles), kept free of building.
   road: Uint8Array;
@@ -28,7 +30,7 @@ export class Ranch {
     this.yards = YARDS.map((s) => new Yard(s));
     this.course = new Course();
     this.ring = new Ring();
-    this.fixtures = [...this.yards, this.course, this.ring];
+    this.fixtures = [...this.yards, this.course, this.ring, this.village];
     for (const r of REGIONS) {
       if (!r.gate) continue;
       const span = this.gateSpan(r.gate.x, r.gate.y, r.gate.vertical);
@@ -104,9 +106,11 @@ export class Ranch {
 
   // Why a new building cannot go here (null: it can): the drove road, and a
   // pen gate that would open onto a wall or trees.
-  placementProblem(kind: BuildingKind, tx: number, ty: number, w: number, h: number, rot: Rot): string | null {
-    return placementProblem(this.map, this.road, this.buildings, kind, tx, ty, w, h, rot);
+  placementProblem(kind: BuildingKind, tx: number, ty: number, w: number, h: number, rot: Rot, pen?: Pen): string | null {
+    return placementProblem(this.map, this.road, this.buildings, kind, tx, ty, w, h, rot, pen) ?? this.landRule?.(kind, tx, ty, w, h) ?? null;
   }
+  // The land plots' rule on top (systems/valley.ts): scrub takes only fences.
+  landRule: ((kind: BuildingKind, tx: number, ty: number, w: number, h: number) => string | null) | null = null;
 
   // Hold a pen's gate open so its stock can be driven out (or stop).
   setLetOut(p: Pen, on: boolean) {
@@ -133,7 +137,8 @@ export class Ranch {
     for (const a of animals) {
       if (a.pen || a.gone || a.carried || a.trial) continue;
       for (const p of this.pens) {
-        if (!p.letOut && p.contains(a.x, a.y)) {
+        // Only kinds that get along share a paddock (buildings.ts getsAlong).
+        if (!p.letOut && p.contains(a.x, a.y) && p.canHold(a.sp.id)) {
           a.pen = p;
           a.penT = 0;
           a.stray = false;
@@ -194,6 +199,15 @@ export class Ranch {
         p.open = false;
       }
       if (!was && p.open) ev.push({ kind: 'open', pen: p });
+      // Anyone who slipped in but does not belong is put back out as it shuts.
+      if (was && !p.open) {
+        const out = p.gatePoint(10);
+        for (const a of animals)
+          if (!a.pen && !a.gone && !a.carried && p.covers(a.x, a.y)) {
+            a.x = out.x + (Math.random() - 0.5) * 6;
+            a.y = out.y + (Math.random() - 0.5) * 6;
+          }
+      }
       const before = p.swing;
       p.swing = Math.max(0, Math.min(1, p.swing + (p.open ? 1 : -1) * dt * 2.2));
       if ((before > 0.85) !== (p.swing > 0.85)) p.applyGate(this.map);

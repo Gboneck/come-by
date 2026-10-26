@@ -651,6 +651,384 @@ another origin are never answered from the cache.
 - [x] `scripts/daytest.mjs`: calm, rough, late and frantic-at-dusk first
       drives all afford the kennel by the end of day one
 
+## M28 UI and effects, round four (visible quality)
+- [x] Font: the body face proportional (I and the stops are 1px) with
+      automatic kerning; a bold 7px heading face for titles, banners, the
+      logo and plaques; a two-tone coin that keeps a plum rim on paper
+- [x] Frames: every panel bevelled (plum outline, light top and left,
+      shade bottom and right), gilt when it wants attention, rivets on big
+      ones; wool paper with ruled lines for the journal and the Ledger
+- [x] HUD: a sun-and-moon dial clock (season icon on a clear day), a coin
+      that glints in the purse, a bone-shaped stamina gauge by the dog (with
+      a bead of sweat when spent), the flock's own likeness on its card,
+      icons on BUILD, HELP and the goal; the place name on a teal plaque;
+      bevelled thumb buttons with tiny pictures
+- [x] Screens: the end of day as a journal page (taped, ruled, a CALM
+      stamp); the Ledger as a cloth-bound book with a ribbon, ticked goals
+      and an ink-on-paper map with uncharted hatching and a compass; panel
+      titles in the heading face; build mode's corner brackets (a cross where
+      it cannot go) and headings on the info card; transitions close as an
+      iris on the dog
+- [x] Effects: the bark ring as a dithered shockwave, sparks as streaks
+      and an impact star on a nip, dust two-tone, mud on wet ground and
+      snow in winter, ripples under splashes, notes and hearts over a
+      content flock and stress lines over a nervous one, "THAT'LL DO" as a
+      rubber stamp with a dust puff, fireworks on a tier-up, coins trailing
+      a glint; thinned by `quality.fx`
+- [x] Title: the logo in the heading face, its letters dropping in with a
+      bounce, a glint running along it
+- [x] Photo mode (pause menu, TAKE A PHOTO): no HUD, pan to frame the shot,
+      a postcard frame with the ranch's name, the date, a stamp with your
+      dog on it and a postmark; SNAP saves a crisp PNG (the share sheet on
+      a phone, a download elsewhere)
+- [x] Checks: typecheck, build, shot, uitour at every size, padtest,
+      cooptest, perftest before and after
+- [x] The Ledger's pages: cloth tabs on the cover (RANCH first), Q/E,
+      [ ], LB/RB or a tap to turn; other features add pages to
+      `LEDGER_PAGES` (src/ui/ledger.ts) and draw in the book's ink
+- [x] `sharePng()` (src/ui/photo.ts): any canvas as a crisp PNG, the share
+      sheet on a phone, a download elsewhere; photo mode uses it
+- [x] Paddocks in build mode (src/ui/paddockbuild.ts): drag out a field
+      (or SPACE / MARK OUT drops one at the cursor), then size it by its
+      side handles, slide the gate round the fence, move it whole; live
+      price, "HOLDS 12 SHEEP / 24 DUCKS" and the reason a spot is refused,
+      the refused tiles in plum. Phones get W, H and GATE steppers and
+      BUILD / CANCEL, so no drag has to be precise; keys and pads cycle the
+      handle the arrows move (R / Y). A built paddock reopens (tap it, U /
+      Y, EXTEND) with sides that only go outward, priced at the
+      difference; troughs and the like snap inside it; its card shows the
+      mix, a bar of spaces and its fixtures. Waits on the ranch's paddock
+      rules (`setPaddockRules`); `src/ui/paddockdev.ts` is a stand-in for
+      trying it (debug and tests only)
+## M29 Paddocks you size yourself, and the valley grows (gameplay, round four)
+- [x] Paddocks instead of fixed pens (`src/ranch/paddock.ts`, the rules for
+      build mode): any size from 6x6 to 28 across, the gate on any side at
+      any point along it. Room grows with the area (an 8x7 still holds
+      16), the price with the fence (an 8x7 still costs 25$), so one big
+      paddock costs about half as much a head as small ones. EXTEND drags
+      a side out and pays only for the new fence; the gate moves for free.
+      Build mode's drag handles are the UI session's
+- [x] Mixed flocks that get along: ducks with anyone, sheep with goats,
+      cattle with ponies; others are refused at the gate (and put back out
+      if they slip in). Goods are kept by kind; a mixed paddock's sign
+      counts room
+- [x] Fixtures inside instead of whole-pen upgrades: the trough (now
+      placed where you put it), a field shelter (safe at night, as in a
+      barn's ring) and a hay rack (a third less hay). A barn's ring shelters
+      a big paddock if it reaches its middle or its gate. Old upgraded pens
+      keep their half again
+- [x] Fields past the clearing: two plots off the ranch's south side to buy
+      at their signs (200$, 300$). Bought, they take paddocks and fences at
+      once; stock grazing on them, penned or loose, eats the scrub down,
+      and then anything can be built there
+- [x] Old saves: every pen becomes an 8x7 paddock with its gate, stock,
+      goods, trough and upgrade as they were
+- [x] A village at the crossroads (`src/ranch/village.ts`,
+      `src/systems/valley.ts`) on a new green south-west of the junction:
+      a well at first, then a cottage (fill an order), the market square
+      (4 orders), a second cottage (graze a field clear), the smithy (pen 4
+      cattle), the hall (a trial or fair ribbon) and a third cottage (40
+      penned). One step a morning, the morning after the deed, in order; a
+      banner says what came and the Ledger what is next
+- [x] Market day, the third of each season once the square stands: the
+      drover always has an order and pays half again; goods sell for a
+      quarter more. Festivals, the last day of each season once the hall
+      stands: the season's decorations on the green, and five of a kind
+      driven through the arch make a parade
+- [x] The old bridge at the ford: with a smith to forge the yoke, a cow
+      driven through the woodpile picks up a log (and walks a little
+      slower); six logs mend it, and cattle cross dry-shod, without balking
+- [x] New ranch buildings (`src/systems/farmwork.ts`): the shearing shed
+      (summer: sheep walked along its chute, funnelled in by its wings, are
+      shorn for a wool bonus), the dairy (mornings: cows walked into its
+      yard are milked, paid by how calm they came, and let back out) and
+      the agility yard (a clean run under par counts once a day, three to
+      a free level of speed or stamina)
+- [x] First-pass art (`src/art/village.ts`, `valley.ts`, `farm2.ts`),
+      village lights at night, legacy goals, saves, co-op shared state
+      (paddocks, the valley), the Ledger's village lines
+- [x] The village's people (`src/entities/villagers.ts`, on Characters'
+      Person): each step brings its folk, walking in up the road the
+      morning it is built: the first family; the baker and the grocer, in
+      from up the road each day to their stalls; the smith at the anvil;
+      two more families with a child each; the warden and the weaver. They
+      draw water, garden, sit on the green's bench (it seats two), shop and
+      stop for a word; on market day they crowd the stalls (the weaver
+      minds the third), on festival day they line the green and cheer a
+      parade; at dusk they go home and the warden walks the green with a
+      lantern. The first family says what the village waits on next. They
+      roll their own dice, so seeded runs play the same
+- [x] The pace bot extends paddocks (and buys a field) before building
+      new ones and hauls timber; it has routines for the shed, dairy and
+      agility yard but in practice never gets to them, as it keeps its land
+      for stock while short (they are checked in valleytest instead);
+      `scripts/paddocktest.mjs`, `scripts/valleytest.mjs`
+
+**Herding is unchanged** (`node scripts/tune.mjs <species>`, all five).
+Paddocks alone change nothing (identical to the village-only build). The
+village and field carves move the ground near tune's goal a little, which
+nudges single runs both ways:
+
+| species | calm walk s | reached (of 33) | mean stress | panics |
+|---|---|---|---|---|
+| duck | 15.9 → 16.1 | 26 → 26 | 0.06 → 0.06 | 21 → 14 |
+| sheep | 12.2 → 11.2 | 27 → 27 | 0.10 → 0.09 | 21 → 15 |
+| goat | 120 → 120 | 20 → 18 | 0.06 → 0.05 | 10 → 10 |
+| cow | 120 → 120 | 1 → 2 | 0.02 → 0.02 | 9 → 7 |
+| pony | 6.93 → 6.87 | 29 → 28 | 0.09 → 0.11 | 14 → 17 |
+
+**Pace** (`node scripts/pacetest.mjs --seeds=1,2,3`), before (round three
+plus the village) and after (paddocks). The valley thrives on days 8, 7, 7
+before and 8, 7, 10 after. The first paddock build was much slower (10,
+38, 11): the old upgrade's half again was gone and the bot packed the
+ranch with small pens. Big paddocks now pack more a tile (up to the old
+upgraded density at four times the old pen's area), and the bot keeps its
+land for stock while short. Seed 3 still loses three days at tier 4:
+"no room for a paddock", selling stock to make room for cattle.
+
+| tier | days before | days after | enclosures at tier end, before | after | penned at tier end, before | after |
+|---|---|---|---|---|---|---|
+| 1 | 2.0 | 2.0 | 3.3 | 3.0 | 21 | 26 |
+| 2 | 1.0 | 1.0 | 4.0 | 3.0 | 33 | 35 |
+| 3 | 1.0 | 1.0 | 5.7 | 4.3 | 41 | 37 |
+| 4 | 1.7 | 2.3 | 6.0 | 5.0 | 48 | 53 |
+
+(Enclosures before: the starter pen plus every pen built, counted from the
+day logs; 16 pens were also upgraded. Tier 5 is left out: the before run
+played on to day 23.)
+
+**A year** (`--year --days=22`): seasons before and after are alike in
+earnings, hay and lambs. The valley, after:
+
+| season | earned $ | spent $ | hay stacks | lambs | village built (of 6) | fields clear (of 2) | bridge logs (of 6) |
+|---|---|---|---|---|---|---|---|
+| y1 spring | 1097 | 938 | 0 | 0 | 1.0 | 0 | 0 |
+| y1 summer | 3452 | 533 | 0 | 0 | 3.7 | 0 | 2.3 |
+| y1 autumn | 3287 | 403 | 9.3 | 0 | 4.3 | 0.3 | 2.7 |
+| y1 winter | 2915 | 27 | 0.3 | 0 | 4.3 | 0.3 | 3.0 |
+| y2 spring | 3766 | 108 | 0 | 24.7 | 4.3 | 0.3 | 4.0 |
+| y2 summer | 1706 | 0 | 0 | 0 | 4.3 | 0.3 | 4.0 |
+
+The bot has a cottage, the square and the hall by day 8 (the smithy too
+in two seeds of three; seed 1 has all six by day 12); a player who herds
+for the deeds gets there sooner. Grazing a field clear and mending the bridge are slow for the bot,
+which only does them in passing.
+## M30 Characters (graphics round four)
+Before: the dog snapped between four facings with a four-frame trot and
+gallop; animals had two or three walk frames, the same rhythm for every
+kind, and no fright beyond the head coming up; ducks stood in the pond
+with their legs clipped off. After:
+- [x] The dog, eight ways round: three-quarter views between side on and
+      towards/away (face turned to you heading down, back and nape knot
+      heading up). It turns through the in-betweens instead of snapping, a
+      reversal at speed swinging round by the side that shows its face.
+- [x] Six-frame trot and six-frame double-suspension gallop on every view,
+      built from parts (torso, head, tail, legs, the bandana's loose ends):
+      ears flop on the passing frames and pin back at a gallop, the tail
+      swings, streams or wags on its own beat, the bandana's ends lift off
+      the nape at a trot and stream at a gallop (none on a collar)
+- [x] Skid: digging in from a run or turning tail at speed, forefeet out
+- [x] Watching the stock: standing, it turns up to 90 degrees towards the
+      nearest animal it could be working, ears pricked tall; trotting round
+      a flock it turns a three-quarter view their way
+- [x] Panting (mouth open, flanks heaving) when its wind is low, sooner in
+      summer; friends' and helpers' dogs pant after a long gallop
+- [x] Proud stance at "THAT'LL DO": head up, chest out, tail wagging high
+- [x] Soaked after the ford or a long shower: flecks go dark, drips fall
+      from its belly until it shakes off; wading, the legs go under water
+- [x] The same for helpers and co-op friends' dogs (and their idles), all
+      from state that was already synced; the customization layers apply
+      to every new frame through template letters (dogstyle.ts)
+- [x] Animals: a sheep's bouncy trot, a goat's stiff-legged pronk, a duck's
+      waddle (rolling foot to foot seen end on) and wing-beating run,
+      cattle nodding along and landing heavy, ponies' manes flying at a
+      gallop and lifting with the tail when a gust comes through
+- [x] A clear startle (a jump on the spot: sheep and lambs splay, goats
+      bounce, cattle buck, ponies rear, ducks throw up their wings) at the
+      first fright or a bark, then the flight; wide eyes whenever stressed
+      hard (wool on dark faces, a dark ring on pale ones)
+- [x] Grazing: three nibbling frames and spells of chewing with the head up
+      (a duck preens); cattle chew the cud
+- [x] Ducks afloat: sitting low and bobbing, water lapping at their sides,
+      a wake opening behind them as they paddle
+- [x] Lambs skip as they go; a ewe with her lamb close turns and noses it
+- [x] Townsfolk: an eight-frame side stride with arms swinging (near and
+      far legs shaded apart), arm swing towards and away; a gesture loop
+      while talking (hand up, palm out, a point, a nod), blinks and hands on
+      hips standing about; hammer and axe in four frames (wind-up, the
+      strike on the blow's sound, the bounce); bales and sacks held in both
+      arms; crouching to a basket, kneeling side on; sitting with a foot
+      swung; waving in every facing; the lantern and crook in the hand
+- [x] Clothes with the season: shirt sleeves and the rancher's straw hat in
+      summer, scarves in autumn, scarves, mittens, longer coats and bobble
+      hats in winter; the cast told apart (a tall drover, the auctioneer's
+      boater and waistcoat, the judge's bowler and white beard, the
+      shepherd's hood, the miller stout and bearded, the carpenter's apron)
+- [x] `villager(spec)` in people.ts makes a new villager (coat, legs, hat,
+      build, apron, beard, skirt, scarf...); the village's people (smith,
+      baker, grocer, weaver, six cottagers, the warden) are in folk.ts'
+      CAST, appended to FOLK_IDS so guests see them; every lantern lights
+- [x] Coyotes and wolves: a six-frame stalking creep (shoulders high, head
+      low, tail down), the rush into a flat gallop, carrying off head high,
+      fleeing with the tail clamped, digging rump up, and a howl (head
+      thrown back) as each dig begins; down and up facings too
+- [x] Eye glints at night: a pair of buttercup glints set in dark sockets
+      that ride with the head, blink on each animal's own rhythm and flash
+      when it looks your way
+- [x] Animals with a load (`a.load`) lean into it, head down at every step
+- [x] Sprite sheet rows for the new dog views and animal poses (`?sprites`)
+- [x] Checks: typecheck, build, shot, regions; `tune.mjs <species>
+      --seed=7` identical to before for all five; every sprite scanned:
+      all in the palette, red only on the player's dog; cooptest 48/48
+      (with --shots); folktest, lambtest, nighttest; perftest at 6x
+      throttle run alternately against the base on a busy machine, best of
+      three: day 14.0 ms before / 15.0 ms after, worst (winter storm night,
+      predators, helpers) 19.7 / 18.5 ms, medians overlapping: no
+      measurable cost
+## M31 World and light, round four
+Before → after, in plain words:
+- [x] Shadows: trees' shadows were baked in one place all day; now they
+      move with the sun, long to the west at sunrise, short at noon, long to
+      the east by evening, and buildings' shadows swing with them. Animals'
+      shadows shift the same way. No shadows at night.
+- [x] Golden hour: the late afternoon light warms the sunlit grass with a
+      light buttercup speckle (the shade stays cool); low sun slants in
+      shafts through the treetops in the golden hour.
+- [x] Blue hour: dusk and dawn come in teal before the plum of night.
+- [x] Night: lantern and camp-fire pools end in a dithered buttercup ring;
+      the farmhouse windows glow out into the dark.
+- [x] Morning mist drifts on fair mornings and burns off by mid-morning.
+- [x] Depth: trunks and flaring roots show under the crowns and along the
+      forest's lower edge; the big outcrops stand as taller cliffs with a
+      pale band of strata; the far bank of the river shows its earth face;
+      contact shadows hug building feet.
+- [x] Each region more its own: willows trailing strands by the water,
+      flowering gorse among the rocks, sheep tracks over the hills.
+- [x] Water: trees reflected below the far bank; fish jump now and then;
+      wet paths glint after rain.
+- [x] Wildlife: rabbits at the forest edge morning and evening, deer at
+      dawn and dusk, crows on the fences, frogs on the banks; all flee the
+      dog (hops, bounds into the trees, lifting off, a leap into the water).
+- [x] Checks: typecheck, build, shot, regions in every season, weather and
+      time of day, perftest, picturetest, tune --seed=7 (sheep, and cattle
+      in a winter storm: identical to `test/round-4`). perftest, run back to
+      back with an untouched `test/round-4` (best batch, phone size):
+      title 5.6 vs 6.3 ms, day 9.8 vs 10.6, worst 13.1 vs 13.3 at 4x;
+      title 9.0 vs 9.8, day 15.4 vs 16.2, worst 19.0 vs 20.0 at 6x, i.e. the
+      same within the machine's noise.
+
+- [x] Paddocks of any size (for Gameplay's paddocks, `src/art/paddock.ts`):
+      pens were drawn for one 8x7 shape with the gate in the middle of a
+      side. The paddock is now drawn as any rectangle:
+      - The gate can be anywhere along any side, and a wide gate gets two
+        leaves meeting in the middle.
+      - Posts are spaced evenly along each side at about 8px (10px on a big
+        field), with stouter corner and gate posts. The rails are worn: a
+        knot, a grey weathered streak, the odd sag.
+      - A small pen is trodden all over and strewn with straw. A big one
+        reads as a field: grass inside, a trodden lane just inside the fence,
+        a worn track from the gate to the trough, longer grass in the
+        corners, flowers in spring and summer.
+      - The ground is trodden outside the gate too.
+      - Fixtures: a trough, a hay rack, and a small field shelter in the
+        ranch's roofing with straw bedding.
+      - An inner hurdle with its own gate.
+      - In snow the lanes and tracks show as trodden paths, and every fence's
+        rails (old fences too) turn dark and wet instead of vanishing
+        against the white.
+      - Checks: typecheck, build, shot, picturetest (ok), regions (ranch,
+        show, sale, drover), tune --seed=7 for sheep (identical to before).
+        perftest run back to back with the commit before, best batch at 4x:
+        day 9.5 vs 10.3–10.9 ms, worst 12.1–13.1 vs 14.0–14.4. At 6x: day
+        14.3–15.0 vs 16.3–17.1, worst 20.4 vs 19.7–21.4. Cheaper, because a
+        pen's floor is one image now and no longer redrawn pixel by pixel
+        into the picture cache every frame.
+## M32 Valley projects (world, round four)
+- [x] Herding work out in the valley that changes a place for good and opens
+      something new, alongside Gameplay's village, paddocks and old bridge:
+      - CLEAR THE REED BED (Willow Pool, tier 2, spring or summer): ducks
+        paddle the reeds down; a hay meadow: 8 more bales in the loft each autumn
+      - GRAZE THE ORCHARD CLEAR (the Old Orchard, tier 2, not winter): any
+        flock; good pasture, a sheep flock there every morning but in winter
+      - BROWSE BACK THE SCRUB (the Hidden Valley, tier 3, not winter): any
+        flock, goats quickest; its wild goats come back every day, seven of them
+      - MEND THE SHEPHERD'S HUT (tier 3): goats carry five slates from the
+        quarry under the outcrop on Rocky Rise; a waystation (lie down by the
+        hut to rest as at home) and the fold with a gate E shuts on a flock
+      - PUDDLE THE MILL POND (the Waterfall Pool, tier 4, not winter): cattle
+        held standing in the pool; a waterwheel, goods sell for a quarter more
+      - RAISE THE STONE CIRCLE (tier 5): ponies drag the four fallen stones
+        back from the Rolling Hills; midsummer on summer's second day, when
+        flocks walked through the ring pay double
+- [x] Grazing at the paddocks' per-species rates; hauling picks a load up at
+      a pile, and an animal that panics drops it back there
+- [x] Before and after drawn in code (`src/art/projects.ts`): reeds, brambles,
+      scrub, the hayrick and lilies, wildflowers, the mended hut with a slate
+      roof and smoke, the fold gate, the slate pile, fallen stones, the mill
+      pool's mud and broken wheel pit, the turning waterwheel; signboards with
+      progress; slate panniers and stone travois on the animals; bunting and
+      folk the day one is done; the midsummer bonfire and gathering
+- [x] The Ledger lists the valley (projects done, those under way with what
+      they need and bring, the next one) and flags each workable site on the
+      map; first-sight tips, progress in the place name while you work there,
+      a morning tip when one comes within reach, a banner, confetti and the
+      tier-up stinger when one is done
+- [x] Saved (old saves start with nothing); co-op: shared state, loads and
+      blessings ride in animalExtra bits 2 and 3, guests' dogs herd for them
+      and work the fold's gate
+- [x] `scripts/projecttest.mjs`; `places.mjs --half/--done`; tune.mjs before
+      and after; discoverytest, savetest and the loop tests
+## M33 Buyers' favour and achievements (round four)
+- [x] Buyers' favour (`src/systems/favour.ts`, `src/art/favour.ts`): the
+      miller, the drover, the sale yard (4 levels each) and the summer
+      shearer (3). Filled orders +3, all calm +2, two hours early +1, a
+      special order +1; a missed order -2 (short -1), never losing a level
+- [x] Each level brings something: pay 10/15/20/30% over (shown as its own
+      "+N$ @" float); special orders from level 2 (the miller's RUSH at
+      double pay, the sale yard's SHOW STOCK for calm stock only at double,
+      the drover's BIG DROVE at 1.5x); gifts at 3 (millstone, show bell and
+      fleece bale decor, free in build mode; the drover walks a rare breed
+      to his gate); at the top, FRIEND OF THE VALLEY (your ranch's name on
+      their yard, the miller's meal for the loft each winter, the drover's
+      old dog trains yours, the valley rosette; the shearer comes twice)
+- [x] The yards dress up: bunting, a striped stall over the cart, flower
+      tubs at the gate, the name board on the front fence, the special
+      order's word by the cart's pennant
+- [x] A buyer's card when they take to you (their line, the new perk,
+      hearts filling), and their line said aloud at the yard
+- [x] Achievements (`src/systems/achievements.ts`): 37 across herding,
+      trials, the ranch, the valley, the seasons and co-op, three secret
+      with hints; most read from the lifetime record, some caught as they
+      happen (a day without a bark, ten home at once all calm, a coyote
+      made to drop its prey, the cattle class won without a nip, calm in a
+      storm, resting to dusk, a friend on your ranch)
+- [x] Badges drawn in code (`src/art/badges.ts`): a frame per kind worked
+      out per pixel (medal, rosette, shield, octagon, wreath, tag) and a
+      pixel icon; locked ones in outline, secret ones a question mark
+- [x] The unlock card slides in with a stamp, confetti (scaled by
+      GRAPHICS), the `thatlldo` / `tierup` stingers and a buzz; one at a
+      time, waiting behind the tier card and the judge's card; tap it for
+      the Ledger at that badge
+- [x] The Ledger gets pages (`src/ui/achievements.ts`): RANCH LEDGER,
+      BUYERS (a favour bar each and what the next level brings) and BADGES
+      (the grid, progress on locked ones, hints for secret ones, a badge
+      opened large with SHARE). Q/E (LB/RB) turn the pages, tabs on touch
+- [x] SHARE makes a postcard of the badge (the dog on the stamp, the
+      ranch and the day) as a crisp PNG: the share sheet on a phone, a
+      download elsewhere
+- [x] The board by the farmhouse door (`src/art/trophies.ts`): rosettes,
+      class cups and the Valley Cup, a pin for every badge; a second board
+      once the first is full
+- [x] Saved additively; an older save is credited with what its totals
+      show (quietly, with one card saying how many). A co-op guest earns
+      only the co-op badges while visiting, kept with their travels and
+      folded into their own save at home; the host's favour and badge pins
+      reach guests through `src/net/shared.ts`
+- [x] `scripts/favourtest.mjs` (31 checks) and `scripts/achievetest.mjs`
+      (34 checks); padtest and cooptest gained checks for the Ledger pages,
+      guest badges and shared favour; savetest, ordertest, daytest pass;
+      `tune.mjs --seed=7` is identical to main for all five species
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1471,3 +1849,256 @@ another origin are never answered from the cache.
   and the worst possible one (frantic, penned at dusk) has 15$ on penning
   and 18$ at day's end. 10$ is below the trough (12$), so the tin cannot be
   spent on anything that would leave the kennel out of reach.
+- Characters, round four: the dog's eight ways round are a drawing matter
+  only. The sim keeps its four facings (bark lines, co-op face bits, the
+  bot); render/dogpose.ts picks a view 0..7 from the heading with some
+  hysteresis and turns through the in-betweens 35ms a step (60ms
+  standing). Standing, it turns at most two eighths towards the stock,
+  so a bark (drawn from the sim's facing) never jumps more than that;
+  during a bark it faces its heading. Lying down and getting up happen in
+  the side, front or back views only. The trot and gallop are six frames
+  over the same stride length as the old four (phase x 1.5).
+- Dog frames are put together from parts with template letters (k f n e E
+  h a) that dressRows resolves per look, so every customization reaches
+  every frame without touching the pose grids again. The soaked look is a
+  second set built the first time the dog gets wet (flecks go sage); it
+  lasts until the shake-off, or 40s without rain.
+- Panting: your own dog pants from its real stamina (below 55%, 80% in
+  summer); friends' dogs and helpers have no stamina on screen, so they
+  pant after a couple of seconds of galloping.
+- Animals' wide eyes are a second sprite set per species and coat, built on
+  first fright. The startle is a render-only jump (panic setting in, or
+  stress jumping 0.16 in a frame), so guests see it from synced stress.
+- Bandana red stays on the player's own dog: every animal, predator,
+  person and helper sprite was scanned in the page (2,500 sprites): no red,
+  nothing off the palette, no half-transparent pixels.
+- The village's people (smith, stallholders, cottagers, warden) are
+  drawn and dressed here, ready to spawn; their days are the village's to
+  run (gameplay), through Person.go(steps).
+- Paddocks (round four): 6x6 at least (48 squares), 28 across at most.
+  Price 0.8$ a tile of fence plus 1$ for the gate, so 8x7 is 25$ as
+  before; extending pays only the fence added; moving the gate is free;
+  removing an empty paddock gives half back. Room is 16 per 8x7 scaled
+  by area, plus up to half again as it grows to four times that (so big
+  paddocks reach the old upgraded density). The whole-pen upgrade is gone
+  for new paddocks; old saves keep theirs.
+- Mixed flocks: ducks get on with anyone, sheep with goats, cattle with
+  ponies. A refused animal is turned back at the gate, and one that slips
+  in is put back out when the gate shuts.
+- Fixtures: the trough as before (12$), a field shelter (45$, 3x2, open to
+  the south; a paddock with one is safe at night, as is one whose middle
+  or gate is in a barn's ring) and a hay rack (20$, a third less winter
+  hay). One of each per paddock, clear of the gateway.
+- Fields: the south-west (200$) and the south-east (300$) plots past the
+  clearing, bought at their signs with NIP. They take paddocks and fences
+  at once (the scrub is no obstacle to them) and anything else once grazed
+  clear; penned stock grazes too (sheep 1/22 a second, goats 1/11, cattle
+  1/15, ponies 1/22; ducks not at all).
+- Until build mode's drag handles land (UI's), U extends the paddock side
+  nearest the cursor by two.
+- Village steps go one a morning, in order, the morning after the deed:
+  cottage (1 order), square (4 orders), second cottage (graze a field
+  clear), smithy (pen 4 cattle), hall (a ribbon), third cottage (40
+  penned). The favour session turns the square's deed into drover favour 2.
+- Market day is the third day of each season (once the square stands):
+  the drover always has an order at half again, goods sell for a quarter
+  more. The festival is the last day of each season (once the hall
+  stands): five of a kind through the arch within a minute make a parade.
+- The bridge takes six logs; the agility yard's par is 5.5s with three
+  clean days to a free training level; the shed pays 4$ a fleece and the
+  dairy 7$ a cow (scaled by calm).
+- Villagers roll their own dice (not Math.random), so they cannot change
+  a seeded tune or pace run; they are not pressure sources, so a parade
+  walks past them. Nights without visitors end after 2.5s, so the
+  warden's lantern round is mostly a dusk thing.
+- Merging with the other round-four branches without double work: the
+  third cottage becomes THE SHEPHERD'S COTTAGE (mend the shepherd's hut)
+  when the Map session's `src/systems/projects.ts` is there, and the
+  valley's own shelter and rack art steps aside when Graphics'
+  `src/art/paddock.ts` is there (lazy `import.meta.glob`s that only ask
+  whether the file exists), so each branch works alone and merged.
+- With mixed flocks a fair entry goes home to any paddock it can share
+  (the fair's goat to the sheep's), as everywhere else.
+- The unseeded ordertest is flaky on this branch and on the base (the bot
+  sometimes walks the order's flock into the empty open pen); seeded runs
+  pass.
+- Round four of UI and effects. The body face stays 5px tall and no glyph
+  got wider, so every layout that measured with textWidth() still fits;
+  only I (and the stops) got narrower, and pairs whose facing columns are
+  two rows apart are kerned a pixel closer. The heading face is new and
+  separate (heading(), headingWidth()).
+- One panel() for all screens (src/ui/frame.ts, the same call as the old
+  one in gfx/draw.ts), so every screen picked up the bevel at once. Paper is
+  its own frame: plum ink on wool, teal for what matters; texts written for
+  dark panels map wool to plum and buttercup to teal on paper.
+- The stamina gauge moved from render/world.ts into the HUD layer, so it
+  reads over the night's dither too.
+- Emotes and the nip's impact star are local 'anim' particles (a co-op
+  host does not send them; every screen makes its own). The ripple and the
+  clods of mud are ordinary particles and do travel to friends.
+- Fireworks and the stamp's dust are screen space (src/ui/feel.ts), drawn
+  over the HUD with the coins in flight.
+- The iris follows the dog while the next scene opens; in a menu it is the
+  middle of the screen.
+- Photo mode freezes the world as the pause menu does (it runs on with
+  friends here). The card is saved at the largest whole-number scale that
+  keeps it near 1200px on its long side; the data URL is turned into a file
+  at once so the share sheet opens while the tap still counts.
+- Perf (perftest, 4x CPU, phone size, best batch): title 5.5 to 5.6 ms,
+  day 10.1 to 9.7 ms, worst 11.7 to 12.2 ms: within the noise of a machine
+  shared with other sessions. After the Ledger tabs and the paddock editor
+  (neither runs in play): 5.7, 10.2 and 12.4 ms, under a load average of
+  13 to 20.
+- Paddock rules come from Gameplay's src/ranch/paddock.ts through
+  src/ui/paddockrules.ts, found by `import.meta.glob` so this branch still
+  builds without them. The merge with valley-r4 (branch ui-r4-valley)
+  drops valley's stopgap "U extends the nearest side by two" and its
+  paddock info lines, which the editor replaces.
+- Paddock build UI: the rules (price, capacity, where it may go, building,
+  extending, gates, fixtures) belong to the ranch and come in through one
+  interface, `PaddockRules` in src/ui/paddockbuild.ts; build mode only
+  asks. The editor works on a draft (a rectangle and a gate) that stays
+  open until BUILD, so a rough first drag is fine: every handle can be
+  nudged after, by drag, stepper or key. Extending reuses the editor with
+  the old fence as a floor. Fixtures are charged their catalog price by
+  build mode, as every catalog item is; paddocks and extensions are paid
+  by the rules, since only they know the price.
+- The Ledger keeps its open page between visits (a book stays open where
+  you left it); confirm closes it only when the page does not use it.
+- Tree shadows are no longer baked into the ground: the canopy's
+  silhouette is baked once in sage (`canopyShadow`) and laid over the
+  ground shifted by the sun's vector (`sunShadow` in `src/render/sky.ts`)
+  into a world-sized lit-ground picture (`LitGround`, `src/render/light.ts`).
+  When the sun moves a pixel it is redone 32 rows a frame, so a frame still
+  draws the ground as one image. (Drawing the shadow as its own layer every
+  frame cost 2-3 ms on a throttled phone; compositing plum onto water cost
+  more, so shadows on water are sage.) The shadow
+  mask the bake still keeps (where the shade usually lies) only places
+  ferns and such.
+- Building shadows read `lightLook` (`src/art/seasonlook.ts`), so the
+  picture cache redraws a building only when the sun has moved a whole
+  pixel.
+- The golden hour is a sparse random speckle (~5%), not a Bayer grid: a
+  regular grid over the whole meadow read as a filter. Blue hour mixes teal
+  into the dusk dither (up to 70% of its pixels); warm rings are on lamps
+  and the camp fire only (the farmhouse's big pool ringed its own roof).
+- Morning mist reuses the fog pass, up to 0.28, fair mornings only, off at
+  GRAPHICS LOW. Light shafts visit only the pixels inside their bands and
+  draw at GRAPHICS HIGH only. Wildlife counts scale with `quality.fx`.
+- The wildlife and the fish use their own seeded random numbers, never
+  `Math.random`, so a seeded `tune.mjs` run is unchanged by them.
+- Morning mist is light (up to 0.18, gone by 07:40): at the strength of fog
+  it laid a grid over every morning.
+- Paddock floors are one cached bitmap per paddock, painted from ImageData
+  and keyed on the size, the gate, the fixtures and the season, so a big
+  field costs one image a frame. A repaint always makes a new canvas,
+  because the picture cache knows an image by its object. A paddock reads
+  as a field gradually, as its smaller interior side grows from 6 to 10
+  tiles.
+- `penDrawables` lives in `src/art/paddock.ts` and is re-exported from
+  `art/buildings.ts`, so older imports (farm2.ts on valley-r4) keep working.
+  A trial merge of valley-r4 typechecks and draws Gameplay's real paddocks.
+  To merge, take this side of `penDrawables` in buildings.ts, keep
+  `export function shadowRect` with its `groundShadow` body, and drop
+  `fixtureDrawables` from valleyDrawables: the paddock draws its own
+  fixtures, and with both they would be drawn twice.
+- The paddock data the art reads: `rot` + `gateSpan()` for the gate,
+  `fixtures?: { kind, tx, ty }[]` and `hurdle?: { vertical, at, gate, swing }`
+  (types in `src/art/paddock.ts`). If there is `hasTrough` and no list, a
+  trough goes by the back fence, as before.
+- Valley projects (M28) were planned with the ford bridge among them; the
+  Gameplay session was already mending the old bridge (valley.ts), so tier 4
+  got the mill pond at the Waterfall Pool instead: puddling is cattle work
+  (they balk at water, so it takes nips and then a hold in the shallows).
+- Grazing uses valley.ts's GRAZE rates (duck 0, sheep 1/60, goat 2/60, cow
+  1.5/60, pony 1/60 a second; lambs half) and its rule: an animal counts
+  while its stress is 0.45 or less, it is not panicking and it moves slower
+  than 0.7x its walk. Work needed: the orchard and the scrub 12 each (any
+  kind with a rate), the reed bed 6 (ducks only, paddling at 1/60), the mill
+  pond 6 (cattle only, and only while standing in water). Measured
+  (projecttest, seeded): six ducks driven in by the bot and held clear the
+  reeds in ~66s; eight sheep graze the orchard in 90s; five goats browse the
+  scrub in 72s; four cattle held in the pool puddle it in ~95s (they step out
+  between nips, so holding them is the work).
+- Hauling: an animal of the right kind (not a lamb, stress under 0.6) that
+  passes within 20px of a pile with a load left takes one; at stress over
+  0.8 or in a panic it drops it, and the load is back on its pile; within
+  the site's radius it is counted. Loads in transit go back overnight and on
+  a load. They are tracked in projects.ts and also set `Animal.load` (as
+  Gameplay's log does), so once both branches are in a loaded animal leans
+  into it (Characters' pose) and walks at 0.85 (Gameplay's drag).
+- What each brings: the reed bed, 8 more bales in the loft each autumn
+  (through Gameplay's `seasonal.loftBonus`: the autumn refill is LOFT_MAX
+  plus the bonus; until that field is merged in, projects.ts adds the 8 on
+  autumn's first morning itself); the orchard, 5-7
+  sheep each morning but in winter when fewer than 3 are there (plain wild
+  stock); the scrub, the valley's wild goats every day (7) instead of every
+  3 days (5); the hut, a waystation (lying within 34px of its door rests the
+  dog as at home, friends' dogs too) and the fold's gate (E; solid when
+  shut; the open fold draws driven stock in like a pen gate), and the crook
+  if it was never picked up; the mill, a quarter more on each evening's
+  goods; the circle, midsummer (summer's second day): animals within 28px
+  of the ring's middle are blessed, and a blessed animal penned (not your
+  own let-out stock) pays its delivery value again.
+- Projects open by tier, once their hidden place is found, and by season
+  (the reed bed in spring or summer; the orchard, the scrub and the mill pond
+  not in winter); progress keeps out of season. The Ledger lists them as
+  their own THE VALLEY n/6 under HIDDEN PLACES in the first column (the
+  village is Gameplay's list above it; the second column overflowed a
+  landscape screen once an order was up): the ones under way (the one in
+  hand with what it needs), NEXT (and what it brings when nothing is under
+  way); a plum flag on the map at each workable site (teal while it waits
+  for its season), the place's star once done.
+- Project props are `WORKS` in places.ts, and the hut's walls and the ring's
+  stones carry `project`/`when`/`ring`. `map.setProjects` restamps only the
+  project props' cells, so the hurdle and Gameplay's bridge deck keep theirs.
+- The stone circle now starts with four stones missing: they lie fallen in
+  the Rolling Hills from the first day (a tip calls them out), so a
+  returning player sees four gaps in the ring until ponies bring them back.
+- The Shepherd's Hut's way stays narrow (goats carry slate through it in
+  single file). Widening it turned a few Rocky Rise tiles to grass, and since
+  each region's spawn points come from one seeded stream walking candidate
+  tiles, every flock from Rocky Rise on started somewhere else: pacetest
+  (seeded, deterministic) went from days 8/7/7 to 9/9/8 on that new layout.
+  Narrow again, the runs match test/round-4 exactly.
+- Co-op: the projects' state is one SHARED line; carried loads and
+  midsummer blessings are animalExtra bits 2 and 3 (Gameplay's log is bit
+  1); a guest's first copy changes the map without a ceremony.
+- The Waterfall Pool keeps its size: a bigger pocket and pool (room for
+  more cattle) shifted the seeded random stream through the decorative
+  layer, enough to change the two duck chase runs in tune.mjs. Four cattle
+  fit in its shallows and stream as it is.
+- Checks, before (test/round-4) and after: tune.mjs `--seed=1` identical
+  line for line for all five species; pacetest seeds 1-3 identical (the
+  valley thrives on days 8, 7, 7); cooptest 47/47 (one run had the brace
+  check catch the guest a frame early, a timing flake that passes on a rerun
+  and on the base); savetest, discoverytest and the loop tests (econtest,
+  flowtest, nighttest, pentest, trialtest, ordertest, resttest, daytest,
+  weathertest, transittest, seasontest, lambtest) pass as on the base.
+
+- Favour levels are never lost: a missed order takes points back only down
+  to the level's start. Pay over the price is paid as a separate float so
+  the order code's price line (which gameplay also edits) stays as it was.
+- One special order a day at most, and the miller's rush only for a kind
+  you have penned at home (a rush from the far pastures would be cruel).
+  A show order does not refuse rattled stock for good: it waits in the
+  yard until it settles (peak stress drifts down), which is calm-beats-chaos.
+- The shearer's track is shorter (3 levels: 4, 9, 15 points) because he
+  comes once a summer; his level 2 brings a second clip, which makes the
+  top reachable in a second summer.
+- Achievement badges are earned once and kept; the lifetime record works
+  out most of them, so an older save loses nothing. Moments that cannot be
+  worked out from totals (a quiet day, a perfect drive) are not guessed.
+- A card's confetti uses Math.random, so cards make no fanfare under the
+  bots (`input.override`): seeded tune runs stay identical to main.
+- Valley projects and the village (other sessions this round) are read
+  through an optional view (`projects.done`, `ranch.village.built`), so
+  this branch builds without them and the badges light up once merged.
+- Agreed with the other sessions this round: favour owns the village's
+  market square (its deed is the drover's trust, favour 2; the first
+  cottage stays "fill an order"), and a friend's name goes up over their
+  stall there; the Ledger's extra pages use Feel and UI's page shape
+  (`LEDGER_PAGES`, drawn in the ink they are given); the badge card takes
+  the tier card's slot and waits behind banners; the ribbon board stands
+  just past the farmhouse's front right corner (World and light). The
+  merge steps are in the session notes (favour-achievements.md).

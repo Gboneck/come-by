@@ -3,8 +3,9 @@ import { BAYER4, px, rect } from '../gfx/draw';
 import { text, wrap } from '../gfx/font';
 import { makeCanvas } from '../gfx/screen';
 import type { Game } from '../game';
-import { REGIONS } from '../world/map';
-import { KEEPSAKES, PLACES } from '../world/places';
+import { REGIONS, regionById } from '../world/map';
+import { KEEPSAKES, PLACES, placeById } from '../world/places';
+import { PROJECTS } from '../systems/projects';
 import { FH, FW, GLIMPSED, SEEN } from '../systems/discovery';
 
 // The Ledger map's fog of war, the hidden places found so far, and the
@@ -12,6 +13,38 @@ import { FH, FW, GLIMPSED, SEEN } from '../systems/discovery';
 
 let fog: HTMLCanvasElement | null = null;
 let fogVer = -1;
+let fogPaper: HTMLCanvasElement | null = null;
+let fogPaperVer = -1;
+
+// On the Ledger's paper map the unknown is blank paper, hatched: uncharted.
+function paperFog(game: Game): HTMLCanvasElement {
+  const d = game.discovery;
+  if (fogPaper && fogPaperVer === d.fogVer) return fogPaper;
+  const [c, g] = fogPaper ? [fogPaper, fogPaper.getContext('2d')!] : makeCanvas(FW, FH);
+  const img = g.createImageData(FW, FH);
+  const buf = new Uint32Array(img.data.buffer);
+  const f = d.fog;
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= FW || y >= FH ? 0 : f[y * FW + x]);
+  for (let y = 0; y < FH; y++)
+    for (let x = 0; x < FW; x++) {
+      const v = f[y * FW + x];
+      if (v === SEEN) continue;
+      if (v === GLIMPSED) {
+        if (((x + y) & 1) === 0) buf[y * FW + x] = U32.wool;
+        continue;
+      }
+      const edge = at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1);
+      buf[y * FW + x] = edge && (x + y) % 2 ? U32.sage : (x - y) % 6 === 0 ? U32.sage : U32.wool;
+    }
+  g.putImageData(img, 0, 0);
+  fogPaper = c;
+  fogPaperVer = d.fogVer;
+  return c;
+}
+
+export function drawPaperFog(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number) {
+  g.drawImage(paperFog(game), x0, y0);
+}
 
 function fogCanvas(game: Game): HTMLCanvasElement {
   const d = game.discovery;
@@ -73,6 +106,55 @@ export function drawPlaceMarks(game: Game, g: CanvasRenderingContext2D, x0: numb
     if (!total) continue;
     const cx = x0 + Math.round(r.cx / 2), cy = y0 + Math.round(r.cy / 2);
     text(g, `${found}/${total}`, cx, cy + 3, found === total ? C.butter : C.wool, { align: 'center', shadow: C.plum });
+  }
+}
+
+// ---- The valley projects (src/systems/projects.ts) ----
+
+// The Ledger's lines for the valley projects, in the same shape as the
+// village's (src/ui/valley.ts): how many are done, the ones under way (the
+// one in hand with what it needs), and the next to come with what it
+// brings. The next goal is always visible.
+export function projectLines(game: Game, w: number): { s: string; c: string }[] {
+  const P = game.projects;
+  const out: { s: string; c: string }[] = [];
+  const add = (t: string, c: string) => { for (const s of wrap(t, w)) out.push({ s, c }); };
+  const done = PROJECTS.filter((p) => P.done.has(p.id)).length;
+  out.push({ s: '', c: C.wool });
+  add(`THE VALLEY ${done}/${PROJECTS.length}`, done === PROJECTS.length ? C.butter : C.wool);
+  const hand = P.inHand(game);
+  const status = (p: (typeof PROJECTS)[number]) => {
+    const o = P.open(game, p);
+    const st = p.kind === 'graze' ? `${Math.floor(P.frac(p.id) * 100)}% ${p.verb}` : `${P.delivered(p.id)}/${p.piles.reduce((n, q) => n + q.n, 0)} ${p.verb}`;
+    return o.ok ? st : `${st}, ${o.why}`;
+  };
+  const going = PROJECTS.filter((p) => !P.done.has(p.id) && (P.open(game, p).ok || (game.tier >= p.tier && P.frac(p.id) > 0)));
+  going.sort((a, b) => (a === hand ? -1 : b === hand ? 1 : 0));
+  for (const p of going.slice(0, 2)) {
+    add(`${p.label}: ${status(p)}`, p === hand ? C.wool : C.sage);
+    if (p === hand) add(p.needs, C.sage);
+  }
+  const next = PROJECTS.find((p) => !P.done.has(p.id) && !going.includes(p));
+  if (next) {
+    const o = P.open(game, next);
+    const why = next.place && game.tier >= next.tier && !game.discovery.found.has(next.place) ? `SOMEWHERE IN ${regionById(placeById(next.place).region).name.toUpperCase()}` : o.why;
+    add(`NEXT, ${next.label}: ${why}`, C.sage);
+    if (!going.length) add(`BRINGS ${next.brings}`, C.sage); // nothing in hand: what the next one is for
+  }
+  return out;
+}
+
+// A flag on the Ledger map at each project you can work (inked in plum, as
+// the map's other marks; teal while it waits for its season).
+export function drawProjectMarks(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number) {
+  const P = game.projects;
+  for (const p of PROJECTS) {
+    if (p.tier > game.tier || P.done.has(p.id) || (p.place && !game.discovery.found.has(p.place))) continue; // done: the place's star says it
+    const sx = x0 + Math.round(p.mark[0] / 16), sy = y0 + Math.round(p.mark[1] / 16);
+    const col = P.open(game, p).ok ? C.plum : C.teal;
+    rect(g, sx, sy - 6, 1, 7, C.plum);
+    rect(g, sx + 1, sy - 6, 3, 2, col);
+    px(g, sx + 1, sy - 4, col);
   }
 }
 

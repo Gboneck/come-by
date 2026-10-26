@@ -1,6 +1,8 @@
 import { C } from '../palette';
-import { panel, rect } from '../gfx/draw';
-import { text, textWidth } from '../gfx/font';
+import { rect } from '../gfx/draw';
+import { panel, paper, rule, stamp } from './frame';
+import { heading, text, textWidth } from '../gfx/font';
+import { calendar } from '../systems/season';
 import type { DayStats, Game } from '../game';
 import { SPECIES, SPECIES_ORDER } from '../entities/species';
 import { nextGoal } from '../systems/progression';
@@ -21,7 +23,18 @@ export interface Summary {
 const ROW_STEP = 0.07; // rows of the card arrive one after another
 export const SUMMARY_READY = 0.6; // matches the input delay in game.ts
 
-// End-of-day card. Every day ends with a choice: build, or go again.
+// Tape at a corner of the page: a strip of teal, dithered so it reads as
+// paper tape and not a block.
+function tape(g: CanvasRenderingContext2D, x: number, y: number, w: number) {
+  for (let i = 0; i < w; i++)
+    for (let j = 0; j < 4; j++) {
+      g.fillStyle = (i + j) % 3 === 0 ? C.sage : C.teal;
+      g.fillRect(x + i, y + j, 1, 1);
+    }
+}
+
+// End-of-day card: a page from the ranch journal. Every day ends with a
+// choice: build, or go again.
 export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, H: number): 'next' | 'build' | null {
   const s = game.summary!;
   const ui = game.ui;
@@ -35,64 +48,76 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
     const n = s.stats.delivered[id]!;
     lines.push(['DELIVERED', `${n} ${(n === 1 ? SPECIES[id].name : SPECIES[id].plural).toUpperCase()}`]);
   }
-  if (s.stats.calm > 0) lines.push(['  CALM BONUS', `${s.stats.calm} X1.5`, C.butter]);
+  if (s.stats.calm > 0) lines.push(['  CALM BONUS', `${s.stats.calm} X1.5`, C.teal]);
   const lost = SPECIES_ORDER.reduce((n, id) => n + (s.stats.lost[id] ?? 0), 0);
-  lines.push(['LOST', `${lost}`, lost ? C.butter : undefined]);
+  lines.push(['LOST', `${lost}`, lost ? C.teal : undefined]);
   lines.push(['LEFT OUT', `${s.leftOut}`]);
   lines.push(['PENNED', `${s.penned}`]);
-  if (s.stats.goodsValue) lines.push(['GOODS SOLD', `+${s.stats.goodsValue}$`, C.butter]);
+  if (s.stats.goodsValue) lines.push(['GOODS SOLD', `+${s.stats.goodsValue}$`, C.teal]);
   // The day's takings count up once their row is in.
   const earned = s.stats.deliveredValue + s.stats.goodsValue;
   const earnAge = age - (lines.length + 1) * ROW_STEP;
   const counted = Math.round(earned * Math.min(1, Math.max(0, earnAge / 0.5)));
-  lines.push(['EARNED', `+${counted}$`, C.butter]);
-  lines.push(['PURSE', `${s.coins}$`, C.butter]);
+  lines.push(['EARNED', `+${counted}$`, C.teal]);
+  lines.push(['PURSE', `${s.coins}$`, C.plum]);
   const ng = nextGoal(game);
   const goal = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : null;
   const build = s.buildable ?? [];
   const bh = touch ? 15 : 13;
-  const ph = 30 + lines.length * 8 + 5 + (goal ? 7 : 0) + 9 + (build.length ? 12 + Math.ceil(build.length / 2) * 8 : 0) + bh + 9;
+  const ph = 34 + lines.length * 8 + 5 + (goal ? 8 : 0) + 9 + (build.length ? 12 + Math.ceil(build.length / 2) * 8 : 0) + bh + 9;
   const px0 = Math.round(W / 2 - pw / 2);
   // The card drops in as the fade clears.
   const drop = Math.round(Math.max(0, 1 - age / 0.25) * -16);
   const py0 = Math.round(H / 2 - ph / 2) + drop;
   dimView(g, game.view(), Math.min(8, age * 40));
-  panel(g, px0, py0, pw, ph);
-  text(g, `DAY ${s.day} IS DONE`, W / 2, py0 + 6, C.butter, { align: 'center', scale: 1 });
-  rect(g, px0 + 6, py0 + 14, pw - 12, 1, C.sage);
-  let y = py0 + 20;
+  // The page: ruled, a margin, tape at the top corners.
+  paper(g, px0, py0, pw, ph, { lines: 8, top: 30, margin: true });
+  tape(g, px0 - 3, py0 - 2, 12);
+  tape(g, px0 + pw - 9, py0 - 2, 12);
+  const ink = C.plum, ink2 = C.teal;
+  const cal = calendar(s.day);
+  heading(g, `DAY ${s.day}`, px0 + 13, py0 + 6, ink, { shade: ink2 });
+  text(g, `${cal.season.toUpperCase()}, YEAR ${cal.year}`, px0 + pw - 6, py0 + 8, C.sage, { align: 'right' });
+  rect(g, px0 + 4, py0 + 16, pw - 8, 1, ink);
+  rect(g, px0 + 4, py0 + 18, pw - 8, 1, ink);
+  let y = py0 + 24;
+  const iconOpts = { iconColor: C.butter, iconRim: C.plum };
   lines.forEach(([k, v, col], i) => {
     if (age >= (i + 1) * ROW_STEP) {
-      text(g, k, px0 + 8, y, C.wool);
-      text(g, v, px0 + pw - 8, y, col ?? C.wool, { align: 'right', iconColor: C.butter });
+      text(g, k, px0 + 13, y, ink, iconOpts);
+      text(g, v, px0 + pw - 6, y, col ?? ink, { align: 'right', ...iconOpts });
     }
     y += 8;
   });
   const late = age >= (lines.length + 2) * ROW_STEP;
+  // A calm day earns the page a stamp.
+  if (s.stats.calm > 0 && late) stamp(g, 'CALM', px0 + pw - 26, py0 + 34, C.teal);
   // What comes next: the goal, and tomorrow's sky.
-  rect(g, px0 + 6, y + 1, pw - 12, 1, C.sage);
+  rule(g, px0 + 4, y + 1, pw - 8, C.plum);
   y += 5;
   if (goal) {
     if (late) {
-      text(g, 'NEXT GOAL', px0 + 8, y, C.sage);
-      text(g, goal, px0 + pw - 8, y, C.wool, { align: 'right', iconColor: C.butter });
+      text(g, 'NEXT GOAL', px0 + 13, y, ink2);
+      text(g, goal, px0 + pw - 6, y, ink, { align: 'right', ...iconOpts });
     }
-    y += 7;
+    y += 8;
   }
   if (late) {
     const sky = game.weather.forecast, word = SKY_WORD[sky];
-    text(g, 'TOMORROW', px0 + 8, y + 1, C.sage);
-    text(g, word, px0 + pw - 8, y + 1, C.wool, { align: 'right' });
-    skyIcon(g, sky, px0 + pw - 8 - textWidth(word) - 10, y);
+    text(g, 'TOMORROW', px0 + 13, y + 1, ink2);
+    text(g, word, px0 + pw - 6, y + 1, ink, { align: 'right' });
+    g.fillStyle = C.plum;
+    g.fillRect(px0 + pw - 6 - textWidth(word) - 11, y - 1, 9, 9);
+    skyIcon(g, sky, px0 + pw - 6 - textWidth(word) - 10, y);
   }
   y += 9;
   if (build.length) {
-    rect(g, px0 + 6, y + 1, pw - 12, 1, C.sage);
+    rule(g, px0 + 4, y + 1, pw - 8, C.plum);
     y += 5;
     if (late) {
-      text(g, 'NOW YOU CAN BUILD', px0 + 8, y, C.butter);
+      text(g, 'NOW YOU CAN BUILD', px0 + 13, y, ink2);
       build.forEach((b, i) => {
-        text(g, b, px0 + 8 + (i % 2) * (pw / 2 - 4), y + 8 + Math.floor(i / 2) * 8, C.wool, { iconColor: C.butter });
+        text(g, b, px0 + 13 + (i % 2) * (pw / 2 - 6), y + 8 + Math.floor(i / 2) * 8, ink, iconOpts);
       });
     }
     y += 8 + Math.ceil(build.length / 2) * 8;

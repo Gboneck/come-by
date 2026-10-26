@@ -15,6 +15,8 @@ import { isTyping, padType, stopTyping } from './textfield';
 //   build    stick or d-pad move the cursor, A build/place, B done,
 //            X remove, Y upgrade (over a building) or turn, LB/RB pick,
 //            LT/RT change tab
+//   ledger   LB/RB turn the pages, A closes (or acts on a page's own
+//            choice), B goes back or closes, SELECT / START close
 //   names    up/down change the last letter, right adds one, left
 //            deletes, A or B is done (B on the join screen leaves it)
 //
@@ -121,7 +123,16 @@ export function padFrame(game: Game, dt: number) {
     return;
   }
   if (mode === 'ledger') {
-    if (hit(PAD.A) || hit(PAD.B) || hit(PAD.SELECT) || hit(PAD.START)) push('ledger');
+    // A closes the ranch page (or acts on another page), B goes back (or
+    // closes), SELECT and START close, LB/RB turn the pages, the d-pad is
+    // the page's own.
+    const d = dirPress(game, dt, RATE);
+    if (d) push(d);
+    if (hit(PAD.A)) push('confirm');
+    if (hit(PAD.B)) push('cancel');
+    if (hit(PAD.SELECT) || hit(PAD.START)) push('ledger');
+    if (hit(PAD.LB)) push('prev');
+    if (hit(PAD.RB)) push('next');
     return;
   }
   // Title, pause, the dog's look, co-op, moving a save: lists of rows.
@@ -145,16 +156,23 @@ const RULES: [RegExp, string][] = [
   // Build mode's foot lines and info card.
   [/^ARROWS MOVE {2}Q\/E PICK {2}R TURN {2}SPACE BUILD$/, '(LB)(RB) PICK  (Y) TURN  (A) BUILD  (LT)(RT) TABS'],
   [/^ARROWS MOVE {2}Q\/E PICK {2}SPACE PLACE {2}X PICK UP$/, '(LB)(RB) PICK  (A) PLACE  (X) PICK UP'],
+  [/^ARROWS MOVE {2}Q\/E PICK {2}SPACE MARK OUT$/, '(LB)(RB) PICK  (A) MARK OUT  (LT)(RT) TABS'],
+  [/^ARROWS (MOVE IT|SLIDE THE GATE|PUSH THE \w+ SIDE) {2}R: NEXT HANDLE {2}SPACE: (BUILD|EXTEND) {2}ESC: CANCEL$/, 'STICK: $1  (Y) NEXT HANDLE  (A) $2  (B) CANCEL'],
+  [/^DRAG ONE OUT, OR SPACE TO MARK ONE OUT$/, 'PRESS (A) TO MARK ONE OUT'],
   [/\bU: UPGRADE/g, '(Y) UPGRADE'],
+  [/\bU: EXTEND/g, '(Y) EXTEND'],
   [/\bX: (REMOVE|PICK IT UP)/g, '(X) $1'],
   // Buttons and cards.
   [/\bSPACE: NEXT DAY\b/g, '(A) NEXT DAY'],
   [/\bB: BUILD\b/g, '(LB) BUILD'],
+  [/^Q\/E: PAGE {2}TAB: CLOSE$/, '(LB)(RB) PAGE  (B) CLOSE'],
   [/\bTAB: CLOSE\b/g, '(B) CLOSE'],
   [/\bESC: RESUME\b/g, '(B) RESUME'],
   [/\bENTER: TYPE A NAME\b/g, '(A) TYPE A NAME'],
   [/\bARROWS: CHANGE\b/g, '(D-PAD) CHANGE'],
+  [/^ARROWS: FRAME {2}SPACE: SNAP {2}ESC: BACK$/, 'STICK FRAME  (A) SNAP  (B) BACK'],
   [/\bPRESS ENTER\b/g, 'PRESS (A)'],
+  [/^ENTER: SHARE$/, '(A) SHARE'],
   [/^H: /, '(Y) '],
   // Hints and tips.
   [/^TAB OPENS\b/, '(SELECT) OPENS'],

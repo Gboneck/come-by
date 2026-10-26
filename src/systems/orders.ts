@@ -9,6 +9,7 @@ import type { Animal } from '../entities/animal';
 import { FAIR_DAY, SHEAR_PAY } from './seasonal';
 import { tierOf } from './progression';
 import { pick, ri } from '../rng';
+import { favourHead, favourOrders, favourTakes, onOrderFilled, onOrderMissed, type Special } from './favour';
 
 // Buyers around the valley ask for a few head by a set hour. You can bring
 // them in from the pastures or let them out of your own pens (E at the
@@ -20,10 +21,12 @@ export interface Order {
   species: SpeciesId;
   n: number;
   due: number; // seconds into the daylight
+  special?: Special; // a favoured buyer's rush, show or big drove (favour.ts)
   got: number;
   paid: number;
   state: 'open' | 'done' | 'gone';
   kind?: 'shear'; // the shearer: sheep come back out shorn, paid a wool bonus
+  market?: boolean; // market day at the crossroads: pays half again
 }
 
 // Per head, times the species value, before the calm multiplier.
@@ -85,6 +88,7 @@ export function morningOrders(game: Game) {
     const early = yard.site.id === 'mill' ? 11 : yard.site.id === 'drover' ? 12 : 13;
     o.list.push({ id: o.nextId++, yard: yard.site.id, species: sp, n: ri(lo, hi), due: hourToT(ri(early, early + 3)), got: 0, paid: 0, state: 'open' });
   }
+  favourOrders(game); // a trusted buyer's special order
   if (o.list.length && !game.tipsSeen.has('orders')) {
     game.tipsSeen.add('orders');
     const e = game.input.touchMode ? 'NIP' : 'E';
@@ -105,17 +109,18 @@ export function updateOrders(game: Game, dt: number) {
     const p = y.pen;
     if (ord) {
       const year = game.season.year;
-      const ok = (a: Animal) => !a.trial && !a.forSale && !a.young && a.sp.id === ord.species && ord.got < ord.n && (ord.kind !== 'shear' || a.shorn !== year);
+      const ok = (a: Animal) => !a.trial && !a.forSale && !a.young && a.sp.id === ord.species && ord.got < ord.n && (ord.kind !== 'shear' || a.shorn !== year) && favourTakes(ord, a);
       for (const a of admit(p, game.animals, ok)) {
         ord.got++;
         if (ord.kind === 'shear') a.shorn = year;
         const v = ord.kind === 'shear'
           ? Math.max(1, Math.round(SHEAR_PAY * calmRating(a.peakStress).mult * (a.rare ? 1.5 : 1)))
-          : headPrice(a.sp.id, a.peakStress, a.rare);
+          : Math.round(headPrice(a.sp.id, a.peakStress, a.rare) * (ord.market ? 1.5 : 1));
         ord.paid += v;
         game.earn(v);
         game.fx.float(a.x, a.y - 10, `+${v}$`, C.butter, 1.1);
         game.audio?.play('coin', { x: a.x, y: a.y, vol: 0.7 });
+        favourHead(game, ord, a, v); // the buyer's favour, a special's pay
       }
       if (ord.got >= ord.n) finish(game, ord, y);
     }
@@ -137,6 +142,7 @@ export function updateOrders(game: Game, dt: number) {
   for (const ord of o.open) {
     if (game.day.t < ord.due && !night) continue;
     ord.state = 'gone';
+    onOrderMissed(game, ord);
     const y = yardOf(game, ord.yard);
     y.leaveT = 1.5;
     if (ord.kind === 'shear') {
@@ -156,6 +162,7 @@ function finish(game: Game, ord: Order, y: Yard) {
   game.totals.orders = (game.totals.orders ?? 0) + 1;
   const sp = SPECIES[ord.species];
   const calm = y.pen.animals.every((a) => calmRating(a.peakStress).mult > 1);
+  onOrderFilled(game, ord, calm); // the buyer's favour
   if (ord.kind === 'shear') {
     y.release = true;
     game.showBanner('ALL SHORN!', `${ord.n} SHEEP${calm ? ', ALL CALM' : ''}  +${ord.paid}$. NOW WALK THEM HOME`, 3);
@@ -206,6 +213,7 @@ export function penGateAt(game: Game): Pen | null {
 // E at a pen gate: hold it open to let the stock out, or shut it again.
 // Only when there is no loose animal at the dog's nose to nip instead.
 export function gateAction(game: Game): boolean {
+  if (game.projects.gateAction(game)) return true; // the mended hut's fold
   const p = penGateAt(game);
   if (!p) return false;
   const d = game.dog;

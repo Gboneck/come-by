@@ -1,5 +1,6 @@
 import { C } from '../palette';
-import { disc, panel, rect, ring } from '../gfx/draw';
+import { disc, rect, ring } from '../gfx/draw';
+import { panel } from '../ui/frame';
 import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import type { Dog } from '../entities/dog';
