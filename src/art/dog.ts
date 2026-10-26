@@ -1,23 +1,28 @@
 import { C } from '../palette';
 import { drawSpr, type Sprite } from '../gfx/sprite';
 import { rimLight } from './animals';
-import { DEFAULT_DOG, dressFine, dressRows, playerLook, type DogFacing, type DogLook } from './dogstyle';
-import { finePixels, spr2, toFinePx, up2 } from './hd';
+import { DEFAULT_DOG, dressFine, playerLook, type DogLook } from './dogstyle';
+import { finePixels, spr2, toFinePx } from './hd';
 
 // Blue heeler: teal coat flecked with wool, plum mask and ear tips, and the
 // red bandana that marks the player. `y` (buttercup) swaps in for helpers.
 //
+// Drawn at double density: fine pixels, two to a world pixel each way.
 // Five facings, the left ones mirrored: side on, towards and away from the
 // viewer, and the two three-quarter views between (`dr` heading down-right,
 // face turned to us; `ur` heading up-right, back to us). Every frame is put
-// together from parts (torso, head, tail, legs, the bandana's loose ends),
-// so ears flop and pin back with the gait, the tail swings, streams or wags
-// on its own beat, and the bandana flutters at speed.
+// together from parts (torso, head, tail, legs, the bandana with its fold
+// and loose ends), so ears flop and pin back with the gait, the tail
+// swings, streams or wags on its own beat, and the bandana flutters at
+// speed. Faces carry the mask round each eye with a glint in it, the pale
+// muzzle and the nose; flecks sit in small clusters, never a scatter.
 //
-// Template letters, resolved per look in dressRows (dogstyle.ts):
-//   t coat  w flecks and muzzle  p plum (ear tips, nose, eyes, feet)
-//   r neck band  k bandana bulk (a collar shows coat)  f the loose ends
-//   n a neckerchief's point  e E the mask round each eye  a the tail tip
+// Template letters, resolved per look in dressFine (dogstyle.ts):
+//   t coat  w muzzle and blaze  p plum (ear tips, nose, mouth, feet)
+//   r neck band  k bandana bulk  K a fold in it  f the loose ends
+//   n a neckerchief's point  i the eye  j its glint  h H the mask round
+//   the near and far eye  a the tail tip  v a fleck  x a heavy coat's
+//   fleck  d the saddle  q a far leg
 
 type Grid = string[];
 type Layer = readonly [rows: Grid, dx: number, dy: number];
@@ -51,22 +56,7 @@ export const RUN_BOB = [0, -0.5, 0, 0, -0.5, 0]; // world px: half a pixel is on
 export const SPRINT_BOB = [-1, 0, 0, -1, 0, 0];
 
 // ===================================================================
-// Two quick idles still drawn at world scale (13 x 9, anchor (6, 8)) and
-// brought up to fine pixels by Scale2x: sitting for a scratch, and the
-// shake-off after a swim or a shower, ears and tail flung out.
-// ===================================================================
-const SCRATCH = [
-  ['.............', '........p.p..', '........tht..', '.......rhpt.', '......tkkttwp', '..a..ttttw...', '.ttttttt.....', '.ptttttt.....', '..pp..pp.....'],
-  ['.............', '........p.p..', '........tht..', '.....p.rhpt.', '....p.tkkttwp', '..aa.ttttw...', '.ttttttt.....', '.tttttttt....', '..pp..pp.....'],
-  ['.............', '........p.p..', '........tht..', '.......rhpt.', '....pptkkttwp', '..aa.ttttw...', '.ttttttt.....', '.tttttttt....', '..pp..pp.....'],
-];
-const SHAKE = [
-  ['.............', '........p...p', '.a.......tht.', '.tttttwtrhpt.', '..twttwtkttwp', '..ttwttttnw..', '..ttttttt....', '...tt...tt...', '...pp...pp...'],
-  ['.............', '..........pp.', '.........tht.', '..tttttwrhpt.', '.ttwttwtkttwp', 'a.ttwttttnw..', '...tttttt....', '...tt...tt...', '...pp...pp...'],
-];
-
-// ===================================================================
-// Double density: the side view drawn in fine pixels (two per world
+// The side view, drawn in fine pixels (two per world
 // pixel). 27 x 19, three spare rows on top for raised heads and tall ears;
 // parts are in body rows 0..15 (ears 0-1, head 2-9, torso 4-11, legs
 // 12-15) and drop three rows into the frame. Anchor at the feet (12, 18).
@@ -454,6 +444,21 @@ const fuLie = (breath: boolean, wag: boolean) => compose(14, 23, [
   [wag ? ['tta', 'tt.'] : ['.ta', 'tt.'], 11, 18],
 ]);
 
+// The idles side on: sitting for a scratch (a hind leg up at the ear),
+// and the shake-off, the body twisting one way and the head the other,
+// ears and tail flung out.
+const F_SIT: Layer = [['.........tttt....', '........ttttttt..', '.......tttvtttt..', '......tttttttt...', '.....ttxtttvtt...', '....ttttttttttt..', '...ttttvttttttt..', '..tttttttttttt...', '..ttttttttttttt..', '.ttttttttttttttt.', '.pppppppppppppp..'], 3, 4];
+const F_SIT_LEGS: Layer = [['tt.tt', 'tt.tt', 'tt.tt', 'tt.tt', 'tt.tt', 'pp.ppp'], 15, 9];
+// The scratching leg crosses the body, so it carries a plum edge to read.
+const F_SCRATCH_LEG = [
+  [['.......pp', '......tpp', '.....ttp.', '....ttp..', '...ttp...', '..ttp....', '.ttp.....'], 7, 2] as Layer,
+  [['......pp.', '.....tpp.', '....ttp..', '...ttp...', '..ttp....', '.ttp.....'], 7, 4] as Layer,
+];
+const fScratch = (f: number) =>
+  fside([['att.', '..tt'], 0, 12], F_SIT, F_SIT_LEGS, fHead(f ? F_HEAD.flop : F_HEAD.n), F_BAND, ...(f ? [F_SCRATCH_LEG[f - 1]] : []));
+const fShake = (f: number) =>
+  fside(f ? at(F_TAIL.back, -1, -1) : at(F_TAIL.wagA, 0, 0), at(F_TORSO, f ? 1 : -1, 0), at(fHead(F_HEAD.flop.map((r, i) => (i < 2 ? (f ? r : '.' + r) : r))), f ? -1 : 1, 0), at(F_BAND, f ? 0 : 1, 0), F_STAND_LEGS);
+
 // One facing's full set of poses.
 export interface DogPoses {
   // Side view only: idles and the shake-off.
@@ -508,15 +513,8 @@ function recolor(rows: string[], bandana: string): string[] {
 // `look` dresses the player's dog (markings, neck piece; see dogstyle.ts);
 // `wet` is the soaked look after the ford or a long shower.
 export function makeDogSprites(bandana: 'r' | 'y' = 'r', look: DogLook = DEFAULT_DOG, wet = false): DogSprites {
-  let facing: DogFacing = 'side';
-  // Dressed first, then the sun catches the top of the coat on the far
-  // side: a sage rim.
-  // Poses still drawn at world scale come up through Scale2x; the rest
-  // are drawn in fine pixels.
-  const S = (rows: string[], ax: number, ay: number) => {
-    const r = dressRows(rows, facing, look, wet);
-    return spr2(rimLight(up2(recolor(r, bandana)), 't', 's', false), ax * 2, ay * 2 + 1);
-  };
+  // Every pose is drawn in fine pixels: dressed for the look first, then
+  // the sun catches the top of the coat on the far side, a sage rim.
   const F = (rows: string[], ax: number, ay: number) => {
     const r = dressFine(rows, look, wet).map((x) => x.replace(/q/g, 't'));
     return spr2(rimLight(recolor(r, bandana), 't', 's', false), ax, ay);
@@ -524,7 +522,6 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r', look: DogLook = DEFAULT
   const six = [0, 1, 2, 3, 4, 5];
 
   // ---- side ----
-  const s = (rows: string[]) => S(rows, 6, 8);
   const f2 = (rows: string[]) => F(rows, 12, 18);
   const sSettle = F_SETTLE.map(f2);
   const sLie = f2(fLie(FL_TORSO, FL_TAIL.rest)), sLieBreath = f2(fLie(FL_TORSO_BREATH, FL_TAIL.rest)), sLieWag = f2(fLie(FL_TORSO, FL_TAIL.up));
@@ -546,12 +543,11 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r', look: DogLook = DEFAULT
     sniff: [f2(fSniff(F_SNIFF_HEAD, F_TAIL.wagA, F_SNIFF_LEGS)), f2(fSniff(F_SNIFF_HEAD2, F_TAIL.wagB, F_SNIFF_LEGS))],
     sniffWalk: six.map((f) => f2(fSniff(f % 2 ? F_SNIFF_HEAD2 : F_SNIFF_HEAD, f % 3 ? F_TAIL.wagA : F_TAIL.wagB, fTrotLegs(f)))),
     dig: [0, 1, 2, 3].map((f) => f2(fDig(f))),
-    scratch: SCRATCH.map(s),
-    shake: SHAKE.map(s),
+    scratch: [0, 1, 2].map((f) => f2(fScratch(f))),
+    shake: [0, 1].map((f) => f2(fShake(f))),
   };
 
   // ---- three-quarter views (lying down uses the side view's poses) ----
-  facing = 'dr';
   const d3 = (rows: string[]) => F(rows, 12, 19);
   const drP: DogPoses = {
     stand: d3(fd3Stand()),
@@ -569,7 +565,6 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r', look: DogLook = DEFAULT
     lieBreath: sLieBreath,
     lieWag: sLieWag,
   };
-  facing = 'ur';
   const u3 = (rows: string[]) => F(rows, 10, 21);
   const urP: DogPoses = {
     stand: u3(fu3Stand()),
@@ -589,7 +584,6 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r', look: DogLook = DEFAULT
   };
 
   // ---- down ----
-  facing = 'down';
   const fd = (rows: string[]) => F(rows, 7, 21);
   const downP: DogPoses = {
     stand: fd(fdown(FD_EARS.up, FD_FACE.n, FD_LEGS.stand)),
@@ -609,7 +603,6 @@ export function makeDogSprites(bandana: 'r' | 'y' = 'r', look: DogLook = DEFAULT
   };
 
   // ---- up ----
-  facing = 'up';
   const fu = (rows: string[]) => F(rows, 7, 22);
   const upP: DogPoses = {
     stand: fu(fup(FU_HEAD.up, FU_LEGS.stand, FU_TAIL.down)),
