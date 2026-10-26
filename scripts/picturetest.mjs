@@ -44,23 +44,27 @@ const diffs = await page.evaluate(async ({ save, night }) => {
   // A run of frames with things moving: gates swinging, sails turning, the
   // trough shimmering. Pictures are redrawn, or (changing every frame)
   // played straight to the screen; each frame must match the art.
-  let moving = 0;
+  // Each moment is drawn directly twice first: if those differ, drawing
+  // changes something (state kept by a draw call), not the cache.
+  let moving = 0, again = 0;
   g.dog.x = 96 * 8; g.dog.y = 104 * 8;
   Object.assign(pic.pictureStats, { hit: 0, miss: 0, direct: 0 });
   for (let f = 0; f < 60; f++) {
     if (f % 20 === 5) for (const p of g.ranch.pens) p.open = !p.open;
     g.update(1 / 60);
     const t = g.t;
-    pic.setPictures(true); const a = shot();
-    pic.setPictures(false); g.t = t; const c = shot();
-    pic.setPictures(true);
-    for (let i = 0; i < a.length; i++) if (a[i] !== c[i]) moving++;
+    pic.setPictures(false); const c = shot();
+    g.t = t; const d = shot();
+    pic.setPictures(true); g.t = t; const a = shot();
+    for (let i = 0; i < a.length; i++) if (a[i] !== d[i]) moving++;
+    for (let i = 0; i < c.length; i++) if (c[i] !== d[i]) again++;
   }
-  out.push(moving, JSON.stringify(pic.pictureStats));
+  out.push(moving, JSON.stringify(pic.pictureStats), again);
   return out;
 }, { save: fixture, night });
-bad += diffs.slice(0, 4).filter(Boolean).length;
-console.log(`${diffs.slice(0, 4).every((d) => !d) ? 'ok  ' : 'FAIL'} ${night ? 'night, storm' : 'day'}: pixels that differ at three spots: ${diffs.slice(0, 3).join(', ')}; over 60 moving frames: ${diffs[3]} (pictures ${diffs[4]})`);
+bad += diffs.slice(0, 4).filter(Boolean).length + (diffs[5] ? 1 : 0);
+console.log(`${diffs.slice(0, 4).every((d) => !d) && !diffs[5] ? 'ok  ' : 'FAIL'} ${night ? 'night, storm' : 'day'}: pixels that differ at three spots: ${diffs.slice(0, 3).join(', ')}; over 60 moving frames: ${diffs[3]} (pictures ${diffs[4]})`);
+if (diffs[5]) console.log(`FAIL ${night ? 'night, storm' : 'day'}: the same moment drawn twice without pictures differs by ${diffs[5]} pixels: something keeps state in its draw call (not the picture cache)`);
 }
 // The chunked fine layer (src/gfx/chunks.ts) draws what a plain layer does:
 // the baked ground through a FineLayer, moving about, against drawImage.

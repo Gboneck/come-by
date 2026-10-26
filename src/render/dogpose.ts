@@ -30,12 +30,14 @@ interface Pose {
   hx: number;
   hy: number;
   last: number;
+  at: number; // the game time it was last brought up to
   prevV: number;
   skidT: number;
   heat: number; // galloping lately (friends' and helpers' panting)
   lieT: number; // helpers keep no lying timers of their own
   wasLying: boolean;
   riseT: number;
+  look: boolean; // standing, head turned to the stock
   fresh: boolean;
 }
 const poses = new WeakMap<object, Pose>();
@@ -80,14 +82,19 @@ const standIn: DogState = { view: 0, speed: 0, sprint: false, phase: 0, lying: f
 
 const THATLL_DO = "THAT'LL DO";
 
-export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper, own = false) {
-  const isDog = d instanceof Dog;
+// A dog's pose brought up to the game's clock, once a moment: the shadow
+// (drawn before the dogs) and the dog then agree, and drawing the same
+// moment again (a photo, a test) draws the same dog.
+function pose(game: Game, d: Dog | Helper): Pose {
   let p = poses.get(d);
   if (!p) {
     const [hx, hy] = FACE_VEC[d.face];
-    poses.set(d, (p = { view: 0, base: 0, turnT: 0, hx, hy, last: game.t, prevV: 0, skidT: 0, heat: 0, lieT: 1, wasLying: d.lying, riseT: 0, fresh: true }));
+    poses.set(d, (p = { view: 0, base: 0, turnT: 0, hx, hy, last: game.t, at: NaN, prevV: 0, skidT: 0, heat: 0, lieT: 1, wasLying: d.lying, riseT: 0, look: false, fresh: true }));
   }
   const t = game.t;
+  if (p.at === t) return p;
+  p.at = t;
+  const isDog = d instanceof Dog;
   const dt = Math.max(0, Math.min(0.2, t - p.last));
   p.last = t;
   const speed = Math.hypot(d.vx, d.vy);
@@ -105,16 +112,11 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   const bark = d.barkAnim;
 
   // The sim's own timers (helpers keep none: count them here).
-  let phase: number, lieT: number, rise: number;
-  if (isDog) ({ phase, lieT, rise } = d.anim());
-  else {
-    phase = d.phase;
+  if (!isDog) {
     if (lying && !p.wasLying) p.lieT = 0;
     if (lying) p.lieT += dt;
     if (!lying && p.wasLying) p.riseT = 0.12;
     p.riseT -= dt;
-    lieT = p.lieT;
-    rise = p.riseT > 0 ? p.riseT / 0.12 : 0;
   }
   p.wasLying = lying;
 
@@ -132,6 +134,7 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
       look = !moving && w.d < 80 && Math.abs(k) <= 2;
     }
   }
+  p.look = look;
   if (p.fresh || lying) p.view = want;
   else if (p.view !== want) {
     p.turnT -= dt;
@@ -157,6 +160,26 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   // Out of wind.
   if (sprint && speed > 40) p.heat = Math.min(6, p.heat + dt);
   else p.heat = Math.max(0, p.heat - dt * 0.35);
+  return p;
+}
+
+export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper, own = false) {
+  const isDog = d instanceof Dog;
+  const p = pose(game, d);
+  const t = game.t;
+  const speed = Math.hypot(d.vx, d.vy);
+  const sprint = isDog ? d.sprinting : speed > 50;
+  const inWater = isDog ? d.inWater : (game.map.flagsAtPx(d.x, d.y) & SHALLOW) !== 0;
+  const lying = d.lying;
+  const bark = d.barkAnim;
+  let phase: number, lieT: number, rise: number;
+  if (isDog) ({ phase, lieT, rise } = d.anim());
+  else {
+    phase = d.phase;
+    lieT = p.lieT;
+    rise = p.riseT > 0 ? p.riseT / 0.12 : 0;
+  }
+  const look = p.look;
   let pant = !sprint && p.heat > 2.2;
   if (own && isDog) pant = !d.sprinting && (d.exhausted || d.stamina < d.stats.stamina * (game.season.season === 'summer' ? 0.8 : 0.55));
   const b = game.banner;
@@ -218,9 +241,8 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
 
 // The dog's shadow, in fine pixels, swung with the sun: long side on,
 // round seen from the front or back, between at the three-quarter views.
-export function drawDogShadow(g: CanvasRenderingContext2D, d: Dog | Helper, sun: number) {
-  const p = poses.get(d);
-  const v = p ? p.view : d.face === 'l' || d.face === 'r' ? 0 : 2;
+export function drawDogShadow(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper, sun: number) {
+  const v = pose(game, d).view;
   const rx = v % 4 === 0 ? 10 : v % 2 ? 8 : 6;
   fineShadow(g, d.x - 1 + sun, d.y + 2, rx, 2, C.sage);
 }
