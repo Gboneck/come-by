@@ -674,8 +674,8 @@ export interface DogState {
   t: number;
 }
 
-// Digging: scrape, scrape, a look into the hole, and again.
-const DIG_SEQ = [0, 1, 0, 1, 0, 1, 2, 3, 3, 3];
+// Digging: scrape, scrape, a look into the hole, and again (ten a second).
+const DIG_SEQ = [0, 1, 0, 1, 2, 3, 3, 0, 1, 0];
 
 export const viewOf = (v: number): DogView => VIEWS[((v % 8) + 8) % 8][0];
 export const FACE_VIEW: Record<'r' | 'd' | 'l' | 'u', number> = { r: 0, d: 2, l: 4, u: 6 };
@@ -700,7 +700,7 @@ export function pickDogFrame(S: DogSprites, st: DogState): { s: Sprite; flip: bo
     // Side on, towards whichever side it faced.
     const Q = S.poses.side, left = v >= 3 && v <= 5;
     const T = st.actT ?? st.t;
-    if (st.act === 'dig' && Q.dig) return { s: Q.dig[DIG_SEQ[Math.floor(T * 7) % DIG_SEQ.length]], flip: left, bob: 0 };
+    if (st.act === 'dig' && Q.dig) return { s: Q.dig[DIG_SEQ[Math.floor(T * 10) % DIG_SEQ.length]], flip: left, bob: 0 };
     if (st.act === 'sniff' && st.speed > 6 && Q.sniffWalk) return { s: Q.sniffWalk[((Math.floor(st.phase * 1.5) % 6) + 6) % 6], flip: left, bob: 0 };
     if (st.act === 'sniff' && Q.sniff) return { s: Q.sniff[Math.floor(T * 4) % 2], flip: left, bob: 0 };
   }

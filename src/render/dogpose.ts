@@ -167,7 +167,7 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   const S = soakedNow ? soaked(base) : base;
   standIn.view = p.view;
   idleIn.inWater = inWater;
-  idleIn.busy = lying || bark > 0 || speed > 4 || rise > 0 || proud || !!(d as { act?: unknown }).act;
+  idleIn.busy = lying || bark > 0 || speed > 4 || rise > 0 || proud || (isDog && (d.dig > 0 || d.sniff > 0.4));
   idleIn.side = p.view === 0 || p.view === 4;
   idleIn.flip = p.view === 4;
   idleIn.stand = pickDogFrame(S, standIn).s;
@@ -177,12 +177,16 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
     drawSpr(g, ip.s, d.x + ip.dx * 0.5, d.y + 2, ip.flip);
     return;
   }
-  // On the scent or digging (the treasure hunt sets these on the dog).
-  const hunt = d as { act?: 'sniff' | 'dig' | null; actT?: number; actX?: number; actY?: number };
-  const act = !lying && bark <= 0 ? hunt.act ?? null : null;
-  let view = p.view;
-  if (act && hunt.actX !== undefined) view = hunt.actX < d.x ? 4 : 0;
-  const f = pickDogFrame(S, { view, speed, sprint, phase, lying, lieT, rise, bark, skid: p.skidT > 0, pant, proud, look, act, actT: hunt.actT, t });
+  // On the scent or digging (the treasure hunt sets these on the dog): a
+  // dig runs 0.9s, scraping, and ends in a quick shake.
+  const sniffing = isDog && d.sniff > 0.4, digging = isDog && d.dig > 0;
+  const act = lying || bark > 0 ? null : digging ? 'dig' : sniffing ? 'sniff' : null;
+  const shakeOff = digging && d.dig < 0.16 && S.poses.side.shake;
+  if (shakeOff) {
+    drawSpr(g, S.poses.side.shake![Math.floor(t / 0.06) % 2], d.x, d.y + 2, p.view >= 3 && p.view <= 5);
+    return;
+  }
+  const f = pickDogFrame(S, { view: p.view, speed, sprint, phase, lying, lieT, rise, bark, skid: p.skidT > 0, pant, proud, look, act, actT: digging ? 0.9 - d.dig : t, t });
   const x = d.x, y = d.y + 2 + f.bob;
   if (!inWater) {
     drawSpr(g, f.s, x, y, f.flip);
