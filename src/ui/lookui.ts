@@ -3,7 +3,7 @@ import { rect } from '../gfx/draw';
 import { panel } from './frame';
 import { heading, text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
-import { playerDogSprites, type Mask, type Neck, type Speckle } from '../art/dogstyle';
+import { playerDogSprites, type Mask, type Neck, type Speckle, type Tag } from '../art/dogstyle';
 import { dimView } from './feel';
 import { safeArea } from './safe';
 import { cycle, optionRow } from './rows';
@@ -19,20 +19,42 @@ const SPECKLES: Speckle[] = ['light', 'classic', 'heavy'];
 const SPECKLE_NAME: Record<Speckle, string> = { light: 'FEW FLECKS', classic: 'BLUE FLECKED', heavy: 'HEAVY FLECKS' };
 const MASKS: Mask[] = ['both', 'one', 'none'];
 const MASK_NAME: Record<Mask, string> = { both: 'BOTH EYES', one: 'ONE EYE', none: 'NO MASK' };
-const NECKS: Neck[] = ['bandana', 'neckerchief', 'collar'];
-const NECK_NAME: Record<Neck, string> = { bandana: 'BANDANA', neckerchief: 'NECKERCHIEF', collar: 'COLLAR' };
+const NECKS: Neck[] = ['bandana', 'neckerchief', 'collar', 'spotted'];
+const NECK_NAME: Record<Neck, string> = { bandana: 'BANDANA', neckerchief: 'NECKERCHIEF', collar: 'COLLAR', spotted: 'SPOTTED' };
+// Things to wear dug up (systems/loot.ts) join the choices once found.
+const necks = (g: Game) => NECKS.filter((n) => n !== 'spotted' || g.loot.has('kerchief'));
+const TAG_ITEM: Record<Tag, string> = { none: '', brass: 'tag-brass', bone: 'tag-bone', gold: 'tag-gold' };
+const TAG_NAME: Record<Tag, string> = { none: 'NONE', brass: 'BRASS', bone: 'BONE-SHAPED', gold: 'GOLDEN' };
+const tags = (g: Game) => (Object.keys(TAG_ITEM) as Tag[]).filter((t) => t === 'none' || g.loot.has(TAG_ITEM[t]));
+type Marks = 'none' | 'socks' | 'blaze' | 'both';
+const MARK_NAME: Record<Marks, string> = { none: 'NONE', socks: 'WHITE SOCKS', blaze: 'A BLAZE', both: 'SOCKS AND BLAZE' };
+const marksOf = (g: Game): Marks => (g.look.dog.socks ? (g.look.dog.blaze ? 'both' : 'socks') : g.look.dog.blaze ? 'blaze' : 'none');
+const marks = (g: Game): Marks[] => {
+  const s = g.loot.has('photo-socks'), b = g.loot.has('photo-blaze');
+  return (['none', 'socks', 'blaze', 'both'] as Marks[]).filter((m) => m === 'none' || (m === 'socks' ? s : m === 'blaze' ? b : s && b));
+};
 
-interface Row { label: string; value: (g: Game) => string; step: (g: Game, d: -1 | 1) => void }
+interface Row { label: string; value: (g: Game) => string; step: (g: Game, d: -1 | 1) => void; show?: (g: Game) => boolean }
 
 const ROWS: Row[] = [
   { label: 'COAT', value: (g) => SPECKLE_NAME[g.look.dog.speckle], step: (g, d) => { g.look.dog.speckle = cycle(SPECKLES, g.look.dog.speckle, d); } },
   { label: 'MASK', value: (g) => MASK_NAME[g.look.dog.mask], step: (g, d) => { g.look.dog.mask = cycle(MASKS, g.look.dog.mask, d); } },
   { label: 'SADDLE', value: (g) => (g.look.dog.saddle ? 'DARK PATCH' : 'NONE'), step: (g) => { g.look.dog.saddle = !g.look.dog.saddle; } },
   { label: 'TAIL', value: (g) => (g.look.dog.tailTip ? 'WHITE TIP' : 'PLAIN'), step: (g) => { g.look.dog.tailTip = !g.look.dog.tailTip; } },
-  { label: 'NECK', value: (g) => NECK_NAME[g.look.dog.neck], step: (g, d) => { g.look.dog.neck = cycle(NECKS, g.look.dog.neck, d); } },
+  { label: 'NECK', value: (g) => NECK_NAME[g.look.dog.neck], step: (g, d) => { g.look.dog.neck = cycle(necks(g), g.look.dog.neck, d); } },
+  { label: 'TAG', value: (g) => TAG_NAME[g.look.dog.tag ?? 'none'], step: (g, d) => { g.look.dog.tag = cycle(tags(g), g.look.dog.tag ?? 'none', d); }, show: (g) => tags(g).length > 1 },
+  {
+    label: 'MARKS',
+    value: (g) => MARK_NAME[marksOf(g)],
+    step: (g, d) => {
+      const m = cycle(marks(g), marksOf(g), d);
+      g.look.dog.socks = m === 'socks' || m === 'both';
+      g.look.dog.blaze = m === 'blaze' || m === 'both';
+    },
+    show: (g) => marks(g).length > 1,
+  },
 ];
-// Row 0 is the name, then ROWS, then the button.
-const N = ROWS.length + 2;
+const rowsFor = (g: Game) => ROWS.filter((r) => !r.show || r.show(g));
 
 function changed(game: Game) {
   applyLook(game.look);
@@ -41,10 +63,12 @@ function changed(game: Game) {
 export function lookKeys(game: Game) {
   const inp = game.input;
   if (isTyping()) return;
+  // Row 0 is the name, then the rows, then the button.
+  const rows = rowsFor(game), N = rows.length + 2;
   if (inp.pressed('up')) game.lookSel = (game.lookSel + N - 1) % N;
   if (inp.pressed('down')) game.lookSel = (game.lookSel + 1) % N;
   const s = game.lookSel;
-  const row = ROWS[s - 1];
+  const row = rows[s - 1];
   if (inp.pressed('cancel') || inp.pressed('pause')) return game.closeLook();
   if (inp.pressed('left') && row) { row.step(game, -1); changed(game); }
   if (inp.pressed('right') && row) { row.step(game, 1); changed(game); }
@@ -59,6 +83,7 @@ export function drawLook(game: Game, g: CanvasRenderingContext2D, W: number, H: 
   const ui = game.ui;
   const touch = game.input.touchMode;
   const S = safeArea(game.screen);
+  const rows = rowsFor(game), N = rows.length + 2;
   dimView(g, game.view());
   const rh = touch ? 14 : 12, gap = touch ? 3 : 2;
   const pw = Math.min(W - 12, 190);
@@ -105,7 +130,7 @@ export function drawLook(game: Game, g: CanvasRenderingContext2D, W: number, H: 
     }
     y += rh + gap;
   }
-  ROWS.forEach((r, i) => {
+  rows.forEach((r, i) => {
     const sel = game.lookSel === i + 1;
     if (optionRow(game, g, `look-${i}`, bx, y, bw, rh, r.label, r.value(game), sel, (d) => { game.lookSel = i + 1; r.step(game, d); changed(game); })) game.lookSel = i + 1;
     y += rh + gap;

@@ -305,6 +305,9 @@ export class HostNet implements PingNet {
         }
         return;
       }
+      // E on a dig spot (no animal at the nose): the guest dug it (theirs,
+      // on their screen); it is gone for everyone.
+      if (!e.target && game.loot.digBy(game, e.x, e.y)) return;
       // E at a pen gate holds it open for a buyer's order, as for the host.
       const was = game.dog;
       const stand = new Dog(e.x, e.y);

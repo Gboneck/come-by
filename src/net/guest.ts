@@ -415,6 +415,7 @@ export class GuestNet implements PingNet {
     d.update(dt, input, game.map, game.fx, free);
     for (const ev of d.events) this.ownEvent(game, ev);
     d.events.length = 0;
+    game.loot.update(game, dt); // our scent, and our dog staying put while it digs
     this.send(game, dt);
 
     this.apply(game, dt);
@@ -443,6 +444,8 @@ export class GuestNet implements PingNet {
       game.audio?.play('bark', opts);
       game.feel.kick(kx, ky, 0.09);
       buzz(touch(game), 12);
+    } else if (game.loot.dig(game, (id, coins) => this.travels.addLoot(id, coins))) {
+      // Digging: what comes up is ours (the host hears the nip and fills the hole in for everyone).
     } else {
       const hit = nipPick(game.animals, d.x + d.hx * 4, d.y + d.hy * 4, d.hx, d.hy);
       target = hit?.id ?? 0;

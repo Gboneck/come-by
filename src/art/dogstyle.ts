@@ -10,7 +10,8 @@ import { makeDogSprites, type DogSprites } from './dog';
 
 export type Speckle = 'light' | 'classic' | 'heavy';
 export type Mask = 'both' | 'one' | 'none';
-export type Neck = 'bandana' | 'neckerchief' | 'collar';
+export type Neck = 'bandana' | 'neckerchief' | 'collar' | 'spotted';
+export type Tag = 'none' | 'brass' | 'bone' | 'gold';
 export type DogFacing = 'side' | 'dr' | 'ur' | 'down' | 'up';
 
 export interface DogLook {
@@ -19,11 +20,15 @@ export interface DogLook {
   saddle: boolean; // a dark patch over the back
   tailTip: boolean; // a white tip to the tail
   neck: Neck;
+  // Dug up (systems/loot.ts), so missing from older looks.
+  tag?: Tag; // a collar tag where a neckerchief's point would hang
+  socks?: boolean; // white lower legs
+  blaze?: boolean; // a white blaze up the face
 }
 
 export const DEFAULT_DOG: DogLook = { speckle: 'classic', mask: 'both', saddle: false, tailTip: false, neck: 'bandana' };
 
-const lookKey = (l: DogLook) => `${l.speckle}-${l.mask}-${+l.saddle}-${+l.tailTip}-${l.neck}`;
+const lookKey = (l: DogLook) => `${l.speckle}-${l.mask}-${+l.saddle}-${+l.tailTip}-${l.neck}-${l.tag ?? 'none'}-${+!!l.socks}-${+!!l.blaze}`;
 
 // Coat pixels that take flecks: a fixed scatter, so frames stay steady.
 const fleck = (x: number, y: number) => (x * 3 + y * 5) % 7 === 0;
@@ -64,16 +69,37 @@ export function dressRows(rows: string[], facing: DogFacing, look: DogLook, wet 
         for (let y = 0; y < H; y++) if (coat(at(x, y))) { set(x, y, 'p'); break; } else if (at(x, y) !== '.') break;
     }
   }
+  // Socks: the legs' coat just above the paws goes white, side on and three
+  // quarters (lying down, or seen from the front, there are no legs to see).
+  if (look.socks && facing !== 'down' && facing !== 'up' && !g[H - 1].some(coat))
+    for (let y = legs; y < H - 1; y++)
+      for (let x = 0; x < g[y].length; x++) if (at(x, y) === 't' && !(coat(at(x - 1, y)) && coat(at(x + 1, y)))) set(x, y, 'w');
+  // A blaze: white up the forehead, between the eyes or over the brow.
+  if (look.blaze) {
+    const ey = g.findIndex((r) => r.includes('e') && r.includes('E'));
+    if (ey > 0) {
+      const xc = Math.round((g[ey].indexOf('e') + g[ey].indexOf('E')) / 2);
+      if (at(xc, ey - 1) === 't') set(xc, ey - 1, 'w');
+    } else {
+      const hy = g.findIndex((r) => r.includes('h'));
+      if (hy >= 0) set(g[hy].indexOf('h'), hy, 'w');
+    }
+  }
+  const tag = look.tag && look.tag !== 'none' ? (look.tag === 'bone' ? 'w' : 'y') : 't';
   const T: Record<string, string> = {
     k: look.neck === 'collar' ? 't' : 'r',
     f: look.neck === 'collar' ? '.' : 'r',
-    n: look.neck === 'neckerchief' ? 'r' : 't',
+    n: look.neck === 'neckerchief' ? 'r' : tag,
     e: look.mask === 'none' ? 'w' : 'p',
     E: look.mask === 'both' ? 'p' : 'w',
     h: look.mask === 'none' ? 'w' : 't', // side on, a pale face round the eye
     a: look.tailTip ? 'w' : 't',
   };
-  return g.map((r) => r.map((c) => T[c] ?? c).join(''));
+  const out = g.map((r) => r.map((c) => T[c] ?? c));
+  // The spotted kerchief: still red (the player's), with wool spots.
+  if (look.neck === 'spotted')
+    for (let y = 0; y < H; y++) for (let x = 0; x < out[y].length; x++) if (out[y][x] === 'r' && (x * 2 + y) % 3 === 0) out[y][x] = 'w';
+  return out.map((r) => r.join(''));
 }
 
 // The player's sprites for a look, built once per look.

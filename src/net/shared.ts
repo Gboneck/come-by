@@ -30,6 +30,8 @@ export const SHARED: Shared[] = [
   { key: 'valley', get: (g) => valleyShared(g), set: (g, v) => valleyApply(g, v as ValleySave) },
   // Valley projects: progress, what is done, the fold's gate (systems/projects.ts).
   { key: 'projects', get: (g) => g.projects.shared(), set: (g, v) => g.projects.applyShared(g, v) },
+  // Today's dug holes (systems/loot.ts): the spots themselves are the same on every screen.
+  { key: 'loot', get: (g) => g.loot.shared(g), set: (g, v) => g.loot.applyShared(g, v) },
 ];
 
 type PaddockRec = [number, number, number, number, Rot, number | null, PenFixture[]];

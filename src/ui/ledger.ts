@@ -17,6 +17,7 @@ import { discoveryLines, drawPaperFog, drawPlaceMarks, drawProjectMarks, project
 import { travelLines } from '../net/travels';
 import { valleyLedger } from './valley';
 import { BADGES_PAGE, BUYERS_PAGE } from './achievements';
+import { FINDS_PAGE, drawLootMarks } from './loot';
 
 let mini: HTMLCanvasElement | null = null;
 
@@ -72,6 +73,7 @@ function drawMap(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number
   }
   drawPlaceMarks(game, g, x0, y0);
   drawProjectMarks(game, g, x0, y0);
+  drawLootMarks(game, g, x0, y0); // the old map's X, and lost animals
   // Flocks out in the pastures, as ink dots.
   for (const gr of game.groups) {
     if (!game.discovery.known(gr.x, gr.y)) continue; // no flocks in the fog
@@ -157,7 +159,7 @@ export interface LedgerPage {
   keys?: (game: Game) => boolean;
   dot?: (game: Game) => boolean;
 }
-export const LEDGER_PAGES: LedgerPage[] = [BUYERS_PAGE, BADGES_PAGE];
+export const LEDGER_PAGES: LedgerPage[] = [BUYERS_PAGE, BADGES_PAGE, FINDS_PAGE];
 // The open page (0: the ranch). The book stays open where you left it.
 export const ledgerView = { page: 0 };
 

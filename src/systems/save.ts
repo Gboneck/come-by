@@ -20,6 +20,7 @@ import { PIECES, type PlacedDecor } from '../ui/decorbuild';
 import { SKIES, type Sky } from './weather';
 import type { DiscoverySave } from './discovery';
 import type { ProjectsSave } from './projects';
+import type { LootSave } from './loot';
 import { mergeTravels } from '../net/travels';
 
 // A save is "the morning of day N": the ranch, the herds where they stand,
@@ -61,6 +62,7 @@ export interface SaveData {
   // Added with exploring.
   discovery?: DiscoverySave;
   projects?: ProjectsSave; // added with the valley projects
+  loot?: LootSave; // added with digging
   // Added with seasons (the calendar itself follows from `day`).
   seasonal?: { loft: number; hungryNights: number; fair: FairEntry[] };
   // Added with the valley growing: the village, paddocks, the old bridge,
@@ -147,7 +149,7 @@ export function saveData(game: Game): SaveData {
         return out;
       }),
     wild: [
-      ...game.animals.filter((a) => !a.pen && !a.gone && !a.trial && !game.discovery.tracked.has(a)), // strays and wild flocks: in `discovery`
+      ...game.animals.filter((a) => !a.pen && !a.gone && !a.trial && !game.discovery.tracked.has(a) && !game.loot.lost.has(a)), // strays and wild flocks: in `discovery`; the map's lost animals come back each morning
       ...away,
     ].map((a) => {
       const at = gateOf(a);
@@ -164,6 +166,7 @@ export function saveData(game: Game): SaveData {
     weather: { sky: game.weather.sky, forecast: game.weather.forecast, dir: [+game.weather.dirX.toFixed(3), +game.weather.dirY.toFixed(3)] },
     discovery: game.discovery.save(game),
     projects: game.projects.save(),
+    loot: game.loot.save(),
     seasonal: { loft: game.seasonal.loft, hungryNights: game.seasonal.hungryNights, fair: game.seasonal.fair },
     valley: valleySave(game),
     farmwork: (({ marks, trainedDay, best, cleanRuns, shorn, milked }) => ({ marks, trainedDay, best, cleanRuns, shorn, milked }))(game.farmwork),
@@ -280,6 +283,7 @@ export function loadInto(game: Game): boolean {
   game.setTier(d.tier, false);
   game.discovery.load(game, d.discovery);
   game.projects.load(game, d.projects);
+  game.loot.load(game, d.loot);
   mergeTravels(game); // places and keepsakes found visiting friends' ranches
   valleyLoad(game, d.valley);
   Object.assign(game.farmwork, d.farmwork ?? {});

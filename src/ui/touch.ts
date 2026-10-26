@@ -32,6 +32,7 @@ export function touchLayout(game: Game, W: number, H: number): TouchLayout {
 const BTN_ICON: Record<string, string[]> = {
   BARK: ['.#...#.', '#..#..#', '.#...#.'],
   NIP: ['#.#.#', '.#.#.'],
+  DIG: ['.#.#.', '#.#.#', '.###.'], // a paw (NIP digs on a scent: systems/loot.ts)
   DOWN: ['#...#', '.#.#.', '..#..'],
 };
 
@@ -110,7 +111,7 @@ export function drawTouchControls(game: Game, g: CanvasRenderingContext2D, W: nu
   const d = game.dog;
   const coach = coachButton(game);
   roundButton(g, L.bark, 'BARK', ui.isActive('bark'), d.barkCd <= 0, coach === 'bark');
-  roundButton(g, L.nip, 'NIP', ui.isActive('nip'), d.nipCd <= 0 && !d.lying, coach === 'nip');
+  roundButton(g, L.nip, game.loot.canDig(game) ? 'DIG' : 'NIP', ui.isActive('nip'), d.nipCd <= 0 && !d.lying, coach === 'nip' || game.loot.canDig(game));
   roundButton(g, L.lie, 'DOWN', input.lie, true, coach === 'lie' && !input.lie);
 
   // The stick: walk inside the inner ring, run past it. The outer ring is

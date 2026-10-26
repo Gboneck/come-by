@@ -2,11 +2,12 @@ import { C } from '../palette';
 import { line, px, rect } from '../gfx/draw';
 import { gust } from '../render/wind';
 import { drawGift, type GiftId } from './favour';
+import { drawLootPiece, isLootPiece, type LootPieceId } from './loot';
 
 // Decor the player places in build mode. (x, y) is the ground point at the
 // middle of the piece's footprint, as for the ranch's own decor.
 
-export type PieceId = 'flowerbed' | 'hay' | 'bench' | 'signpost' | 'dogbed' | 'scarecrow' | 'birdbath' | 'ribbons' | 'trophy' | GiftId;
+export type PieceId = 'flowerbed' | 'hay' | 'bench' | 'signpost' | 'dogbed' | 'scarecrow' | 'birdbath' | 'ribbons' | 'trophy' | GiftId | LootPieceId;
 
 export interface PieceInfo {
   ribbons?: [number, number, number]; // for the ribbon board
@@ -141,6 +142,7 @@ export function drawPiece(g: CanvasRenderingContext2D, id: PieceId, x: number, y
       break;
     }
     default:
-      drawGift(g, id, x, y, t); // buyers' gifts (art/favour.ts)
+      if (isLootPiece(id)) drawLootPiece(g, id, x, y, t); // grown from what was dug up (art/loot.ts)
+      else drawGift(g, id, x, y, t); // buyers' gifts (art/favour.ts)
   }
 }

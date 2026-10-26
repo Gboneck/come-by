@@ -1029,6 +1029,42 @@ Before → after, in plain words:
       guest badges and shared favour; savetest, ordertest, daytest pass;
       `tune.mjs --seed=7` is identical to main for all five species
 
+## M34 Sniff and dig: loot (world, round five)
+- [x] Scent (`src/systems/loot.ts`, drawn in `src/art/loot.ts`): walking
+      slowly or standing still near something buried, curls of scent drift
+      from it to the dog's nose (faint on the move, bright when it stands to
+      sniff; further in rain; none at night or lying down); close up the
+      ground is turned and glints, and the dog puts its nose down
+- [x] NIP digs on a scent (E: DIG over the dog; the phone's NIP button
+      reads DIG with a paw), never with an animal at the nose or a fox at
+      its heels, never lying down; a bot's nip stays a nip. The dog digs
+      nearly a second, earth flying, and leaves a hole until morning; the
+      find hops out with a sparkle and a FOUND IT! banner (rare: a stinger;
+      the hoard: the tier-up stinger and confetti)
+- [x] Dig spots, new each morning, the same on every screen (seeded by the
+      day): two or three in the meadows round the ranch, three out in the
+      pastures, two in hidden places (which places by season); one more of
+      each after rain, one fewer in winter; regions open by tier
+- [x] 29 things to find in four rarities: coins (1-3$), old coins (6-10$), a
+      purse (20-30$); bones to bury on the ranch and dig up aged another day
+      (full wind); curios (button, horseshoe, marble, pipe, thimble,
+      arrowhead, fossil); seeds (sunflowers, herbs, roses, a pippin) and the
+      fossil open free decor; things to wear (brass, bone-shaped and golden
+      collar tags, a spotted kerchief, white socks, a blaze) join the dog's
+      look; relics: the shepherd's whistle (bark +10% reach) and the
+      bellwether's bell (the flock near the dog settles quicker)
+- [x] The old shepherd's map, four pages, each where the last says: a lost
+      ewe in the Old Orchard, a way to a hidden place, a lost billy goat in
+      the Hidden Valley, and X marks the spot by the cairn on Lookout Knoll:
+      the hoard (100$ and the golden tag). Lost animals wait each morning
+      until penned (a bonus, by calm); the next page is an X on the Ledger map
+- [x] The Ledger's FINDS page (`src/ui/loot.ts`): every find in a grid, "?"
+      for what is still in the ground, framed by rarity, the one picked
+      written up (or where to look), bones, the map and how to dig
+- [x] Saved (old saves start with nothing); co-op: the day's holes are
+      shared, a guest's finds go to their travels and home with them
+- [x] `scripts/loottest.mjs`; seeded tune.mjs identical for all five
+      species; discoverytest, projecttest, savetest, seasontest, cooptest
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -2102,3 +2138,15 @@ Before → after, in plain words:
   the tier card's slot and waits behind banners; the ribbon board stands
   just past the farmhouse's front right corner (World and light). The
   merge steps are in the session notes (favour-achievements.md).
+- Loot (round five): every roll is seeded by the day and the spot, so a
+  spot holds the same thing for anyone who digs it and seeded runs match;
+  things found once (seeds, wear, relics, pages) are not found twice, and
+  a roll that lands on one falls back to coins. Coins stay modest (about
+  15$ for a whole day dug, the hoard once) so herding stays the living.
+- Digging is NIP on a spot rather than a new button: nothing to learn on a
+  phone, and an animal at the nose always gets the nip, so it never gets in
+  the way of herding. Lying down stays lying down (no digging, no scent).
+- Things to wear are drawn by the look's template rewrite (dogstyle.ts):
+  the spotted kerchief stays Bandana red with wool spots, tags hang where a
+  neckerchief's point would, socks and a blaze are wool. Until Characters
+  draws a dig pose, digging uses the sniff pose with the paws going.
