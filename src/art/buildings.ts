@@ -44,78 +44,123 @@ export const railCol = (): string => (seasonLook.snow > 0.4 ? C.sage : C.wool);
 export const postH = (x: number, y: number) => (hash2(x, y, 401) < 0.22 ? 5 : 6);
 export const postCap = (x: number, y: number) => (seasonLook.snow > 0.4 ? C.wool : hash2(x, y, 402) < 0.3 ? C.sage : C.moss);
 
-export function post(g: CanvasRenderingContext2D, x: number, base: number, sturdy: boolean) {
-  if (sturdy) {
-    rect(g, x, base - 6, 2, 7, C.plum);
-    rect(g, x, base - 7, 2, 1, C.wool);
-    px(g, x - 1, base, C.wool);
-    px(g, x + 2, base, C.sage);
-    return;
+// Fences are drawn on the fine grid (world coordinates in, fine pixels
+// out): slim posts lit on their right side under a weathered cap, round
+// rails with a pale top and a shadowed underside, a thin shadow on the
+// ground. A sturdy (upgraded) fence has thicker capped posts on stone
+// footings and a third rail.
+export function postF(fg: CanvasRenderingContext2D, X: number, B: number, h: number, cap: string, sturdy: boolean, heavy = false) {
+  const w = sturdy || heavy ? 4 : 3;
+  const H = h * PX + (sturdy ? 2 : heavy ? 1 : 0);
+  rect(fg, X, B - H + 1, w, H, C.plum);
+  rect(fg, X + w - 1, B - H + 2, 1, H - 2, C.sage);
+  rect(fg, X, B - H + 1, w, sturdy ? 2 : 1, cap);
+  if (sturdy || heavy) {
+    // A stone at its foot.
+    rect(fg, X - 1, B, w + 2, 1, C.sage);
+    px(fg, X - 1, B - 1, C.wool);
   }
-  const h = postH(x, base);
-  rect(g, x, base - h + 1, 2, h, C.plum);
-  px(g, x + (hash2(x, base, 403) < 0.5 ? 0 : 1), base - h + 1, postCap(x, base));
-  if (hash2(x, base, 407) < 0.4) px(g, x - 1, base, C.moss);
-  if (hash2(x, base, 408) < 0.2) px(g, x + 1, base - 2, C.teal);
+  px(fg, X + w, B, C.sage);
+}
+
+export function post(g: CanvasRenderingContext2D, x: number, base: number, sturdy: boolean) {
+  const cap = sturdy || seasonLook.snow > 0.4 ? C.wool : postCap(x, base);
+  fine(g, (fg) => postF(fg, x * PX, base * PX + 1, sturdy ? 6 : postH(x, base), cap, sturdy));
+}
+
+// A rail along x from X0 to X1 (fine) with its top at row Y: pale on top,
+// shadowed underneath, a knot or a grey streak here and there.
+export function railF(fg: CanvasRenderingContext2D, X0: number, X1: number, Y: number, seed: number) {
+  if (X1 <= X0) return;
+  const top = seasonLook.snow > 0.4 ? C.wool : C.wool;
+  rect(fg, X0, Y, X1 - X0, 1, top);
+  rect(fg, X0, Y + 1, X1 - X0, 1, C.sage);
+  for (let x = X0 + 2; x < X1 - 1; x += 5) {
+    const h = hash2(x >> 2, seed, 404);
+    if (h < 0.1) px(fg, x, Y, C.plum); // a knot
+    else if (h < 0.18) rect(fg, x, Y, 3, 1, C.sage); // weathered grey
+  }
 }
 
 export function hFence(g: CanvasRenderingContext2D, xa: number, xb: number, base: number, gap?: [number, number], sturdy = false) {
-  const inGap = (x: number) => !!gap && x > gap[0] && x < gap[1];
-  rect(g, xa, base + 1, xb - xa, 1, C.sage);
-  const rc = railCol();
-  for (let x = xa; x <= xb; x++) {
-    if (inGap(x)) continue;
-    const knot = hash2(x, base, 404) < 0.05;
-    px(g, x, base - 2, rc);
-    px(g, x, base - 4, knot ? C.sage : rc);
-    if (sturdy) px(g, x, base - 6, rc);
-  }
-  for (let x = xa; x <= xb; x += 8) {
-    if (inGap(x) && x !== gap![0] && x !== gap![1]) continue;
-    post(g, x, base, sturdy);
-  }
-  if (gap) {
-    post(g, gap[0], base, sturdy);
-    post(g, gap[1] - 1, base, sturdy);
-  }
+  fine(g, (fg) => {
+    const B = base * PX + 1;
+    const X0 = xa * PX, X1 = (xb + 1) * PX;
+    const G0 = gap ? (gap[0] + 1) * PX : 0, G1 = gap ? gap[1] * PX : 0;
+    const span = (fn: (a: number, b: number) => void) => {
+      if (!gap) fn(X0, X1);
+      else { fn(X0, Math.min(X1, G0)); fn(Math.max(X0, G1), X1); }
+    };
+    span((a, b) => rect(fg, a, B + 1, b - a, 1, C.sage));
+    span((a, b) => { railF(fg, a, b, B - 5, base); railF(fg, a, b, B - 9, base + 1); if (sturdy) railF(fg, a, b, B - 13, base + 2); });
+    for (let x = xa; x <= xb; x += 8) {
+      if (gap && x > gap[0] && x < gap[1]) continue;
+      const cap = sturdy || seasonLook.snow > 0.4 ? C.wool : postCap(x, base);
+      postF(fg, x * PX, B, sturdy ? 6 : postH(x, base), cap, sturdy);
+    }
+    if (gap) {
+      postF(fg, gap[0] * PX, B, 6, C.wool, sturdy, true);
+      postF(fg, (gap[1] - 1) * PX, B, 6, C.wool, sturdy, true);
+    }
+  });
 }
 
-// One post and the rail down to the next post of a north-south fence.
+// One post and the rails down to the next post of a north-south fence: the
+// rails seen from above as two pale lines (the upper one set higher), their
+// shade beside them, a shadow on the ground.
+export function vRailsF(fg: CanvasRenderingContext2D, X: number, Ya: number, Yb: number, sturdy: boolean, seed: number) {
+  const n = Yb - Ya;
+  if (n <= 0) return;
+  rect(fg, X + 4, Ya - 2, 1, n, C.sage);
+  rect(fg, X + 1, Ya - 9, 1, n, C.wool);
+  rect(fg, X + 2, Ya - 8, 1, n, C.sage);
+  rect(fg, X + 2, Ya - 5, 1, n, C.wool);
+  rect(fg, X + 3, Ya - 4, 1, n, C.sage);
+  if (sturdy) rect(fg, X, Ya - 13, 1, n, C.wool);
+  const k = Ya + Math.floor(hash2(X, seed, 405) * (n - 2));
+  if (hash2(X, seed, 406) < 0.4) px(fg, X + 2, k - 5, C.plum);
+}
+
 export function vFenceSeg(g: CanvasRenderingContext2D, x: number, ya: number, yb: number, rail = true, sturdy = false) {
-  if (rail) {
-    rect(g, x + 2, ya - 2, 1, yb - ya, C.sage);
-    const rc = railCol();
-    rect(g, x, ya - 4, 1, yb - ya, rc);
-    rect(g, x + 1, ya - 3, 1, yb - ya, rc);
-    if (sturdy) rect(g, x, ya - 6, 1, yb - ya, rc);
-    const k = ya + Math.floor(hash2(x, ya, 405) * 6);
-    if (hash2(x, ya, 406) < 0.4) px(g, x + 1, k - 3, C.sage);
-  }
-  post(g, x, ya, sturdy);
+  fine(g, (fg) => {
+    const X = x * PX, Ya = ya * PX + 1, Yb = yb * PX + 1;
+    if (rail) vRailsF(fg, X, Ya, Yb, sturdy, ya);
+    const cap = sturdy || seasonLook.snow > 0.4 ? C.wool : postCap(x, ya);
+    postF(fg, X, Ya, sturdy ? 6 : postH(x, ya), cap, sturdy);
+  });
 }
 
 // A gate leaf swinging outward about its hinge. `along` is the unit vector
-// along the fence from the hinge, `outward` points out of the pen.
+// along the fence from the hinge, `outward` points out of the pen. On the
+// fine grid: two rails and a brace, a stile at the free end with a latch.
 export function gateLeaf(g: CanvasRenderingContext2D, hx: number, hy: number, along: [number, number], outward: [number, number], len: number, swing: number, flash: number) {
   const a = swing * Math.PI * 0.5;
   const ex = hx + len * (along[0] * Math.cos(a) + outward[0] * Math.sin(a));
   const ey = hy + len * (along[1] * Math.cos(a) + outward[1] * Math.sin(a));
-  line(g, hx, hy + 1, ex, ey + 1, C.sage);
-  const rc = railCol();
-  line(g, hx, hy - 2, ex, ey - 2, rc);
-  line(g, hx, hy - 4, ex, ey - 4, rc);
-  // Diagonal brace.
-  line(g, hx, hy - 4, (hx + ex) / 2, (hy + ey) / 2 - 2, rc);
-  rect(g, ex - 0.5, ey - 5, 1, 6, C.plum);
-  // Hinge straps on the rails at the post, a latch at the free end.
-  const ux = (ex - hx) / Math.max(1, len), uy = (ey - hy) / Math.max(1, len);
-  px(g, hx + ux, hy - 2 + uy, C.plum);
-  px(g, hx + ux, hy - 4 + uy, C.plum);
-  px(g, ex - ux, ey - 3 - uy, C.butter);
-  if (flash > 0 && Math.floor(flash * 12) % 2 === 0) {
-    px(g, ex + 1, ey - 6, C.butter);
-    px(g, ex - 2, ey - 7, C.butter);
-  }
+  fine(g, (fg) => {
+    const HX = Math.round(hx * PX) + 1, HY = Math.round(hy * PX) + 1;
+    const EX = Math.round(ex * PX) + 1, EY = Math.round(ey * PX) + 1;
+    line(fg, HX, HY + 1, EX, EY + 1, C.sage);
+    for (const off of [5, 9]) {
+      line(fg, HX, HY - off, EX, EY - off, C.wool);
+      line(fg, HX, HY - off + 1, EX, EY - off + 1, C.sage);
+    }
+    // The brace, from the foot at the hinge to the top rail at the latch.
+    line(fg, HX, HY - 5, EX, EY - 9, C.wool);
+    rect(fg, EX - 1, EY - 11, 2, 12, C.plum);
+    px(fg, EX, EY - 10, C.sage);
+    const ux = (EX - HX) / Math.max(1, len * PX), uy = (EY - HY) / Math.max(1, len * PX);
+    for (const off of [5, 9]) {
+      px(fg, HX + ux * 2, HY - off + uy * 2, C.plum);
+      px(fg, HX + ux * 3, HY - off + uy * 3, C.plum);
+    }
+    px(fg, EX - ux * 3, EY - 7 - uy, C.butter);
+    if (flash > 0 && Math.floor(flash * 12) % 2 === 0) {
+      px(fg, EX + 2, EY - 13, C.butter);
+      px(fg, EX - 3, EY - 15, C.butter);
+      px(fg, EX + 4, EY - 9, C.butter);
+    }
+  });
 }
 
 // Pens and paddocks: drawn in paddock.ts (re-exported here for older imports).

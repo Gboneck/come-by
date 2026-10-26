@@ -834,12 +834,11 @@ function bakeWorld(map: WorldMap): Baked {
   // ---- Animated water ----
   const comps = components(map, (t) => t === Ter.Water || t === Ter.Shallow);
   const waterAnims: WaterAnim[] = [];
-  const src = { W, water, deep, wdist, ground: gp, skip };
   comps.box.forEach((bb) => {
     const x0 = Math.max(0, bb[0] * TS - 6), y0 = Math.max(0, bb[1] * TS - 6);
     const x1 = Math.min(W, (bb[2] + 1) * TS + 6), y1 = Math.min(H, (bb[3] + 1) * TS + 6);
     const flowing = bb[3] - bb[1] > 20;
-    waterAnims.push(makeWaterAnim(src, x0, y0, x1 - x0, y1 - y0, flowing, flowing ? stones : []));
+    waterAnims.push(makeWaterAnim(x0, y0, x1 - x0, y1 - y0, flowing, flowing ? stones : []));
   });
 
   let wx0 = W, wy0 = H, wx1 = 0, wy1 = 0;

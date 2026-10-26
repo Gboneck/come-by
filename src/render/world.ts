@@ -17,7 +17,7 @@ import { drawShafts } from './light';
 import { quality } from '../gfx/quality';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
-import { drawSway } from './sway';
+import { drawSway, drawWater } from './sway';
 import { lightLook, setSeasonLook } from '../art/seasonlook';
 import { drawDog } from './dogpose';
 import { yardFire } from '../art/course';
@@ -81,6 +81,10 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // The fine ground and canopy, painted in chunks with this look.
   game.life.lit.sync(game.baked, groundLook(game), sh.dx, sh.dy, game.day.phase !== 'night', ox, oy, W, H, true);
   game.life.lit.drawGround(g, game.baked, ox, oy, W, H);
+  g.save();
+  g.translate(-ox, -oy);
+  drawWater(g, game.baked.water, game.baked.fine, game.baked.waterDist, ox, oy, W, H, game.life.vt);
+  g.restore();
 
   g.save();
   g.translate(-ox, -oy);
