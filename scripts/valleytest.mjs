@@ -60,6 +60,14 @@ const res = await page.evaluate(async () => {
   const solid = (p) => (g.map.flagsAtPx((p.tx + 1) * 8 + 2, (p.ty + p.h - 1) * 8 + 2) & M.SOLID) !== 0;
   const cot1 = VIL.PLOTS.find((p) => p.step === 'cottage1');
   check('first order filled: a cottage the next morning, solid, a newcomer', vil.has('cottage1') && solid(cot1) && g.valley.newcomer?.step === 'cottage1' && g.banner?.big?.includes('VILLAGE'), { banner: g.banner?.big });
+  // Its family walks in up the road and finds the door.
+  step(0.5);
+  const fam = g.folk.people.filter((p) => p.id === 'cottager1' || p.id === 'cottager2');
+  const road = VIL.SPOTS.road, door = VIL.doorOf(cot1);
+  check('the newcomers walk in up the road', fam.length === 2 && fam.every((p) => Math.hypot(p.x - road.x, p.y - road.y) < 30), fam.map((p) => [Math.round(p.x), Math.round(p.y)]));
+  let atDoor = 1e9;
+  for (let i = 0; i < 40; i++) { step(1); atDoor = Math.min(atDoor, Math.max(...fam.map((p) => Math.hypot(p.x - door.x, p.y - door.y)))); }
+  check('...and reach their cottage door', atDoor < 6, { atDoor: Math.round(atDoor) });
   // Everything else done at once: still one step a morning, in order.
   g.totals.orders = 4;
   g.totals.ribbons = [1, 0, 0];
@@ -105,6 +113,19 @@ const res = await page.evaluate(async () => {
   flock.forEach((a) => { a.x = VIL.ARCH.x - 12; });
   step(0.1);
   check('five sheep through the arch make a parade', g.valley.parades === 1 && g.valley.paradeDone && g.coins > coinsP, { parades: g.valley.parades, paid: g.coins - coinsP });
+  step(0.3);
+  const vill = () => g.folk.people.filter((p) => /^(smith|baker|grocer|weaver|warden|cottager\d)$/.test(p.id));
+  check('the village turns out and cheers a parade', vill().filter((p) => p.shown).length >= 3 && vill().some((p) => p.pose === 'wave'), vill().map((p) => `${p.id}:${p.shown ? p.pose : 'in'}`).join(' '));
+  // Night: everyone indoors but the warden, round the green with a lantern.
+  g.day.startNight();
+  g.quietT = -1e9; // (a night with no visitors ends early; hold it)
+  step(12);
+  check('at night the villagers are indoors, the warden out with a lantern', vill().every((p) => !p.shown || (p.id === 'warden' && p.lantern)) && vill().some((p) => p.id === 'warden' && p.shown), `${g.mode} ${g.day.nightT.toFixed(1)}: ${vill().map((p) => `${p.id}:${p.shown ? p.pose : 'in'}`).join(' ')}`);
+  g.day.nightT = 30;
+  step(8);
+  check('...and the warden goes in too', vill().every((p) => !p.shown), vill().filter((p) => p.shown).map((p) => `${p.id} ${Math.round(p.x)},${Math.round(p.y)} home ${Math.round(p.home.x)},${Math.round(p.home.y)} ${p.pose} walkT ${p.walkT.toFixed(1)} nightT ${g.day.nightT.toFixed(1)} ${g.day.phase} ${g.mode}`).join(' '));
+  g.day.phase = 'day';
+  g.day.nightT = 0;
 
   // ---- Fields past the clearing ----
   const v = g.valley;

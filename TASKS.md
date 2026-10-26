@@ -698,11 +698,72 @@ another origin are never answered from the cache.
 - [x] First-pass art (`src/art/village.ts`, `valley.ts`, `farm2.ts`),
       village lights at night, legacy goals, saves, co-op shared state
       (paddocks, the valley), the Ledger's village lines
+- [x] The village's people (`src/entities/villagers.ts`, on Characters'
+      Person): each step brings its folk, walking in up the road the
+      morning it is built: the first family; the baker and the grocer, in
+      from up the road each day to their stalls; the smith at the anvil;
+      two more families with a child each; the warden and the weaver. They
+      draw water, garden, sit on the green's bench (it seats two), shop and
+      stop for a word; on market day they crowd the stalls (the weaver
+      minds the third), on festival day they line the green and cheer a
+      parade; at dusk they go home and the warden walks the green with a
+      lantern. The first family says what the village waits on next. They
+      roll their own dice, so seeded runs play the same
 - [x] The pace bot extends paddocks (and buys a field) before building
-      new ones, hauls timber, and uses the shed, dairy and agility yard;
+      new ones and hauls timber; it has routines for the shed, dairy and
+      agility yard but in practice never gets to them, as it keeps its land
+      for stock while short (they are checked in valleytest instead);
       `scripts/paddocktest.mjs`, `scripts/valleytest.mjs`
 
-VALLEY_TABLES
+**Herding is unchanged** (`node scripts/tune.mjs <species>`, all five).
+Paddocks alone change nothing (identical to the village-only build). The
+village and field carves move the ground near tune's goal a little, which
+nudges single runs both ways:
+
+| species | calm walk s | reached (of 33) | mean stress | panics |
+|---|---|---|---|---|
+| duck | 15.9 → 16.1 | 26 → 26 | 0.06 → 0.06 | 21 → 14 |
+| sheep | 12.2 → 11.2 | 27 → 27 | 0.10 → 0.09 | 21 → 15 |
+| goat | 120 → 120 | 20 → 18 | 0.06 → 0.05 | 10 → 10 |
+| cow | 120 → 120 | 1 → 2 | 0.02 → 0.02 | 9 → 7 |
+| pony | 6.93 → 6.87 | 29 → 28 | 0.09 → 0.11 | 14 → 17 |
+
+**Pace** (`node scripts/pacetest.mjs --seeds=1,2,3`), before (round three
+plus the village) and after (paddocks). The valley thrives on days 8, 7, 7
+before and 8, 7, 10 after. The first paddock build was much slower (10,
+38, 11): the old upgrade's half again was gone and the bot packed the
+ranch with small pens. Big paddocks now pack more a tile (up to the old
+upgraded density at four times the old pen's area), and the bot keeps its
+land for stock while short. Seed 3 still loses three days at tier 4:
+"no room for a paddock", selling stock to make room for cattle.
+
+| tier | days before | days after | enclosures at tier end, before | after | penned at tier end, before | after |
+|---|---|---|---|---|---|---|
+| 1 | 2.0 | 2.0 | 3.3 | 3.0 | 21 | 26 |
+| 2 | 1.0 | 1.0 | 4.0 | 3.0 | 33 | 35 |
+| 3 | 1.0 | 1.0 | 5.7 | 4.3 | 41 | 37 |
+| 4 | 1.7 | 2.3 | 6.0 | 5.0 | 48 | 53 |
+
+(Enclosures before: the starter pen plus every pen built, counted from the
+day logs; 16 pens were also upgraded. Tier 5 is left out: the before run
+played on to day 23.)
+
+**A year** (`--year --days=22`): seasons before and after are alike in
+earnings, hay and lambs. The valley, after:
+
+| season | earned $ | spent $ | hay stacks | lambs | village built (of 6) | fields clear (of 2) | bridge logs (of 6) |
+|---|---|---|---|---|---|---|---|
+| y1 spring | 1097 | 938 | 0 | 0 | 1.0 | 0 | 0 |
+| y1 summer | 3452 | 533 | 0 | 0 | 3.7 | 0 | 2.3 |
+| y1 autumn | 3287 | 403 | 9.3 | 0 | 4.3 | 0.3 | 2.7 |
+| y1 winter | 2915 | 27 | 0.3 | 0 | 4.3 | 0.3 | 3.0 |
+| y2 spring | 3766 | 108 | 0 | 24.7 | 4.3 | 0.3 | 4.0 |
+| y2 summer | 1706 | 0 | 0 | 0 | 4.3 | 0.3 | 4.0 |
+
+The bot has a cottage, the square and the hall by day 8 (the smithy too
+in two seeds of three; seed 1 has all six by day 12); a player who herds
+for the deeds gets there sooner. Grazing a field clear and mending the bridge are slow for the bot,
+which only does them in passing.
 ## M28 Characters (graphics round four)
 Before: the dog snapped between four facings with a four-frame trot and
 gallop; animals had two or three walk frames, the same rhythm for every
@@ -1622,3 +1683,42 @@ with their legs clipped off. After:
 - The village's people (smith, stallholders, cottagers, warden) are
   drawn and dressed here, ready to spawn; their days are the village's to
   run (gameplay), through Person.go(steps).
+- Paddocks (round four): 6x6 at least (48 squares), 28 across at most.
+  Price 0.8$ a tile of fence plus 1$ for the gate, so 8x7 is 25$ as
+  before; extending pays only the fence added; moving the gate is free;
+  removing an empty paddock gives half back. Room is 16 per 8x7 scaled
+  by area, plus up to half again as it grows to four times that (so big
+  paddocks reach the old upgraded density). The whole-pen upgrade is gone
+  for new paddocks; old saves keep theirs.
+- Mixed flocks: ducks get on with anyone, sheep with goats, cattle with
+  ponies. A refused animal is turned back at the gate, and one that slips
+  in is put back out when the gate shuts.
+- Fixtures: the trough as before (12$), a field shelter (45$, 3x2, open to
+  the south; a paddock with one is safe at night, as is one whose middle
+  or gate is in a barn's ring) and a hay rack (20$, a third less winter
+  hay). One of each per paddock, clear of the gateway.
+- Fields: the south-west (200$) and the south-east (300$) plots past the
+  clearing, bought at their signs with NIP. They take paddocks and fences
+  at once (the scrub is no obstacle to them) and anything else once grazed
+  clear; penned stock grazes too (sheep 1/22 a second, goats 1/11, cattle
+  1/15, ponies 1/22; ducks not at all).
+- Until build mode's drag handles land (UI's), U extends the paddock side
+  nearest the cursor by two.
+- Village steps go one a morning, in order, the morning after the deed:
+  cottage (1 order), square (4 orders), second cottage (graze a field
+  clear), smithy (pen 4 cattle), hall (a ribbon), third cottage (40
+  penned). The favour session turns the square's deed into drover favour 2.
+- Market day is the third day of each season (once the square stands):
+  the drover always has an order at half again, goods sell for a quarter
+  more. The festival is the last day of each season (once the hall
+  stands): five of a kind through the arch within a minute make a parade.
+- The bridge takes six logs; the agility yard's par is 5.5s with three
+  clean days to a free training level; the shed pays 4$ a fleece and the
+  dairy 7$ a cow (scaled by calm).
+- Villagers roll their own dice (not Math.random), so they cannot change
+  a seeded tune or pace run; they are not pressure sources, so a parade
+  walks past them. Nights without visitors end after 2.5s, so the
+  warden's lantern round is mostly a dusk thing.
+- The unseeded ordertest is flaky on this branch and on the base (the bot
+  sometimes walks the order's flock into the empty open pen); seeded runs
+  pass.

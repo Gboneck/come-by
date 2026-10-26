@@ -5,7 +5,7 @@ import { hipRoof, shadowRect, type Drawable } from './buildings';
 import { snowCap } from './seasonlook';
 import type { Game } from '../game';
 import type { Light } from '../render/night';
-import { ARCH, PLOTS, type Plot } from '../ranch/village';
+import { ARCH, PLOTS, SPOTS, type Plot } from '../ranch/village';
 import { isFestival, isMarketDay } from '../systems/valley';
 import { TS } from '../world/map';
 
@@ -54,6 +54,18 @@ function well(g: CanvasRenderingContext2D, p: Plot) {
   rect(g, x0 + 3, y1 - 12, w - 6, 1, C.plum);
   line(g, x0 + w / 2, y1 - 11, x0 + w / 2, y1 - 8, C.plum);
   rect(g, x0 + w / 2 - 1, y1 - 8, 3, 2, C.wool);
+}
+
+// As the ranch's bench, long enough for two: a seat on legs with a back
+// rail; the sitters' ground points are (x - 3, y) and (x + 3, y).
+function bench(g: CanvasRenderingContext2D, x: number, y: number) {
+  rect(g, x - 8, y + 1, 16, 1, C.sage);
+  rect(g, x - 7, y - 3, 15, 2, C.plum);
+  rect(g, x - 7, y - 3, 15, 1, C.moss);
+  for (const lx of [x - 7, x, x + 7]) rect(g, lx, y - 1, 1, 2, C.plum);
+  rect(g, x - 7, y - 6, 15, 1, C.plum);
+  for (const lx of [x - 7, x + 7]) rect(g, lx, y - 5, 1, 2, C.plum);
+  snowCap(g, x - 7, y - 4, 15);
 }
 
 function stall(g: CanvasRenderingContext2D, p: Plot, busy: boolean, k: number) {
@@ -194,6 +206,8 @@ export function villageDrawables(game: Game, g: CanvasRenderingContext2D, inView
       },
     });
   }
+  // A bench on the green once anyone lives here (villagers sit on it).
+  if (vil.built.size) out.push({ y: SPOTS.bench.y - 1, draw: () => bench(g, SPOTS.bench.x, SPOTS.bench.y) });
   // The green's signpost by the road.
   out.push({
     y: 83 * TS,

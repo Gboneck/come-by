@@ -202,7 +202,8 @@ needs a line there.
   `ranchstyle.ts` (roof, trim), `decor2.ts` (placeable decor).
 - `src/world/` tile map, regions, terrain/canopy baking; `places.ts` the
   hidden places (pockets, ways, landmarks, strays and wild flocks).
-- `src/entities/` dog, animals + species, predators, helpers.
+- `src/entities/` dog, animals + species, predators, helpers; `folk.ts` the
+  townsfolk, `villagers.ts` the village's people and their days.
 - `src/ranch/` buildings, paddocks, gates; `paddock.ts` the rules for
   paddocks you size yourself (place, extend, move the gate, fixtures,
   price by fence, room by area), `village.ts` the village at the

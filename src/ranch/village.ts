@@ -43,7 +43,7 @@ export const SPOTS = {
   stall1: { x: 90 * TS, y: 82 * TS + 4 },
   stall2: { x: 93 * TS, y: 82 * TS + 4 },
   stall3: { x: 91 * TS, y: 84 * TS + 4 },
-  anvil: { x: 91 * TS, y: 77 * TS + 6 },
+  anvil: { x: 92 * TS + 2, y: 77 * TS + 5 }, // the smith's place, the anvil on their right
   hallDoor: { x: 86 * TS, y: 78 * TS + 4 },
   bench: { x: 88 * TS + 4, y: 79 * TS + 4 },
   green: { x: 88 * TS, y: 79 * TS + 4 },

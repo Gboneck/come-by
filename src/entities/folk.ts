@@ -15,6 +15,7 @@ import { PathFollower } from '../world/path';
 import { SPECIES } from './species';
 import { tToClock } from '../systems/orders';
 import { defOf } from '../ranch/catalog';
+import { isVillager, villageBrain, villageCast } from './villagers';
 
 // The townsfolk. The rancher (your handler) lives in the farmhouse: out in
 // the morning, helping at the pen gate when you bring a flock home, doing
@@ -234,6 +235,7 @@ export class Folk {
     for (const p of this.people) {
       if (p === this.rancher) continue;
       if (p.id === 'carpenter') this.carpenterBrain(game, p, dt);
+      else if (isVillager(p.id)) villageBrain(game, this, p, dt);
       else this.valleyBrain(game, p, dt);
     }
     // Footsteps for anyone walking on screen; a blow on every downstroke
@@ -420,6 +422,8 @@ export class Folk {
       const e = this.roadIn();
       this.people.push(new Person('carpenter', e.x, e.y));
     }
+    // The village's people (entities/villagers.ts).
+    villageCast(game, this);
   }
 
   // Where visitors arrive at the ranch: the track in from the east.
@@ -765,7 +769,7 @@ const CROUCH = [0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 3];
 // Is this person at a building job (a hammer) rather than the woodpile (an
 // axe)? Guests do not get `tool`, but they do get the sites.
 function hammering(p: Person, jobs: Job[]): boolean {
-  if (p.tool === 'hammer') return true;
+  if (p.tool === 'hammer' || p.id === 'smith') return true;
   for (const j of jobs) {
     if (Math.abs(p.x - j.b.cx) < (j.b.x1 - j.b.x0) / 2 + 12 && Math.abs(p.y - j.b.cy) < (j.b.y1 - j.b.y0) / 2 + 12) return true;
   }
