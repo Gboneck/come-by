@@ -11,9 +11,16 @@ import { registerPwa } from './pwa/register';
 import { padFrame } from './ui/pad';
 import { AutoQuality } from './gfx/quality';
 import { settings } from './ui/settings';
+import { setTextBoost } from './gfx/font';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const screen = new Screen(canvas);
+// Text sizes step up a face where fine pixels are physically small (the
+// wide view on a phone), so words keep their size (gfx/font.ts).
+const syncText = () => setTextBoost(screen.cssPerFine < 0.85 ? 1 : 0);
+screen.onResize = syncText;
+screen.setView(settings.view);
+syncText();
 const input = new Input(screen);
 const params = new URLSearchParams(location.search);
 registerPwa();
