@@ -447,7 +447,7 @@ function stamps(j: Job) {
   });
   // Worn bare patches with a clean edge, darker on their lower rim.
   cells(j, 53, 47, 166, 30, (wx, wy, gx, gy) => {
-    if (snow || hash2(gx, gy, 167) > 0.18) return;
+    if (snow || hash2(gx, gy, 167) > 0.1) return;
     const r = 6 + hash2(gx, gy, 168) * 8; // fine px
     const cx = wx * FINE, cy = wy * FINE;
     if (!openBox(wx - 4, wy - 3, 9, 6)) return;
@@ -460,7 +460,9 @@ function stamps(j: Job) {
         if (dd > 1) continue;
         const bx = x - j.x0, by = y - j.y0;
         if (bx < 0 || by < 0 || bx >= j.bw || by >= j.bh || j.cls[by * j.bw + bx] !== K.Grass) continue;
-        j.px[by * j.bw + bx] = dd > 0.82 && y > cy ? sage : moss;
+        // Worn to moss in the middle, fading out through a dithered edge.
+        if (dd > 0.7 && bayer(x, y) > (1 - dd) / 0.3) continue;
+        j.px[by * j.bw + bx] = moss;
       }
   });
   // Pebbles on the tracks.
