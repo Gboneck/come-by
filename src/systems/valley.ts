@@ -320,18 +320,6 @@ export function valleyHint(g: Game): string | null {
   return null;
 }
 
-// For the Ledger: the village and the valley's projects, a line each.
-export function valleyLines(g: Game): string[] {
-  const v = g.valley, vil = g.ranch.village;
-  const out: string[] = [];
-  const built = STEPS.filter((s) => vil.has(s.id)).length;
-  const next = nextStep(g);
-  out.push(`THE VILLAGE: ${built}/${STEPS.length} BUILT${next ? `. NEXT, ${next.name}: ${next.deed}` : '. COMPLETE'}`);
-  for (const p of v.paddocks) out.push(`${p.site.name}: ${p.cleared ? 'CLEAR, LAND TO BUILD ON' : `${Math.round((1 - v.left(p)) * 100)}% GRAZED`}`);
-  out.push(`THE OLD BRIDGE: ${v.bridge ? 'MENDED' : vil.has('smithy') ? `${v.logs}/${BRIDGE_LOGS} LOGS HAULED` : 'NEEDS A SMITH IN THE VILLAGE'}`);
-  return out;
-}
-
 // ---- Co-op and saving ----
 
 export interface ValleySave {
