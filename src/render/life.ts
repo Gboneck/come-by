@@ -8,7 +8,7 @@ import { hash2 } from '../rng';
 import { drift, stepWind } from './wind';
 import { WeatherFx } from './weather';
 import { SeasonLayers } from './seasons';
-import { SunShadows } from './light';
+import { LitGround } from './light';
 import { Wildlife } from './wildlife';
 import { skyDarkness } from './sky';
 import { SHALLOW, TS, Ter, WORLD_H, WORLD_W, type SpeciesId } from '../world/map';
@@ -70,7 +70,7 @@ export class Life {
   private t = 0;
   wx = new WeatherFx();
   seasons = new SeasonLayers();
-  shadows = new SunShadows();
+  lit = new LitGround();
   wild = new Wildlife();
   vt = 0; // the valley's own clock: runs up to x12 while the dog rests
 

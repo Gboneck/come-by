@@ -651,6 +651,33 @@ another origin are never answered from the cache.
 - [x] `scripts/daytest.mjs`: calm, rough, late and frantic-at-dusk first
       drives all afford the kennel by the end of day one
 
+## M28 World and light, round four
+Before → after, in plain words:
+- [x] Shadows: trees' shadows were baked in one place all day; now they
+      move with the sun, long to the west at sunrise, short at noon, long to
+      the east by evening, and buildings' shadows swing with them. Animals'
+      shadows shift the same way. No shadows at night.
+- [x] Golden hour: the late afternoon light warms the sunlit grass with a
+      light buttercup speckle (the shade stays cool); low sun slants in
+      shafts through the treetops in the golden hour.
+- [x] Blue hour: dusk and dawn come in teal before the plum of night.
+- [x] Night: lantern and camp-fire pools end in a dithered buttercup ring;
+      the farmhouse windows glow out into the dark.
+- [x] Morning mist drifts on fair mornings and burns off by mid-morning.
+- [x] Depth: trunks and flaring roots show under the crowns and along the
+      forest's lower edge; the big outcrops stand as taller cliffs with a
+      pale band of strata; the far bank of the river shows its earth face;
+      contact shadows hug building feet.
+- [x] Each region more its own: willows trailing strands by the water,
+      flowering gorse among the rocks, sheep tracks over the hills.
+- [x] Water: trees reflected below the far bank; fish jump now and then;
+      wet paths glint after rain.
+- [x] Wildlife: rabbits at the forest edge morning and evening, deer at
+      dawn and dusk, crows on the fences, frogs on the banks; all flee the
+      dog (hops, bounds into the trees, lifting off, a leap into the water).
+- [x] Checks: typecheck, build, shot, regions in every season, weather and
+      time of day, perftest, picturetest, tune --seed=7
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1471,3 +1498,20 @@ another origin are never answered from the cache.
   and the worst possible one (frantic, penned at dusk) has 15$ on penning
   and 18$ at day's end. 10$ is below the trough (12$), so the tin cannot be
   spent on anything that would leave the kennel out of reach.
+- Tree shadows are no longer baked: the canopy's silhouette is baked once
+  in sage (`canopyShadow`) and drawn each frame offset by the sun's vector
+  (`sunShadow` in `src/render/sky.ts`), one drawImage. A first version
+  composited plum shadows onto water with canvas operations; it cost ~3ms a
+  frame on a throttled phone, so shadows on water are sage now. The shadow
+  mask the bake still keeps (where the shade usually lies) only places
+  ferns and such.
+- Building shadows read `lightLook` (`src/art/seasonlook.ts`), so the
+  picture cache redraws a building only when the sun has moved a whole
+  pixel.
+- The golden hour is a sparse random speckle (~5%), not a Bayer grid: a
+  regular grid over the whole meadow read as a filter. Blue hour mixes teal
+  into the dusk dither (up to 70% of its pixels); warm rings are on lamps
+  and the camp fire only (the farmhouse's big pool ringed its own roof).
+- Morning mist reuses the fog pass, up to 0.28, fair mornings only, off at
+  GRAPHICS LOW. Light shafts visit only the pixels inside their bands and
+  draw at GRAPHICS HIGH only. Wildlife counts scale with `quality.fx`.

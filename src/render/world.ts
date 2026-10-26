@@ -57,14 +57,15 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // the look that roofs, fences and decor read as they draw.
   setSeasonLook(game.season);
   game.life.seasons.sync(game.baked, game.season);
-  g.drawImage(game.life.seasons.ground ?? game.baked.ground, ox, oy, W, H, 0, 0, W, H);
-  game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
-  // The trees' shadows, thrown by the sun (and buildings' too, as they draw).
+  // The ground with the trees' shadows thrown by the sun (none at night);
+  // buildings read the same light as they draw.
   const sh = sunShadow(game.day);
   lightLook.dx = sh.dx;
   lightLook.dy = sh.dy;
   lightLook.golden = goldenHour(game.day);
-  game.life.shadows.draw(g, game.baked, ox, oy, W, H, sh.dx, sh.dy);
+  const ground = game.life.lit.picture(game.baked, game.life.seasons.ground ?? game.baked.ground, sh.dx, sh.dy, game.day.phase !== 'night');
+  g.drawImage(ground, ox, oy, W, H, 0, 0, W, H);
+  game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
   drawWater(g, game.baked.water, ox, oy, W, H, game.life.vt);
 
   g.save();

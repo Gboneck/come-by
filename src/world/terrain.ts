@@ -51,6 +51,9 @@ export interface Baked {
   // The water as a plum mask over its bounding box, so a shadow falling on
   // water can be drawn plum rather than sage.
   waterMask: { c: HTMLCanvasElement; x: number; y: number };
+  // The canopy's silhouette in sage: the trees' shadow, drawn offset by the
+  // sun each frame (render/light.ts).
+  canopyShadow: HTMLCanvasElement;
 }
 
 function tileField(map: WorldMap, pred: (t: Ter, i: number) => boolean): Float32Array {
@@ -798,7 +801,11 @@ function bakeWorld(map: WorldMap): Baked {
   const wmi = wmg.createImageData(wmc.width, wmc.height), wmp = new Uint32Array(wmi.data.buffer);
   for (let y = wy0; y <= wy1; y++) for (let x = wx0; x <= wx1; x++) if (water[y * W + x]) wmp[(y - wy0) * wmc.width + x - wx0] = U32.plum;
   wmg.putImageData(wmi, 0, 0);
-  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist, waterMask: { c: wmc, x: wx0, y: wy0 } };
+  const [csc, csg] = makeCanvas(W, H);
+  const csi = csg.createImageData(W, H), csp = new Uint32Array(csi.data.buffer);
+  for (let i = 0; i < W * H; i++) if (cm[i]) csp[i] = U32.sage;
+  csg.putImageData(csi, 0, 0);
+  return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist, waterMask: { c: wmc, x: wx0, y: wy0 }, canopyShadow: csc };
 }
 
 function makeSwayGrid(W: number, H: number): SwayGrid {

@@ -86,7 +86,7 @@ export class WeatherFx {
     const clouds = 9 * Math.max(0, 1 - w.rain * 2.5) * Math.max(0, 1 - w.fog * 2) * Math.max(0, 1 - dark * 3);
     // The golden hour warms the sunlit grass: a dither of buttercup on the
     // meadow, the moss lightened (the shadows, drawn after, stay cool).
-    const gold = lightLook.golden * 0.07 * Math.max(0, 1 - w.rain * 3) * Math.max(0, 1 - w.fog * 2);
+    const gold = lightLook.golden * 0.045 * Math.max(0, 1 - w.rain * 3) * Math.max(0, 1 - w.fog * 2);
     if ((wetL < 0.5 && clouds < 0.5 && gold < 0.01) || !quality.shade) return;
     if (!this.wc || this.wc.width !== W || this.wc.height !== H) {
       [this.wc, this.wg] = makeCanvas(W, H);

@@ -36,47 +36,57 @@ export function drawShafts(g: CanvasRenderingContext2D, baked: Baked, ox: number
   }
 }
 
-// The trees' shadows, moving with the sun: the canopy's silhouette, shifted
-// by the sun's vector, laid over the ground in sage (and in plum where it
-// falls on water). Long and to the west at sunrise, short at noon, long to
-// the east in the golden hour. Two small screen-sized canvases and a few
-// drawImage calls a frame: no per-pixel work.
-export class SunShadows {
-  private s1: [HTMLCanvasElement, CanvasRenderingContext2D] = makeCanvas(1, 1);
-  private s2: [HTMLCanvasElement, CanvasRenderingContext2D] = makeCanvas(1, 1);
+// The ground with the trees' shadows on it, moving with the sun: the
+// canopy's silhouette (baked once in sage) laid over the ground shifted by
+// the sun's vector, long to the west at sunrise, short at noon, long to the
+// east in the golden hour. Composed into one world-sized picture, so a frame
+// draws the ground as one image as it always did. When the sun moves a
+// pixel the picture is redone a strip at a time over the next frames (the
+// strips differ by a pixel, which no one can see); a new season's ground is
+// redone at once.
+const STRIP = 32;
 
-  private fit(W: number, H: number) {
-    for (const s of [this.s1, this.s2])
-      if (s[0].width !== W || s[0].height !== H) {
-        s[0].width = W;
-        s[0].height = H;
-        s[1].imageSmoothingEnabled = false;
-      }
+export class LitGround {
+  private c: HTMLCanvasElement | null = null;
+  private g: CanvasRenderingContext2D | null = null;
+  private src: HTMLCanvasElement | null = null;
+  private key = '';
+  private row = 0;
+  private dx = 0;
+  private dy = 0;
+
+  picture(baked: Baked, src: HTMLCanvasElement, dx: number, dy: number, sun: boolean): HTMLCanvasElement {
+    if (!this.c) {
+      [this.c, this.g] = makeCanvas(WORLD_W, WORLD_H);
+      this.src = null;
+    }
+    const key = sun ? `${dx},${dy}` : 'none';
+    if (src !== this.src) {
+      this.src = src;
+      this.key = key;
+      this.set(dx, dy, sun);
+      this.strips(baked, WORLD_H);
+    } else if (key !== this.key) {
+      this.key = key;
+      this.set(dx, dy, sun);
+    }
+    if (this.row < WORLD_H) this.strips(baked, STRIP);
+    return this.c!;
   }
 
-  draw(g: CanvasRenderingContext2D, baked: Baked, ox: number, oy: number, W: number, H: number, dx: number, dy: number) {
-    this.fit(W, H);
-    const [c1, g1] = this.s1;
-    g1.globalCompositeOperation = 'source-over';
-    g1.clearRect(0, 0, W, H);
-    // The screen pixel (x, y) is in shadow if the canopy is at (x - dx, y - dy).
-    g1.drawImage(baked.canopy, ox - dx, oy - dy, W, H, 0, 0, W, H);
-    g1.globalCompositeOperation = 'source-in';
-    g1.fillStyle = C.sage;
-    g1.fillRect(0, 0, W, H);
-    g1.globalCompositeOperation = 'source-over';
-    g.drawImage(c1, 0, 0);
-    // Where it falls on water, plum.
-    const m = baked.waterMask;
-    if (m.x < ox + W && m.x + m.c.width > ox && m.y < oy + H && m.y + m.c.height > oy) {
-      const [c2, g2] = this.s2;
-      g2.globalCompositeOperation = 'source-over';
-      g2.clearRect(0, 0, W, H);
-      g2.drawImage(m.c, m.x - ox, m.y - oy);
-      g2.globalCompositeOperation = 'destination-in';
-      g2.drawImage(c1, 0, 0);
-      g2.globalCompositeOperation = 'source-over';
-      g.drawImage(c2, 0, 0);
-    }
+  private set(dx: number, dy: number, sun: boolean) {
+    this.dx = sun ? dx : 1e5; // far off: no shadow
+    this.dy = sun ? dy : 1e5;
+    this.row = 0;
+  }
+
+  private strips(baked: Baked, rows: number) {
+    const g = this.g!, W = WORLD_W, H = WORLD_H;
+    const y0 = this.row, y1 = Math.min(H, y0 + rows);
+    g.drawImage(this.src!, 0, y0, W, y1 - y0, 0, y0, W, y1 - y0);
+    const dx = this.dx, dy = this.dy;
+    const ax = Math.max(0, dx), bx = Math.min(W, W + dx), ay = Math.max(y0, dy), by = Math.min(y1, H + dy);
+    if (bx > ax && by > ay) g.drawImage(baked.canopyShadow, ax - dx, ay - dy, bx - ax, by - ay, ax, ay, bx - ax, by - ay);
+    this.row = y1;
   }
 }
