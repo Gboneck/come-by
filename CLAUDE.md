@@ -202,7 +202,11 @@ needs a line there.
   (hidden places found, keepsakes, the Ledger map's fog: `game.discovery`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
-  pieces, `textfield.ts` typed names.
+  pieces, `textfield.ts` typed names; `frame.ts` the UI's frames (panel,
+  paper, stamp, ribbon), `hudart.ts` the dial, coin, stamina bone and icons,
+  `emotes.ts` the flock's notes, hearts and stress lines, `photo.ts` photo
+  mode, `feel.ts` kicks, coins, fireworks and the iris. `src/gfx/font.ts`
+  has two faces: text() (5px, proportional) and heading() (7px, bold).
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses, `life.ts` butterflies/birds/fireflies/smoke/footprints, `sway.ts`
   wind-blown grass and water loops, `wind.ts` gusts, `sky.ts` dawn and dusk.
