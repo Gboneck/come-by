@@ -1,8 +1,8 @@
 import { C } from '../palette';
-import { drawSpr, spr, type Sprite } from '../gfx/sprite';
+import { drawSpr, type Sprite } from '../gfx/sprite';
 import { rimLight } from './animals';
-import { DEFAULT_DOG, dressFine, dressRows, type DogFacing, type DogLook } from './dogstyle';
-import { spr2, up2 } from './hd';
+import { DEFAULT_DOG, dressFine, dressRows, playerLook, type DogFacing, type DogLook } from './dogstyle';
+import { finePixels, spr2, toFinePx, up2 } from './hd';
 
 // Blue heeler: teal coat flecked with wool, plum mask and ear tips, and the
 // red bandana that marks the player. `y` (buttercup) swaps in for helpers.
@@ -47,7 +47,7 @@ const TROT_UP_A = [false, false, false, false, true, true];
 const TROT_UP_B = [false, true, true, false, false, false];
 // Body bob per trot frame (up while a pair swings through) and per gallop
 // frame (up in both suspensions).
-export const RUN_BOB = [0, -1, 0, 0, -1, 0];
+export const RUN_BOB = [0, -0.5, 0, 0, -0.5, 0]; // world px: half a pixel is one fine pixel
 export const SPRINT_BOB = [-1, 0, 0, -1, 0, 0];
 
 // ===================================================================
@@ -724,39 +724,49 @@ export function pickDogFrame(S: DogSprites, st: DogState): { s: Sprite; flip: bo
 }
 
 // ---- Asleep: curled nose to tail while the day runs on (resting). ----
-// Facing right, 13 x 8, anchor at the feet (6, 7) like the other poses.
-const curlRows = (back: string) => [
-  '.............',
-  '.............',
-  '........p.p..',
-  back,
-  '..ttwtttttpt.',
-  '.tttttttrttww',
-  '.ttwtttttttp.',
-  '..ttttttwww..',
+// Facing right, in fine pixels, 22 x 12, anchor at the feet (12, 11);
+// eyes shut in the mask, the bandana tucked under the chin.
+const CURL = [
+  '.............p..p.....',
+  '............ptpptp....',
+  '......tttddtpttttp....',
+  '....tttvvtddtttttt....',
+  '...ttvttttttthhtttt...',
+  '..tttttxttttthpptwww..',
+  '..ttvttttttttttwwwwpp.',
+  '..tttttttttttrkwwwwpp.',
+  '..ttttxtttttrkkkwwww..',
+  '..atttttttttttttttt...',
+  '...wwttttttttttttt....',
+  '....pppppppppppppp....',
 ];
-const CURL = curlRows('...tttt.ttt..');
-const CURL_BREATH = curlRows('..ttttt.ttt..');
+const CURL_BREATH = CURL.map((r, i) => (i === 2 ? '.....ttttddtpttttp....' : r));
 
 const curls = new Map<string, Sprite[]>();
 
-// `friend`: a co-op friend's dog, in buttercup.
+// `friend`: a co-op friend's dog, in buttercup (and plain markings).
 export function drawSleepingDog(g: CanvasRenderingContext2D, x: number, y: number, flip: boolean, t: number, friend = false) {
-  const b = friend ? 'y' : 'r';
-  let curl = curls.get(b);
-  if (!curl) curls.set(b, (curl = [spr(rimLight(recolor(CURL, b), 't', 's', false), 6, 7), spr(rimLight(recolor(CURL_BREATH, b), 't', 's', false), 6, 7)]));
+  const look = friend ? DEFAULT_DOG : playerLook();
+  const key = `${friend ? 'y' : 'r'}${JSON.stringify(look)}`;
+  let curl = curls.get(key);
+  if (!curl) {
+    const S = (rows: string[]) => spr2(rimLight(recolor(dressFine(rows, look), friend ? 'y' : 'r'), 't', 's', false), 12, 11);
+    curls.set(key, (curl = [S(CURL), S(CURL_BREATH)]));
+  }
   drawSpr(g, curl[t % 2.4 > 1.6 ? 1 : 0], x, y + 2, flip);
 }
 
-// Little z's drifting up from the sleeping dog, growing as they rise.
-const ZS = [['####', '..#.', '.#..', '####'], ['####', '..#.', '.#..', '####'], ['#####', '...#.', '..#..', '.#...', '#####']];
+// Little z's drifting up from the sleeping dog, growing as they rise, in
+// fine pixels.
+const ZS = [['####', '..#.', '.#..', '####'], ['#####', '...#.', '..#..', '.#...', '#####'], ['######', '....#.', '...#..', '..#...', '.#....', '######']];
 export function drawSnores(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  g.fillStyle = C.wool;
+  const pts: number[] = [];
   for (let k = 0; k < 2; k++) {
     const u = (t * 0.5 + k / 2) % 1;
     const z = ZS[Math.min(2, Math.floor(u * 3))];
     if (u > 0.85 && Math.floor(t * 10) % 2) continue;
-    const zx = Math.round(x + 4 + u * 8 + Math.sin((t + k) * 2) * 1.5), zy = Math.round(y - 8 - u * 14);
-    z.forEach((row, j) => [...row].forEach((ch, i) => ch === '#' && g.fillRect(zx + i, zy + j, 1, 1)));
+    const zx = toFinePx(x + 4 + u * 8 + Math.sin((t + k) * 2) * 1.5), zy = toFinePx(y - 8 - u * 14);
+    z.forEach((row, j) => [...row].forEach((ch, i) => ch === '#' && pts.push(zx + i, zy + j)));
   }
+  finePixels(g, C.wool, pts);
 }

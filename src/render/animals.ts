@@ -1,6 +1,8 @@
 import { C } from '../palette';
-import { ellipse, rect } from '../gfx/draw';
+import { rect } from '../gfx/draw';
 import { drawSpr, tint, type Sprite } from '../gfx/sprite';
+import { PX } from '../gfx/screen';
+import { drawSprTop, finePixels, fineShadow, toFinePx } from '../art/hd';
 import { seasonLook } from '../art/seasonlook';
 import { animalSprites, type AnimalSprites } from '../art/animals';
 import { lambSprites } from '../art/young';
@@ -62,7 +64,9 @@ export function drawAnimalShadow(g: CanvasRenderingContext2D, a: Animal, sun = 0
   const [rx, ry] = a.young ? [3, 1] : SHADOW[a.sp.id];
   const side = a.face === 'l' || a.face === 'r';
   const lying = (poses.get(a)?.rest ?? 0) > (poses.get(a)?.lieAfter ?? 1e9);
-  ellipse(g, a.x - 1 + sun, a.y + 1, side || lying ? rx + (lying ? 1 : 0) : Math.max(2, rx - 2), ry, C.sage);
+  // In fine pixels: twice the world sizes, a touch flatter.
+  const w = side || lying ? rx + (lying ? 1 : 0) : Math.max(2, rx - 2);
+  fineShadow(g, a.x - 1 + sun, a.y + 1, w * 2, ry * 2 - 1, C.sage);
 }
 
 const OUT = [[-1, 0], [1, 0], [0, -1]];
@@ -150,26 +154,21 @@ export function drawAnimal(g: CanvasRenderingContext2D, a: Animal, t: number, ni
   if (!a.inWater) {
     // On snow a pale coat would vanish: a sage outline keeps the shape.
     if (seasonLook.snow > 0.45) {
-      const o = outline(s);
-      for (const [ox, oy] of OUT) drawSpr(g, o, x + ox, y + oy, flip);
+      const o = outline(s), u = 1 / (s.d ?? 1); // a fine pixel wide on fine art
+      for (const [ox, oy] of OUT) drawSpr(g, o, x + ox * u, y + oy * u, flip);
     }
     drawSpr(g, s, x, y, flip);
     return;
   }
-  // Wading: the legs go under, a waterline laps round.
-  const sink = 2;
-  const left = Math.round(x) - (flip ? s.w - 1 - s.ax : s.ax);
-  const top = Math.round(y) - s.ay;
-  g.save();
-  g.beginPath();
-  g.rect(left, top, s.w, s.h - sink);
-  g.clip();
-  drawSpr(g, s, x, y, flip);
-  g.restore();
-  const wl = top + s.h - sink;
-  const k = Math.floor(t * 4 + a.id);
-  g.fillStyle = C.wool;
-  for (let i = -1; i <= s.w; i++) if ((i + k) % 3 !== 0) g.fillRect(left + i, wl, 1, 1);
+  // Wading: the legs go under (four fine rows), a thin broken waterline
+  // laps round, a fine pixel tall.
+  const rows = s.h - Math.ceil(4 / (PX / (s.d ?? 1)));
+  const at = drawSprTop(g, s, x, y, flip, rows);
+  const wl = at.top + rows * at.k;
+  const ph = Math.floor(t * 5 + a.id);
+  const pts: number[] = [];
+  for (let i = -1; i <= s.w * at.k; i++) if ((i + ph) % 5 !== 0 && (i + ph) % 5 !== 3) pts.push(at.left + i, wl);
+  finePixels(g, C.wool, pts);
 }
 
 // Standing about: mostly still, now and then a look round, a spell of
@@ -200,25 +199,28 @@ function drawSwimmer(g: CanvasRenderingContext2D, a: Animal, S: AnimalSprites, t
   const side = a.face === 'l' || a.face === 'r';
   const flip = a.face === 'l';
   const s = side ? W.side[Math.floor(t * 1.3 + a.id) % 2] : a.face === 'd' ? W.down : W.up;
-  const bob = Math.sin(t * 2.4 + a.id) > 0.6 ? -1 : 0;
-  const x = Math.round(a.x), y = Math.round(a.y) + 1;
+  const bob = Math.sin(t * 2.4 + a.id) > 0.6 ? -0.5 : 0;
+  const x = a.x, y = a.y + 1;
   drawSpr(g, s, x, y + bob, flip);
-  g.fillStyle = C.wool;
-  // Water lapping at its sides, shimmering.
-  const k = Math.floor(t * 3 + a.id);
-  const l = x - (flip ? s.w - 1 - s.ax : s.ax);
-  for (const i of [-1, 0, s.w - 1, s.w]) if ((i + k) % 3 !== 0) g.fillRect(l + i, y, 1, 1);
-  if (!moving) return;
-  // The wake: two lines opening out behind, flickering as it goes.
-  const sp = Math.hypot(a.vx, a.vy) || 1;
-  const bx = -a.vx / sp, by = -a.vy / sp;
-  for (let i = 3; i < 7; i += 2) {
-    if ((i + Math.floor(t * 6)) % 4 === 0) continue;
-    const cx = x + bx * (i + 1), cy = y + by * (i + 1);
-    const ox = -by * (i * 0.5), oy = bx * (i * 0.5);
-    g.fillRect(Math.round(cx + ox), Math.round(cy + oy), 1, 1);
-    g.fillRect(Math.round(cx - ox), Math.round(cy - oy), 1, 1);
+  // Water lapping at its sides, shimmering, in fine pixels.
+  const k = PX / (s.d ?? 1);
+  const l = toFinePx(x) - (flip ? s.w - 1 - s.ax : s.ax) * k, wy = toFinePx(y) + 1, w = s.w * k;
+  const ph = Math.floor(t * 3 + a.id);
+  const pts: number[] = [];
+  for (const i of [-2, -1, 0, w - 1, w, w + 1]) if ((i + ph) % 3 !== 0) pts.push(l + i, wy);
+  if (moving) {
+    // The wake: two lines opening out behind, flickering as it goes.
+    const sp = Math.hypot(a.vx, a.vy) || 1;
+    const bx = -a.vx / sp, by = -a.vy / sp;
+    const cx0 = toFinePx(a.x), cy0 = wy;
+    for (let i = 4; i < 14; i += 2) {
+      if ((i + Math.floor(t * 8)) % 6 === 0) continue;
+      const cx = cx0 + bx * (i + 4), cy = cy0 + by * (i + 4) * 0.6;
+      const ox = -by * (i * 0.55), oy = bx * (i * 0.3);
+      pts.push(Math.round(cx + ox), Math.round(cy + oy), Math.round(cx - ox), Math.round(cy - oy));
+    }
   }
+  finePixels(g, C.wool, pts);
 }
 
 // Worry marks: "!" when stressed, blinking when panicking. Drawn above the

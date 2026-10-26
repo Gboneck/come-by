@@ -1,5 +1,7 @@
 import { C } from '../palette';
 import { drawSpr, type Sprite } from '../gfx/sprite';
+import { PX } from '../gfx/screen';
+import { drawSprTop, finePixels, fineShadow, toFinePx } from '../art/hd';
 import { pickDogFrame, viewOf, type DogSprites, type DogState } from '../art/dog';
 import { playerDogSprites, soaked } from '../art/dogstyle';
 import { Dog } from '../entities/dog';
@@ -172,7 +174,7 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   const raining = game.weather.rain > 0.3 && game.season.snow < 0.4;
   const ip = idlePose(d, idleIn, S, t, raining, () => game.life.spray(d.x, d.y - 3));
   if (ip) {
-    drawSpr(g, ip.s, d.x + ip.dx, d.y + 2, ip.flip);
+    drawSpr(g, ip.s, d.x + ip.dx * 0.5, d.y + 2, ip.flip);
     return;
   }
   // On the scent or digging (the treasure hunt sets these on the dog).
@@ -184,32 +186,37 @@ export function drawDog(game: Game, g: CanvasRenderingContext2D, d: Dog | Helper
   const x = d.x, y = d.y + 2 + f.bob;
   if (!inWater) {
     drawSpr(g, f.s, x, y, f.flip);
-    // Dripping, until it shakes off.
+    // Dripping, until it shakes off: drops form under the belly and fall.
     if (soakedNow && !lying) {
-      const u = (t * 1.7 + (d.x % 7) * 0.13) % 1;
-      if (u < 0.45) {
-        const side = viewOf(p.view) === 'side';
-        const dx = Math.round(((Math.floor(t * 1.7) * 5) % (side ? 7 : 3)) - (side ? 3 : 1));
-        g.fillStyle = C.wool;
-        g.fillRect(Math.round(x + dx), Math.round(d.y - 1 + u * 7), 1, 1);
+      const pts: number[] = [];
+      const side = viewOf(p.view) === 'side';
+      for (let k = 0; k < 2; k++) {
+        const u = (t * 1.5 + k * 0.5 + (d.x % 7) * 0.13) % 1;
+        if (u > 0.6) continue;
+        const dx = ((Math.floor(t * 1.5 + k * 0.5) * 7 + k * 5) % (side ? 15 : 7)) - (side ? 7 : 3);
+        pts.push(toFinePx(x) + dx, toFinePx(d.y) - 2 + Math.round(u * 12));
       }
+      finePixels(g, C.wool, pts);
     }
     return;
   }
-  // Wading: the legs go under and the water laps round.
+  // Wading: the legs go under and the water laps round in a thin broken
+  // line, a fine pixel tall.
   const s = f.s;
-  const left = Math.round(x) - (f.flip ? s.w - 1 - s.ax : s.ax);
-  const top = Math.round(y) - s.ay;
-  const keep = s.ay - 1;
-  g.save();
-  g.beginPath();
-  g.rect(left, top, s.w, keep);
-  g.clip();
-  drawSpr(g, s, x, y, f.flip);
-  g.restore();
-  const k = Math.floor(t * 5);
-  g.fillStyle = C.wool;
-  const wl = top + keep;
-  // Round the legs only (the sprite is wider than the dog's feet).
-  for (let i = 2; i < s.w - 2; i++) if ((i + k) % 3 !== 0) g.fillRect(left + i, wl, 1, 1);
+  const rows = s.ay + 1 - Math.ceil(6 / (PX / (s.d ?? 1))); // six fine rows under
+  const at = drawSprTop(g, s, x, y, f.flip, rows);
+  const wl = at.top + rows * at.k;
+  const ph = Math.floor(t * 6);
+  const pts: number[] = [];
+  for (let i = 4; i < s.w * at.k - 4; i++) if ((i + ph) % 5 !== 0 && (i + ph) % 5 !== 2) pts.push(at.left + i, wl);
+  finePixels(g, C.wool, pts);
+}
+
+// The dog's shadow, in fine pixels, swung with the sun: long side on,
+// round seen from the front or back, between at the three-quarter views.
+export function drawDogShadow(g: CanvasRenderingContext2D, d: Dog | Helper, sun: number) {
+  const p = poses.get(d);
+  const v = p ? p.view : d.face === 'l' || d.face === 'r' ? 0 : 2;
+  const rx = v % 4 === 0 ? 10 : v % 2 ? 8 : 6;
+  fineShadow(g, d.x - 1 + sun, d.y + 2, rx, 2, C.sage);
 }

@@ -84,6 +84,8 @@ export function setPlayerLook(look: DogLook) {
   current = { ...look };
 }
 
+export const playerLook = (): DogLook => current;
+
 export function playerDogSprites(look: DogLook = current): DogSprites {
   const k = lookKey(look);
   let s = cache.get(k);

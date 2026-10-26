@@ -1,5 +1,6 @@
 import type { Sprite } from '../gfx/sprite';
 import type { DogSprites } from '../art/dog';
+import { hash2 } from '../rng';
 
 // The dogs' idles, for the eye only: left standing a while a dog puts its
 // nose down to sniff or sits for a scratch; out of the ford (or after a
@@ -15,7 +16,10 @@ interface Idle {
   wet: boolean;
   rainT: number;
   dryT: number;
+  n: number; // which dog, and how many idles so far: the choices are
+  k: number; // hashed from these, never Math.random (seeded runs stay exact)
 }
+let made = 0;
 const states = new WeakMap<object, Idle>();
 
 const DUR = { sniff: 1.8, scratch: 1.5, shake: 0.7 };
@@ -33,7 +37,7 @@ export const isWet = (key: object) => states.get(key)?.wet ?? false;
 
 export function idlePose(key: object, dog: IdleDog, skin: DogSprites, t: number, raining: boolean, spray: () => void): { s: Sprite; flip: boolean; dx: number } | null {
   let st = states.get(key);
-  if (!st) states.set(key, (st = { last: t, still: 0, next: 5 + Math.random() * 4, act: null, actT: 0, wet: false, rainT: 0, dryT: 0 }));
+  if (!st) states.set(key, (st = { last: t, still: 0, next: 5 + hash2(++made, 1, 17) * 4, act: null, actT: 0, wet: false, rainT: 0, dryT: 0, n: made, k: 0 }));
   const dt = Math.max(0, Math.min(0.2, t - st.last));
   st.last = t;
   if (dog.inWater) {
@@ -62,9 +66,9 @@ export function idlePose(key: object, dog: IdleDog, skin: DogSprites, t: number,
       st.actT = 0;
       st.wet = false;
     } else if (st.still > st.next && dog.side) {
-      st.act = Math.random() < 0.55 ? 'sniff' : 'scratch';
+      st.act = hash2(st.n, ++st.k, 18) < 0.55 ? 'sniff' : 'scratch';
       st.actT = 0;
-      st.next = st.still + 5 + Math.random() * 6;
+      st.next = st.still + 5 + hash2(st.n, st.k, 19) * 6;
     }
   }
   if (!st.act) return null;
