@@ -7,7 +7,6 @@ import { yardFire } from '../art/course';
 import { hash2, mulberry32 } from '../rng';
 import { drift, stepWind } from './wind';
 import { WeatherFx } from './weather';
-import { SeasonLayers } from './seasons';
 import { FineWorld } from './light';
 import { Wildlife } from './wildlife';
 import { skyDarkness } from './sky';
@@ -70,7 +69,6 @@ export class Life {
   private track = new WeakMap<object, Track>();
   private t = 0;
   wx = new WeatherFx();
-  seasons = new SeasonLayers();
   lit = new FineWorld();
   wild = new Wildlife();
   vt = 0; // the valley's own clock: runs up to x12 while the dog rests

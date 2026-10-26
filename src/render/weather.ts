@@ -1,12 +1,12 @@
-import { C, U32 } from '../palette';
-import { BAYER4, line } from '../gfx/draw';
-import { PX, fine, makeCanvas } from '../gfx/screen';
+import { C } from '../palette';
+import { line } from '../gfx/draw';
+import { PX, fine } from '../gfx/screen';
 import { hash2 } from '../rng';
 import { WORLD_W } from '../world/map';
 import { windStrength } from './wind';
-import { lightLook, seasonLook } from '../art/seasonlook';
+import { seasonLook } from '../art/seasonlook';
 import type { Game } from '../game';
-import { NS, tileNoise, type SkyOpts } from './night';
+import type { SkyOpts } from './night';
 import { quality } from '../gfx/quality';
 
 // The weather, drawn. Reads `game.weather` (sky, rain, fog, wind) and keeps
@@ -26,10 +26,6 @@ export class WeatherFx {
   private seenAt = 0; // the last strike the audio announced
   private sinceAudio = 99;
   private bolt: number[][] | null = null;
-  private wc: HTMLCanvasElement | null = null;
-  private wg: CanvasRenderingContext2D | null = null;
-  private wimg: ImageData | null = null;
-  private cloudTex = tileNoise(32, 901);
 
   update(game: Game, dt: number, lapse: number) {
     const w = game.weather;
@@ -73,53 +69,6 @@ export class WeatherFx {
       fogX: this.fogX,
       flash: this.flashNear > 0.45 ? (this.flash > 0.11 ? 10 : this.flash > 0.04 ? 4 : this.flash > 0 ? 1 : 0) : this.flash > 0.05 ? 3 : this.flash > 0 ? 1 : 0,
     };
-  }
-
-  // Shade on the ground (screen coords, straight after the baked ground):
-  // grass and paths darken by a dither of the next darker colour, under the
-  // shadows of passing clouds on a fair day and all over when it is wet. The
-  // animals are not dimmed, so the flock still reads.
-  drawGroundShade(g: CanvasRenderingContext2D, game: Game, ox: number, oy: number, W: number, H: number, dark: number) {
-    const w = game.weather;
-    if (seasonLook.snow > 0.3) return; // the snow layer has its own look
-    const wetL = this.wet * 5;
-    const clouds = 9 * Math.max(0, 1 - w.rain * 2.5) * Math.max(0, 1 - w.fog * 2) * Math.max(0, 1 - dark * 3);
-    // The golden hour warms the sunlit grass: a dither of buttercup on the
-    // meadow, the moss lightened (the shadows, drawn after, stay cool).
-    const gold = lightLook.golden * 0.045 * Math.max(0, 1 - w.rain * 3) * Math.max(0, 1 - w.fog * 2);
-    if ((wetL < 0.5 && clouds < 0.5 && gold < 0.01) || !quality.shade) return;
-    if (!this.wc || this.wc.width !== W || this.wc.height !== H) {
-      [this.wc, this.wg] = makeCanvas(W, H);
-      this.wimg = this.wg.createImageData(W, H);
-    }
-    const buf = new Uint32Array(this.wimg!.data.buffer);
-    const src = game.baked.groundPx, meadow = U32.meadow, moss = U32.moss, sage = U32.sage, butter = U32.butter;
-    const CT = this.cloudTex, cx = Math.floor(this.cloudX), cy = Math.floor(this.cloudY);
-    for (let y = 0; y < H; y++) {
-      const wy = y + oy;
-      const row = wy * WORLD_W + ox, by = (wy & 3) * 4;
-      const ny = ((wy - cy) >> 2 & (NS - 1)) * NS;
-      for (let x = 0; x < W; x++) {
-        let level = wetL;
-        if (clouds > 0) {
-          // Sampled at a quarter resolution, so the clouds are big and soft.
-          const n = CT[((x + ox - cx) >> 2 & (NS - 1)) + ny];
-          if (n > 160) level += clouds * Math.min(1, (n - 160) / 30);
-        }
-        let d = 0;
-        const thr = BAYER4[by + ((x + ox) & 3)];
-        if (thr < level) {
-          const c = src[row + x];
-          d = c === meadow ? moss : c === moss ? sage : 0;
-        } else if (gold > 0 && hash2(x + ox, wy, 77) < gold) {
-          const c = src[row + x];
-          d = c === meadow ? butter : c === moss ? meadow : 0;
-        }
-        buf[y * W + x] = d;
-      }
-    }
-    this.wg!.putImageData(this.wimg!, 0, 0);
-    g.drawImage(this.wc, 0, 0);
   }
 
   // On the ground (world coords): puddles on the paths, and the splash of
