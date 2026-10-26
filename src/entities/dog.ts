@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { ellipse } from '../gfx/draw';
-import { drawSpr, type Sprite } from '../gfx/sprite';
-import { RUN_BOB, SPRINT_BOB, type DogPoses, type DogSprites } from '../art/dog';
+import { drawSpr } from '../gfx/sprite';
+import { FACE_VIEW, pickDogFrame, type DogPoses, type DogSprites } from '../art/dog';
 import { playerDogSprites } from '../art/dogstyle';
 import { fxSprites } from '../art/fx';
 import type { Input } from '../input';
@@ -268,30 +268,9 @@ export class Dog {
     return this.face === 'd' ? P.down : this.face === 'u' ? P.up : P.side;
   }
 
-  frameSprite(): { s: Sprite; flip: boolean; bob: number } {
-    const P = this.poses();
-    const flip = this.face === 'l';
-    const pose = (s: Sprite, bob = 0) => ({ s, flip, bob });
-    if (this.lying) {
-      // Sink through the settle poses, then breathe; now and then the tail
-      // thumps the ground a few times.
-      const i = Math.floor(this.lieT / SETTLE_STEP);
-      if (i < P.settle.length) return pose(P.settle[i]);
-      const t = this.lieT - P.settle.length * SETTLE_STEP;
-      const thump = t > 1.5 ? (t - 1.5) % 3.2 : 1;
-      if (thump < 0.48 && Math.floor(thump / 0.08) % 2 === 0) return pose(P.lieWag);
-      return pose(t % 1.6 > 1.1 ? P.lieBreath : P.lie);
-    }
-    if (this.barkAnim > 0) return pose(this.barkAnim > 0.1 ? P.bark : P.brace);
-    if (this.getUp > 0) {
-      // Rise back up through the settle poses.
-      const i = Math.min(P.settle.length - 1, Math.floor((this.getUp / GET_UP) * P.settle.length));
-      return pose(P.settle[i]);
-    }
-    if (this.speed <= 6) return pose(P.stand);
-    const cyc = this.sprinting ? P.sprint : P.run;
-    const f = Math.floor(this.phase) % cyc.length;
-    return pose(cyc[f], (this.sprinting ? SPRINT_BOB : RUN_BOB)[f]);
+  // The dog's own timers, for the drawing (render/dogpose.ts).
+  anim() {
+    return { phase: this.phase, lieT: this.lieT, rise: this.getUp > 0 ? this.getUp / GET_UP : 0 };
   }
 
   drawShadow(g: CanvasRenderingContext2D) {
@@ -299,8 +278,11 @@ export class Dog {
     ellipse(g, this.x - 1, this.y + 2, side ? 5 : 3, 1, C.sage);
   }
 
+  // Plain, facing as the sim has it (the world draws the dog through
+  // render/dogpose.ts: turning, watching the stock, moods).
   draw(g: CanvasRenderingContext2D) {
-    const { s, flip, bob } = this.frameSprite();
+    const a = this.anim();
+    const { s, flip, bob } = pickDogFrame(this.skin ?? playerDogSprites(), { view: FACE_VIEW[this.face], speed: this.speed, sprint: this.sprinting, phase: a.phase, lying: this.lying, lieT: a.lieT, rise: a.rise, bark: this.barkAnim, t: 0 });
     drawSpr(g, s, this.x, this.y + 2 + bob, flip);
   }
 }

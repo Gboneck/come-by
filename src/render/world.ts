@@ -13,21 +13,17 @@ import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
 import { drawSway, drawWater } from './sway';
 import { setSeasonLook } from '../art/seasonlook';
-import { idlePose } from './dogidle';
-import { playerDogSprites } from '../art/dogstyle';
-import { drawSpr } from '../gfx/sprite';
+import { drawDog } from './dogpose';
 import { yardFire } from '../art/course';
 import { drawSleepingDog, drawSnores } from '../art/dog';
 import { cached, picturesFrame } from '../gfx/picture';
 
-// The player's dog: asleep while resting, its idles (sniff, scratch, the
-// shake-off) when left standing, otherwise its own pose.
+// The player's dog: asleep while resting, otherwise its poses and idles
+// (render/dogpose.ts).
 function drawPlayerDog(game: Game, g: CanvasRenderingContext2D) {
   const d = game.dog;
   if (sleeping(game)) return drawSleepingDog(g, d.x, d.y, d.face === 'l', game.t);
-  const ip = idlePose(d, d.skin ?? playerDogSprites(), game.t, game.weather.rain > 0.3 && game.season.snow < 0.4, (x, y) => game.life.spray(x, y));
-  if (ip) drawSpr(g, ip.s, d.x + ip.dx, d.y + 2, ip.flip);
-  else d.draw(g);
+  drawDog(game, g, d, true);
 }
 
 // Sideways shift of moving things' shadows with the time of day.
@@ -106,9 +102,9 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   for (const a of game.animals) if (!a.gone && inView(a.x, a.y)) ents.push({ y: a.y, draw: () => drawAnimal(g, a, game.t, night) });
   ents.push({ y: game.dog.y, draw: () => drawPlayerDog(game, g) });
   for (const p of game.predators) if (p.active && inView(p.x, p.y)) ents.push({ y: p.y, draw: () => p.draw(g) });
-  for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => h.draw(g) });
+  for (const h of game.helpers) if (inView(h.x, h.y)) ents.push({ y: h.y, draw: () => drawDog(game, g, h) });
   // Co-op friends' dogs, curled up too while everyone rests.
-  for (const o of game.coop) if (inView(o.x, o.y)) ents.push({ y: o.y, draw: () => (o.lying && game.rest > 1.3 ? drawSleepingDog(g, o.x, o.y, o.face === 'l', game.t, true) : o.draw(g)) });
+  for (const o of game.coop) if (inView(o.x, o.y)) ents.push({ y: o.y, draw: () => (o.lying && game.rest > 1.3 ? drawSleepingDog(g, o.x, o.y, o.face === 'l', game.t, true) : drawDog(game, g, o)) });
   ents.push(...game.folk.drawables(g, (x, y) => inView(x, y)));
   ents.sort((p, q) => p.y - q.y);
   for (const e of ents) e.draw();
