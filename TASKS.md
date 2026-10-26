@@ -1153,6 +1153,10 @@ less noise". The world is now drawn at two fine pixels to a world pixel
 - [x] Camera: the dog, the worked flock and the open gate it can go in are
       framed together when they fit (`scripts/cameratest.mjs`: flock and
       gate on screen 10/12 in CLOSE, was 4/12; 12/12 in WIDE, was 8/12)
+- [x] Fog as mist: short level streaks (4 fine px) on a ramp of its own,
+      sliding with the drift, in place of the night's even dots (World's
+      idea); the touch stick keeps its travel under the thumb in WIDE (its
+      radii scale like the touch buttons)
 
 Performance (perftest at 390x844@3, stepped seeded frames with every
 pixel drawn, best of two interleaved runs of 7 batches; other sessions
@@ -2295,4 +2299,9 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
   in the 64-step ramp.
 - Animals get a faint halo at night (power 0.4, radius 11) so the flock
   reads in the dark; predators' eyes are drawn above the dark as before.
+- Fog has its own threshold ramp (the 8x8 ramp over 4-pixel runs, each
+  band of 8 rows shifted by a hash) instead of sharing the night's: thin
+  mist then reads as level streaks, not a grid of dots. It falls only
+  where the night leaves a pixel clear, so its level is scaled by 16 /
+  (16 - night) to cover the same share as before.
 

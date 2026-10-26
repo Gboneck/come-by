@@ -54,7 +54,8 @@ original and drawn in code. No external art files, ever.
   under CPU throttling (`--throttle=4,6`, stepped seeded frames on a real
   tier-5 ranch, `scripts/fixtures/tier5.json` from
   `scripts/makefixture.mjs`; `--profile`, `--calls`, `--live`,
-  `--quality=low`, `--idle`, `--noflush`), `scripts/picturetest.mjs` checks the picture
+  `--quality=low`, `--idle`, `--noflush`; `--only=fognight` the fog's
+  path), `scripts/picturetest.mjs` checks the picture
   cache (and FineLayer) draws exactly what the art does,
   `scripts/skyshots.mjs --tag=x` shoots dusk, night, fog, fog night and a
   storm night at phone size (`shots/sky/`), `scripts/cameratest.mjs`
@@ -154,7 +155,8 @@ original and drawn in code. No external art files, ever.
   world-anchored) at HIGH, 4x4 in world pixels at MEDIUM/LOW. Lights
   (`Light`: r, warm, power, soft) cut pools that fall off smoothly; the
   outer fall cools to teal before the plum and a flame's ring warms its
-  edge with buttercup. Fog lies in drifting banks, thicker by place
+  edge with buttercup. Fog lies in drifting banks of short level streaks
+  (a ramp of its own), thicker by place
   (`setFogField`; the default from the soil: by water, not on high ground).
   At night every animal on screen has a faint halo so the flock reads.
   `ditherRect` and the dim/fade covers use fine dither patterns too.
