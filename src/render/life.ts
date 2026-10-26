@@ -1,5 +1,6 @@
 import { C } from '../palette';
 import { drawSpr, tint, type Sprite } from '../gfx/sprite';
+import { PX, fine } from '../gfx/screen';
 import { fxSprites } from '../art/fx';
 import { critterSprites } from '../art/critters';
 import { chimneyTop } from '../art/buildings';
@@ -360,124 +361,142 @@ export class Life {
   // ---- Drawing ----
 
   // On the ground, under everything that stands: prints, ripples, dust and
-  // the shadows of things in the air.
+  // the shadows of things in the air. On the fine grid.
   drawGround(g: CanvasRenderingContext2D) {
     this.wild.drawGround(g, this.t);
-    for (const p of this.prints) {
-      const k = p.life / p.max;
-      if (k < 0.4 && hash2(p.x, p.y, Math.floor(p.life * 5)) > k / 0.4) continue;
-      g.fillStyle = p.col;
-      for (const [dx, dy] of p.shape) g.fillRect(p.x + dx, p.y + dy, 1, 1);
-    }
-    for (const b of this.bits) {
-      const t = 1 - b.life / b.max;
-      if (b.kind === 'ring') {
-        const rx = Math.round(1 + t * b.size), ry = Math.max(1, Math.round(rx * 0.45));
-        g.fillStyle = C.wool;
-        const n = rx * 4 + 4;
-        for (let i = 0; i < n; i++) {
-          if (t > 0.5 && (i + Math.floor(t * 10)) % 3 === 0) continue;
-          const a = (i / n) * Math.PI * 2;
-          if (t > 0.75 && i % 2) continue;
-          g.fillRect(Math.round(b.x + Math.cos(a) * rx), Math.round(b.y + Math.sin(a) * ry), 1, 1);
-        }
-      } else if (b.kind === 'anim') {
-        const fr = b.frames!;
-        drawSpr(g, fr[Math.min(fr.length - 1, Math.floor(t * fr.length))], b.x, b.y, b.flip);
-      } else if (b.kind === 'drop' || b.kind === 'pebble' || b.kind === 'feather') {
-        if (b.z > 1) { g.fillStyle = C.sage; g.fillRect(Math.round(b.x), Math.round(b.y), 1, 1); }
-      } else if (b.kind === 'leaf' && b.z <= 0) {
-        // A fallen leaf lies a while, then is gone.
-        if (b.life < 1 && Math.floor(b.life * 8) % 2) continue;
-        g.fillStyle = b.col;
-        g.fillRect(Math.round(b.x), Math.round(b.y), 1, 1);
-      } else if (b.kind === 'leaf') {
-        g.fillStyle = C.sage;
-        g.fillRect(Math.round(b.x - b.z * 0.4), Math.round(b.y + b.z * 0.2), 1, 1);
+    fine(g, (fg) => {
+      for (const p of this.prints) {
+        const k = p.life / p.max;
+        if (k < 0.4 && hash2(p.x, p.y, Math.floor(p.life * 5)) > k / 0.4) continue;
+        fg.fillStyle = p.col;
+        for (const [dx, dy] of p.shape) fg.fillRect((p.x + dx) * PX, (p.y + dy) * PX + 1, 2, 1);
       }
+      for (const b of this.bits) {
+        const t = 1 - b.life / b.max;
+        if (b.kind === 'ring') {
+          const rx = Math.round((1 + t * b.size) * PX), ry = Math.max(1, Math.round(rx * 0.45));
+          fg.fillStyle = C.wool;
+          const n = rx * 4 + 4;
+          for (let i = 0; i < n; i++) {
+            if (t > 0.5 && (i + Math.floor(t * 10)) % 3 === 0) continue;
+            if (t > 0.75 && i % 2) continue;
+            const a = (i / n) * Math.PI * 2;
+            fg.fillRect(Math.round(b.x * PX + Math.cos(a) * rx), Math.round(b.y * PX + Math.sin(a) * ry), 1, 1);
+          }
+        } else if (b.kind === 'drop' || b.kind === 'pebble' || b.kind === 'feather') {
+          if (b.z > 1) { fg.fillStyle = C.sage; fg.fillRect(Math.round(b.x * PX), Math.round(b.y * PX), 2, 1); }
+        } else if (b.kind === 'leaf' && b.z <= 0) {
+          // A fallen leaf lies a while, then is gone.
+          if (b.life < 1 && Math.floor(b.life * 8) % 2) continue;
+          fg.fillStyle = b.col;
+          const X = Math.round(b.x * PX), Y = Math.round(b.y * PX);
+          fg.fillRect(X, Y, 2, 1);
+          fg.fillRect(X + 1, Y - 1, 1, 1);
+        } else if (b.kind === 'leaf') {
+          fg.fillStyle = C.sage;
+          fg.fillRect(Math.round((b.x - b.z * 0.4) * PX), Math.round((b.y + b.z * 0.2) * PX), 2, 1);
+        }
+      }
+      fg.fillStyle = C.sage;
+      for (const f of this.flies) {
+        const sx = Math.round((f.x - f.z * 0.5) * PX), sy = Math.round((f.y + f.z * 0.4) * PX);
+        fg.fillRect(sx - (Math.floor(f.t * 9) % 3 === 1 ? 2 : 0), sy, Math.floor(f.t * 9) % 3 === 1 ? 5 : 1, 1);
+      }
+    });
+    for (const b of this.bits) {
+      if (b.kind !== 'anim') continue;
+      const t = 1 - b.life / b.max;
+      const fr = b.frames!;
+      drawSpr(g, fr[Math.min(fr.length - 1, Math.floor(t * fr.length))], b.x, b.y, b.flip);
     }
     const S = critterSprites();
-    g.fillStyle = C.sage;
-    for (const f of this.flies) {
-      const sx = Math.round(f.x - f.z * 0.5), sy = Math.round(f.y + f.z * 0.4);
-      g.fillRect(sx, sy, Math.floor(f.t * 9) % 3 === 1 ? 3 : 1, 1);
-    }
     for (const b of this.birds) {
       const sx = Math.round(b.x - 14), sy = Math.round(b.y + 18);
       drawSpr(g, tintShadow(S.bird[Math.floor(b.ph * 7) % 3]), sx, sy);
     }
   }
 
-  // Above the canopy: things in the air.
+  // Above the canopy: things in the air. On the fine grid.
   drawAir(g: CanvasRenderingContext2D) {
     this.wild.drawAir(g, this.t);
-    for (const b of this.bits) {
-      const k = b.life / b.max;
-      switch (b.kind) {
-        case 'fish': {
-          // A small fish arching out of the water, wool belly flashing.
-          const x = Math.round(b.x), y = Math.round(b.y - b.z);
-          const up = b.vz > 0;
-          g.fillStyle = C.plum;
-          g.fillRect(x, y, 2, 1);
-          g.fillStyle = C.wool;
-          g.fillRect(x + (up ? 0 : 1), y + 1, 1, 1);
-          if (b.max - b.life < 0.12) { g.fillRect(x - 1, Math.round(b.y), 1, 1); g.fillRect(x + 2, Math.round(b.y), 1, 1); }
-          break;
-        }
-        case 'leaf': {
-          if (b.z <= 0) break;
-          // Tumbling: a pixel, then a pair, as it turns over.
-          const x = Math.round(b.x), y = Math.round(b.y - b.z);
-          g.fillStyle = b.col;
-          g.fillRect(x, y, Math.floor(b.life * 7) % 2 ? 2 : 1, 1);
-          break;
-        }
-        case 'breath': {
-          // A small cloud of breath that swells and thins away.
-          const t = 1 - k;
-          const r = b.size * (0.4 + t * 1.6);
-          const cx = Math.round(b.x), cy = Math.round(b.y);
-          const R = Math.ceil(r);
-          g.fillStyle = C.wool;
-          for (let dy = -R; dy <= R; dy++)
-            for (let dx = -R; dx <= R; dx++) {
-              if (dx * dx + dy * dy > r * r || hash2(cx + dx, cy + dy, 11) > k * 1.2) continue;
-              g.fillRect(cx + dx, cy + dy, 1, 1);
+    fine(g, (fg) => {
+      for (const b of this.bits) {
+        const k = b.life / b.max;
+        switch (b.kind) {
+          case 'fish': {
+            // A small fish arching out of the water, its wool belly flashing,
+            // drops flying as it breaks the surface.
+            const X = Math.round(b.x * PX), Y = Math.round((b.y - b.z) * PX);
+            const up = b.vz > 0;
+            fg.fillStyle = C.plum;
+            fg.fillRect(X, Y, 4, 1);
+            fg.fillRect(up ? X + 3 : X, Y - 1, 1, 1);
+            fg.fillStyle = C.teal;
+            fg.fillRect(X + 1, Y, 2, 1);
+            fg.fillStyle = C.wool;
+            fg.fillRect(X + 1, Y + 1, 2, 1);
+            if (b.max - b.life < 0.12) {
+              const W0 = Math.round(b.y * PX);
+              fg.fillRect(X - 2, W0, 1, 1); fg.fillRect(X + 5, W0, 1, 1); fg.fillRect(X - 1, W0 - 2, 1, 1); fg.fillRect(X + 4, W0 - 2, 1, 1);
             }
-          break;
-        }
-        case 'smoke': {
-          // A puff that swells and thins out to nothing.
-          const t = 1 - k;
-          const r = 0.8 + t * 1.9;
-          const dens = k > 0.45 ? 1 : k / 0.45;
-          const cx = Math.round(b.x), cy = Math.round(b.y);
-          const R = Math.ceil(r);
-          g.fillStyle = C.wool;
-          for (let dy = -R; dy <= R; dy++)
-            for (let dx = -R; dx <= R; dx++) {
-              if (dx * dx + dy * dy > r * r) continue;
-              if (dens < 1 && hash2(cx + dx, cy + dy, 7) > dens) continue;
-              g.fillRect(cx + dx, cy + dy, 1, 1);
+            break;
+          }
+          case 'leaf': {
+            if (b.z <= 0) break;
+            // Tumbling: edge on, then flat, as it turns over.
+            const X = Math.round(b.x * PX), Y = Math.round((b.y - b.z) * PX);
+            fg.fillStyle = b.col;
+            if (Math.floor(b.life * 7) % 2) { fg.fillRect(X, Y, 3, 1); fg.fillRect(X + 1, Y - 1, 1, 1); }
+            else fg.fillRect(X, Y, 1, 2);
+            break;
+          }
+          case 'breath': {
+            // A small cloud of breath that swells and thins away.
+            const t = 1 - k;
+            const r = b.size * (0.4 + t * 1.6) * PX;
+            const cx = Math.round(b.x * PX), cy = Math.round(b.y * PX);
+            const R = Math.ceil(r);
+            fg.fillStyle = C.wool;
+            for (let dy = -R; dy <= R; dy++)
+              for (let dx = -R; dx <= R; dx++) {
+                if (dx * dx + dy * dy > r * r || hash2((cx + dx) >> 1, (cy + dy) >> 1, 11) > k * 1.2) continue;
+                fg.fillRect(cx + dx, cy + dy, 1, 1);
+              }
+            break;
+          }
+          case 'smoke': {
+            // A round puff that swells and thins out, edge first.
+            const t = 1 - k;
+            const r = (0.8 + t * 1.9) * PX;
+            const cx = Math.round(b.x * PX), cy = Math.round(b.y * PX);
+            const R = Math.ceil(r);
+            fg.fillStyle = C.wool;
+            for (let dy = -R; dy <= R; dy++) {
+              const hw = Math.floor(Math.sqrt(Math.max(0, r * r - dy * dy)));
+              if (hw <= 0) continue;
+              if (k > 0.45) fg.fillRect(cx - hw, cy + dy, hw * 2 + 1, 1);
+              else for (let dx = -hw; dx <= hw; dx++) if (((cx + dx + cy + dy) & 1) === 0 && Math.hypot(dx, dy) < r * (0.3 + k)) fg.fillRect(cx + dx, cy + dy, 1, 1);
             }
-          break;
+            break;
+          }
+          case 'drop':
+            fg.fillStyle = C.wool;
+            fg.fillRect(Math.round(b.x * PX), Math.round((b.y - b.z) * PX), 1, 2);
+            break;
+          case 'pebble':
+            fg.fillStyle = b.col;
+            fg.fillRect(Math.round(b.x * PX), Math.round((b.y - b.z) * PX), 2, 2);
+            break;
+          case 'feather': {
+            const X = Math.round(b.x * PX), Y = Math.round((b.y - b.z) * PX);
+            fg.fillStyle = C.wool;
+            if (Math.floor(b.life * 4) % 2) { fg.fillRect(X, Y, 3, 1); fg.fillRect(X + 1, Y - 1, 2, 1); }
+            else { fg.fillRect(X, Y, 1, 3); fg.fillRect(X + 1, Y + 1, 1, 2); }
+            break;
+          }
         }
-        case 'drop':
-          g.fillStyle = C.wool;
-          g.fillRect(Math.round(b.x), Math.round(b.y - b.z), 1, 1);
-          break;
-        case 'pebble':
-          g.fillStyle = b.col;
-          g.fillRect(Math.round(b.x), Math.round(b.y - b.z), 1, 1);
-          break;
-        case 'feather':
-          g.fillStyle = C.wool;
-          g.fillRect(Math.round(b.x), Math.round(b.y - b.z), 1, 1);
-          if (Math.floor(b.life * 4) % 2) g.fillRect(Math.round(b.x) + 1, Math.round(b.y - b.z), 1, 1);
-          break;
       }
-    }
+    });
     const S = critterSprites();
     for (const f of this.flies) {
       const fr = (f.white ? S.flyW : S.flyY)[Math.floor(f.t * 9) % 3];
@@ -486,21 +505,25 @@ export class Life {
     for (const b of this.birds) drawSpr(g, S.bird[Math.floor(b.ph * 7) % 3], b.x, b.y);
   }
 
-  // Above the night: fireflies pulse in the dark.
+  // Above the night: fireflies pulse in the dark, a glow round the bright
+  // ones. On the fine grid.
   drawGlow(g: CanvasRenderingContext2D) {
-    g.fillStyle = C.butter;
-    for (const f of this.glows) {
-      const s = Math.sin(f.ph * 2.2);
-      if (s < 0.35) continue;
-      const x = Math.round(f.x), y = Math.round(f.y);
-      g.fillRect(x, y, 1, 1);
-      if (s > 0.9) {
-        g.fillRect(x - 1, y, 1, 1);
-        g.fillRect(x + 1, y, 1, 1);
-        g.fillRect(x, y - 1, 1, 1);
-        g.fillRect(x, y + 1, 1, 1);
+    fine(g, (fg) => {
+      fg.fillStyle = C.butter;
+      for (const f of this.glows) {
+        const s = Math.sin(f.ph * 2.2);
+        if (s < 0.35) continue;
+        const X = Math.round(f.x * PX), Y = Math.round(f.y * PX);
+        fg.fillRect(X, Y, 2, 2);
+        if (s > 0.8) {
+          fg.fillRect(X - 1, Y, 1, 2);
+          fg.fillRect(X + 2, Y, 1, 2);
+          fg.fillRect(X, Y - 1, 2, 1);
+          fg.fillRect(X, Y + 2, 2, 1);
+        }
+        if (s > 0.95) { fg.fillRect(X - 3, Y, 1, 1); fg.fillRect(X + 4, Y + 1, 1, 1); fg.fillRect(X + 1, Y - 3, 1, 1); fg.fillRect(X, Y + 4, 1, 1); }
       }
-    }
+    });
   }
 }
 

@@ -5,6 +5,7 @@ import { quality } from '../gfx/quality';
 import { CS, TS, Ter, WORLD_W } from '../world/map';
 import type { Game } from '../game';
 import { mulberry32 } from '../rng';
+import { PX, fine } from '../gfx/screen';
 
 // Its own random numbers, so wild things never shift the herd's (a seeded
 // tune run must come out exactly the same with or without them).
@@ -189,9 +190,13 @@ export class Wildlife {
     const S = critterSprites();
     for (const w of this.list) {
       if (w.kind === 'crow') continue;
-      g.fillStyle = C.sage;
-      const sw = w.kind === 'deer' ? 7 : w.kind === 'rabbit' ? 4 : 3;
-      g.fillRect(Math.round(w.x - sw / 2), Math.round(w.y + 1), sw, 1);
+      // A soft fine-grid shadow under it.
+      const sw = (w.kind === 'deer' ? 7 : w.kind === 'rabbit' ? 4 : 3) * PX;
+      fine(g, (fg) => {
+        fg.fillStyle = C.sage;
+        fg.fillRect(Math.round(w.x * PX - sw / 2), Math.round(w.y * PX) + 2, sw, 1);
+        fg.fillRect(Math.round(w.x * PX - sw / 2) + 1, Math.round(w.y * PX) + 3, sw - 2, 1);
+      });
       let s;
       if (w.kind === 'rabbit') s = S.rabbit[w.flee ? 2 : Math.floor(t * 2 + w.x) % 5 === 0 ? 1 : 0];
       else if (w.kind === 'deer') s = S.deer[w.flee ? 2 : Math.floor(t / 2 + w.x * 0.1) % 3 === 0 ? 0 : 1];
@@ -207,10 +212,7 @@ export class Wildlife {
       if (w.kind !== 'crow') continue;
       const s = w.flee ? S.crow[1 + (Math.floor(t * 9) % 2)] : S.crow[0];
       drawSpr(g, s, w.x, w.y - w.z, w.flip);
-      if (w.flee) {
-        g.fillStyle = C.sage;
-        g.fillRect(Math.round(w.x - w.z * 0.5), Math.round(w.y + 4 + w.z * 0.3), 2, 1);
-      }
+      if (w.flee) fine(g, (fg) => { fg.fillStyle = C.sage; fg.fillRect(Math.round((w.x - w.z * 0.5) * PX), Math.round((w.y + 4 + w.z * 0.3) * PX), 4, 1); });
     }
   }
 }

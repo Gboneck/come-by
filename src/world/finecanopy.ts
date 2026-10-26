@@ -104,7 +104,7 @@ function drawClump(buf: Buf, c: Clump, kind: number, look: Look, clip?: (k: numb
   }
   // Spring: a few blossoms on the lit side, little flowers not specks.
   if (look.bloom > 0 && kind === 2) {
-    const n = Math.round((c.r / 9) * look.bloom * (c.tone > 0.5 ? 1 : 0.4));
+    const n = Math.round((c.r / 13) * look.bloom * (c.tone > 0.5 ? 1 : 0.4));
     for (let k = 0; k < n; k++) {
       const a = -0.6 - hash2(c.seed, k, 712) * 2.2, rr = c.r * (0.3 + hash2(c.seed, k, 713) * 0.55);
       blossom(buf, Math.round(c.x + Math.cos(a) * rr), Math.round(c.y + Math.sin(a) * rr));
