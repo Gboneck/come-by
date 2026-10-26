@@ -2169,11 +2169,13 @@ Before → after, in plain words:
   one (until the first flock is penned), so a new player sees one thing at
   a time.
 - Co-op, everyone does everything: the guest's build mode is the real one,
-  run on their copy of the ranch; changes go to the host as commands
-  (`BuildCmd`: what was chosen and where), and a spare BuildMode on the
-  host plays them through the same methods, so no rule or price is copied.
-  The guest's screen checks first for a quick "NEED 40$", the host's check
-  is the one that counts.
+  run on their copy of the ranch; each change is the UI's `BuildAction`,
+  sent to the host (`build.remote`) and done there by `applyBuild`, the
+  same code a local build runs, so no rule or price is copied; the answer
+  comes back through `build.answer`. The guest's screen checks first for a
+  quick "NEED 40$", the host's check is the one that counts. Buildings go
+  over the wire by corner tile and kind (`src/net/buildwire.ts`): each
+  browser numbers its own buildings, so ids would not match.
 - One builder at a time: two editors would each be looking at a ranch the
   other is changing. The other player keeps herding meanwhile.
 - Kennel training is the ranch's: every dog on the ranch, guests' included,

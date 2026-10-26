@@ -283,8 +283,9 @@ needs a line there.
   everyone else's wears buttercup with a name tag, in their own markings.
 - **One ranch, one purse, everyone does everything.** The host's browser
   still runs the world and keeps the save; a guest's actions are commands
-  the host plays with the same rules: build mode (`BuildMode.remote` on the
-  guest, `BuildMode.apply` on the host; one builder at a time), E (the
+  the host plays with the same rules: build mode (`build.remote` on the
+  guest, `applyBuild` on the host, `build.answer` back; one builder at a
+  time; buildings by tile, `src/net/buildwire.ts`), E (the
   post, pen gates, breeds for sale, the agility course, fields: played
   with the guest's dog as `game.dog` and `game.actor` set, so runs a guest
   starts follow their dog through `game.dogOf(slot)`), helper commands,
