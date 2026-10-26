@@ -121,7 +121,7 @@ check('a trough outside is refused, inside is fine', fx.outside === 'PLACE IT IN
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${root}/shots/paddock/trough.png` });
 await page.keyboard.press('Space'); await page.waitForTimeout(150);
-const fx2 = await page.evaluate(async () => { const c = await import('/src/ranch/catalog.ts'); const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const pd = game.ranch.buildings.find((x) => R.is(x)); game.build.item = c.CATALOG.findIndex((d) => d.id === p.paddockRules().tool); game.build.cx = pd.tx + 4; game.build.cy = pd.ty + 3; return pd.fixtures.length; });
+const fx2 = await page.evaluate(async () => { const c = await import('/src/ranch/catalog.ts'); const p = await import('/src/ui/paddockbuild.ts'); const R = p.paddockRules(); const pd = game.ranch.buildings.find((x) => R.is(x)); game.build.item = c.CATALOG.findIndex((d) => d.id === p.paddockRules().tool); game.build.cx = pd.tx + 4; game.build.cy = pd.ty + 3; return R.fixtureNames(pd).length; });
 check('SPACE puts the trough in the paddock', fx2 === 1, fx2);
 // 9. Esc on a draft cancels the draft, not build mode.
 await page.keyboard.press('Space'); await page.waitForTimeout(80); // cursor is on the paddock: opens it again

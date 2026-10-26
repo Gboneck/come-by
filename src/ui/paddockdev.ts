@@ -16,14 +16,24 @@ const KINDS: SpeciesId[] = ['sheep', 'duck', 'goat', 'cow', 'pony'];
 // Two spaces a tile inside the fence.
 const spaces = (r: PRect) => Math.max(0, (r.w - 1) * (r.h - 1)) * 2 - 8;
 
+// Written to compile against the old fixed pen and the new paddock alike.
 class DevPaddock extends Pen implements PaddockLike {
-  fixtures: { id: string; tx: number; ty: number }[] = [];
-  constructor(r: PRect, public gate: GateAt) {
+  devFixtures: { id: string; tx: number; ty: number }[] = [];
+  private g: GateAt;
+  constructor(r: PRect, gate: GateAt) {
     super(r.tx, r.ty, gate.side as Rot);
+    this.g = { ...gate };
     this.w = r.w;
     this.h = r.h;
   }
-  // @ts-expect-error: a pen's room is fixed; a stand-in paddock's grows with it
+  get gate(): GateAt {
+    return this.g;
+  }
+  set gate(v: GateAt) {
+    this.g = { ...v };
+    this.rot = v.side as Rot;
+  }
+  // @ts-ignore: an old pen's room is fixed; a stand-in paddock's grows
   get capacity(): number {
     return spaces(this);
   }
@@ -87,8 +97,7 @@ const RULES: PaddockRules = {
     return true;
   },
   moveGate(game, p, gate) {
-    (p as DevPaddock).gate = { ...gate };
-    p.rot = gate.side as Rot;
+    (p as DevPaddock).gate = gate;
     game.ranch.restamp();
     return null;
   },
@@ -99,16 +108,16 @@ const RULES: PaddockRules = {
     return null;
   },
   is: (b): b is PaddockLike => b instanceof DevPaddock,
-  fixtureNames: (p) => (p as DevPaddock).fixtures.map((f) => f.id.toUpperCase()),
+  fixtureNames: (p) => (p as DevPaddock).devFixtures.map((f) => f.id.toUpperCase()),
   fixtures: ['trough'],
   fixtureProblem(game, p, id, tx, ty) {
     const d = defOf(id as ItemId);
     if (tx <= p.tx || ty <= p.ty || tx + d.w >= p.tx + p.w || ty + d.h >= p.ty + p.h) return 'INSIDE THE FENCE, PLEASE';
-    if ((p as DevPaddock).fixtures.some((f) => tx < f.tx + 2 && tx + d.w > f.tx && ty < f.ty + 1 && ty + d.h > f.ty)) return 'SOMETHING IS IN THE WAY';
+    if ((p as DevPaddock).devFixtures.some((f) => tx < f.tx + 2 && tx + d.w > f.tx && ty < f.ty + 1 && ty + d.h > f.ty)) return 'SOMETHING IS IN THE WAY';
     return null;
   },
   placeFixture(game, p, id, tx, ty) {
-    (p as DevPaddock).fixtures.push({ id, tx, ty });
+    (p as DevPaddock).devFixtures.push({ id, tx, ty });
     if (id === 'trough') (p as unknown as Pen).hasTrough = true;
   },
   ghost: (r, gate) => new DevPaddock(r, gate),
