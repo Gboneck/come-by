@@ -221,7 +221,9 @@ const res = await page.evaluate(async () => {
   second.gone = true;
   // The fair packs up at day's end: the entries go home.
   g.endDay();
-  check('after the fair, entries go home and unsold breeds leave', calm.pen === spare && goat.pen === null && sale.pen.animals.length === 0 && ring.animals.length === 0, { calm: calm.pen?.id, goat: goat.pen?.id, sale: sale.pen.animals.length });
+  // (The goat has no paddock of its own, but goats get on with sheep: it
+  // shares the sheep's.)
+  check('after the fair, entries go home and unsold breeds leave', calm.pen === spare && goat.pen === spare && sale.pen.animals.length === 0 && ring.animals.length === 0, { calm: calm.pen?.id, goat: goat.pen?.id, sale: sale.pen.animals.length });
   check('ribbons in the legacy record', g.totals.fairRibbons.reduce((s, n) => s + n, 0) >= 1, g.totals.fairRibbons);
 
   // ---- Seasons in the save ----

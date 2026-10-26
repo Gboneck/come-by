@@ -46,6 +46,13 @@ interface StepDef {
   line: string; // the morning banner's small line
 }
 
+// The Map session's projects (systems/projects.ts, from projects-r4): once
+// they are merged in, the third cottage is the shepherd's, and comes when
+// the shepherd's hut is mended. (A lazy glob: it only asks whether the
+// file is there.)
+const PROJECTS = Object.keys(import.meta.glob('./projects.ts')).length > 0;
+const hutMended = (g: Game) => !!(g as { projects?: { isDone(id: string): boolean } }).projects?.isDone('hut');
+
 const penned = (g: Game, sp?: SpeciesId) => g.ranch.pens.reduce((n, p) => n + p.animals.filter((a) => !a.young && (!sp || a.sp.id === sp)).length, 0);
 
 export const STEPS: StepDef[] = [
@@ -54,7 +61,9 @@ export const STEPS: StepDef[] = [
   { id: 'cottage2', name: 'A SECOND COTTAGE', deed: 'GRAZE A FIELD CLEAR', after: 'cottage1', done: (g) => g.valley.fields.some((p) => p.cleared), line: 'ANOTHER FAMILY MOVES IN' },
   { id: 'smithy', name: 'THE SMITHY', deed: 'PEN 4 CATTLE', after: 'square', done: (g) => penned(g, 'cow') >= 4, line: 'THE SMITH CAN FORGE AN OX YOKE: THE OLD BRIDGE AT THE FORD CAN BE MENDED' },
   { id: 'hall', name: 'THE VILLAGE HALL', deed: 'WIN A RIBBON AT A TRIAL OR THE FAIR', after: 'square', done: (g) => g.totals.ribbons.some((n) => n > 0) || g.totals.fairRibbons.some((n) => n > 0), line: 'A FESTIVAL ON THE GREEN THE LAST DAY OF EACH SEASON' },
-  { id: 'cottage3', name: 'A THIRD COTTAGE', deed: 'HAVE 40 ANIMALS PENNED', after: 'cottage2', done: (g) => penned(g) >= 40, line: 'THE VILLAGE IS FULL OF LIFE' },
+  PROJECTS
+    ? { id: 'cottage3', name: "THE SHEPHERD'S COTTAGE", deed: "MEND THE SHEPHERD'S HUT", after: 'cottage2', done: hutMended, line: "THE SHEPHERD'S FAMILY MOVES IN: THE VILLAGE IS FULL OF LIFE" }
+    : { id: 'cottage3', name: 'A THIRD COTTAGE', deed: 'HAVE 40 ANIMALS PENNED', after: 'cottage2', done: (g) => penned(g) >= 40, line: 'THE VILLAGE IS FULL OF LIFE' },
 ];
 
 export interface FieldState {

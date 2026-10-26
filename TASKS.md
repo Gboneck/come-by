@@ -1719,6 +1719,14 @@ with their legs clipped off. After:
   a seeded tune or pace run; they are not pressure sources, so a parade
   walks past them. Nights without visitors end after 2.5s, so the
   warden's lantern round is mostly a dusk thing.
+- Merging with the other round-four branches without double work: the
+  third cottage becomes THE SHEPHERD'S COTTAGE (mend the shepherd's hut)
+  when the Map session's `src/systems/projects.ts` is there, and the
+  valley's own shelter and rack art steps aside when Graphics'
+  `src/art/paddock.ts` is there (lazy `import.meta.glob`s that only ask
+  whether the file exists), so each branch works alone and merged.
+- With mixed flocks a fair entry goes home to any paddock it can share
+  (the fair's goat to the sheep's), as everywhere else.
 - The unseeded ordertest is flaky on this branch and on the base (the bot
   sometimes walks the order's flock into the empty open pen); seeded runs
   pass.

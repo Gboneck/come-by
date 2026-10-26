@@ -174,7 +174,8 @@ export function seasonalEvening(g: Game) {
   const S = g.season;
   for (const p of g.ranch.pens) p.hungry = false;
   if (S.winter && isWinterTier(g)) feed(g);
-  // The fair packs up: entries go home to a pen of their kind, unsold
+  // The fair packs up: entries go home to a pen of their kind (or one they
+  // can share), unsold
   // breeds go back with their breeders.
   const ring = g.ranch.ring.pen;
   for (const a of ring.animals) sendHome(g, a);

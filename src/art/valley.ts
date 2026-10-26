@@ -97,11 +97,17 @@ function bridge(g: CanvasRenderingContext2D, game: Game, t: number) {
     for (let i = 0; i < 6 + done; i += 3) rect(g, a + dir * i - (dir < 0 ? 2 : 0), y0 + 1, 2, y1 - y0 - 2, C.wool);
 }
 
+// Graphics' paddock art (art/paddock.ts, from world-r4) draws the fixtures
+// itself; until it is merged in, they are drawn here. (A lazy glob: it only
+// asks whether the file is there.)
+const PADDOCK_ART = Object.keys(import.meta.glob('./paddock.ts')).length > 0;
+
 export function valleyDrawables(game: Game, g: CanvasRenderingContext2D): Drawable[] {
   const { ox, oy, W, H } = game.view();
   const inView = (x0: number, y0: number, x1: number, y1: number) => x1 > ox - 40 && x0 < ox + W + 40 && y1 > oy - 40 && y0 < oy + H + 40;
   const night = skyDarkness(game.day) > 0.3;
-  const out: Drawable[] = [...villageDrawables(game, g, inView, night), ...fixtureDrawables(game, g, (x, y) => inView(x - 8, y - 8, x + 8, y + 8))];
+  const out: Drawable[] = villageDrawables(game, g, inView, night);
+  if (!PADDOCK_ART) out.push(...fixtureDrawables(game, g, (x, y) => inView(x - 8, y - 8, x + 8, y + 8)));
   const v = game.valley, t = game.t;
   // Paddocks: scrub on the ground (or flowers once cleared), and a sign.
   for (const p of v.fields) {
