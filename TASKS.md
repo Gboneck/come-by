@@ -1059,14 +1059,63 @@ Before → after, in plain words:
       is laid where its animal stands and lies in the paddock until sold at
       day's end or taken (`takeGood` pays now); `onGood` events for laid,
       taken and sold; saved, and shared with co-op guests
-- [x] Paddock density checked: a 16x12 paddock holds 38 sheep and looks
-      like a herd; left as it is
+- [x] Paddock density: big paddocks now pack up to three-quarters again a
+      tile at four times the old pen's area (was half again); an 8x7 still
+      holds 16. A 16x12 holds 44 sheep and looks like a herd with room to
+      move. More land in use was what slowed the bot most
 - [x] `scripts/breedtest.mjs` (29 checks); seasontest updated (room for
       lambs, the new flock sizes, the fair's pairs); the pace bot buys the
       lot when it has coin and room, and pacetest's year table counts the
       young, stock bought and the herd
 
-HERD_TABLES
+**Herding is unchanged**: `node scripts/tune.mjs <species> --seed=1` gives
+identical results before and after for all five species. (Wild young start
+at tier 2 partly so day one's ducks, and the tune, stay exactly as they
+were.)
+
+**Pace** (`node scripts/pacetest.mjs`, six seeds; before is test/round-5):
+the valley thrives on days 8, 7, 12, 17, 6, 6 before (mean 9.3) and 7, 11,
+11, 7, 11, 8 after (mean 9.2): the same on average, and the worst seed
+went from 17 days to 11. Tier 4 takes longer (cattle in bigger groups, a
+big drove to bring in, more to house) and tier 5 is quicker (more stock
+about for the 50 penned):
+
+| tier | days before | days after | penned at tier end, before | after | enclosures, before | after | earned per day $, before | after |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2.0 | 2.0 | 27 | 27 | 3.3 | 3.5 | 126 | 125 |
+| 2 | 1.0 | 1.0 | 36 | 35 | 3.5 | 3.5 | 403 | 394 |
+| 3 | 1.0 | 1.0 | 43 | 42 | 4.9 | 4.7 | 551 | 466 |
+| 4 | 2.0 | 3.3 | 52 | 60 | 5.5 | 5.5 | 631 | 648 |
+| 5 | 3.4 | 1.8 | 61 | 64 | 5.7 | 5.8 | 981 | 1278 |
+
+The first pass was slower (mean 10.8, one seed 17 days): the bot spent
+whole drives on droves it had no room for and ran out of land at tier 5.
+Big paddocks now pack more a tile, and the bot leaves a drove far bigger
+than its room for another day.
+
+**A year** (`--year --days=22`, three seeds), after:
+
+| season | earned $ | spent $ | young born | stock bought | penned at end | wild stock about |
+|---|---|---|---|---|---|---|
+| y1 spring | 1138 | 984 | 0 | 1.3 | 41 | 35 |
+| y1 summer | 3115 | 432 | 0 | 2.7 | 60 | 135 |
+| y1 autumn | 4359 | 547 | 0 | 0 | 61 | 190 |
+| y1 winter | 3665 | 80 | 0 | 0 | 66 | 158 |
+| y2 spring | 4860 | 6 | 3.0 | 0 | 75 | 232 |
+| y2 summer | 2605 | 0 | 0 | 0 | 79 | 265 |
+
+Before, the same seeds saw 103 to 150 wild stock about by year two (now
+135 to 265) and 22 lambs in year two's spring. Those lambs came with no
+rule about room; now the bot keeps every paddock full, so its herds rarely
+breed (3 young). A player who leaves room in a paddock sees it grow; a full
+paddock gets the tip. The bot ends the year with 79 penned (89 before):
+land, not stock, is what limits it.
+
+**Phone frame work** (`node scripts/perftest.mjs --only=day,worst`, the
+tier-5 fixture with today's bigger wild flocks): day 11.2 to 13.0ms and
+worst 14.9 to 15.7ms at 4x CPU throttle; 17.8 to 20.8 and 22.4 to 24.6ms
+at 6x. The cost is the simulation of the extra wild animals; I left it
+alone rather than risk changing how they herd.
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -1958,6 +2007,30 @@ HERD_TABLES
   whether the file exists), so each branch works alone and merged.
 - With mixed flocks a fair entry goes home to any paddock it can share
   (the fair's goat to the sheep's), as everywhere else.
+- Breeding (round five): once a year, on the first two mornings of the
+  kind's season (spring; ponies summer), from tier 2. Chances a season:
+  ducks 0.5 (2-3 ducklings), sheep 0.93 (15% twins), goats 0.8 (40% twins),
+  cattle 0.65, ponies 0.55. Calm means stress at most 0.4 at the last day's
+  end and in the morning (the night takes most stress off, so the morning
+  alone tells nothing). Room is for the young once grown, so a paddock
+  never ends up over-full when they grow up in autumn. No sexes: any grown
+  one with another of its kind in the paddock can bear.
+- Young take a place (a calf or foal two) and are worth two-fifths of a
+  grown one; they make nothing; buyers never take them.
+- Wild flocks: a sixth bigger for each tier the region has been open, up to
+  two-thirds again; a fourth flock once open three tiers; 40% of wild
+  mothers with young in season, from tier 2.
+- Big droves: 30% a morning from tier 3 (not winter, not fair day, not two
+  mornings running), 2.5 flocks' worth in an older region, at the spawn
+  point farthest from its flocks.
+- The sale yard's lot: one kind a day in turn (of the kinds whose region is
+  open), at four times its delivered value (duck 8$, sheep 20$, goat 32$,
+  cow 56$, pony 120$). The lot makes way for the fair's breeders.
+- Goods items: at most 48 shown a paddock (the count goes on); laid under
+  the animal, nudged inside the fence and off fixtures. Drawing them is
+  UI's.
+- The audio's mother-and-young calls keyed on the mother's `lamb` link, so
+  ewes called as if lost; they now key on `young`.
 - The unseeded ordertest is flaky on this branch and on the base (the bot
   sometimes walks the order's flock into the empty open pen); seeded runs
   pass.
