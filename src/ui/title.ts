@@ -1,6 +1,7 @@
 import { C } from '../palette';
-import { panel, rect } from '../gfx/draw';
-import { text, textWidth } from '../gfx/font';
+import { rect } from '../gfx/draw';
+import { panel } from './frame';
+import { heading, headingWidth, text, textWidth } from '../gfx/font';
 import { drawTitleArt } from '../art/title';
 import type { Game } from '../game';
 import { saveInfo } from '../systems/save';
@@ -11,15 +12,28 @@ import { safeArea } from './safe';
 import { coopLeave, coopRowLabel, openCoop } from './coop';
 import { drawInstallHint } from './install';
 import { openTransfer } from './transfer';
+import { openPhoto } from './photo';
 import { LEVELS, quality } from '../gfx/quality';
 
 
-// Big chunky letters: the 3x5 font scaled up, with a plum outline.
-function logo(g: CanvasRenderingContext2D, s: string, cx: number, y: number, scale: number) {
-  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]])
-    text(g, s, cx + dx * Math.max(1, scale / 3), y + dy * Math.max(1, scale / 3), C.plum, { align: 'center', scale });
-  text(g, s, cx, y + scale, C.plum, { align: 'center', scale });
-  text(g, s, cx, y, C.butter, { align: 'center', scale });
+// The logo in the heading face, scaled up: each letter drops in on its own
+// with a little bounce when the title first shows, and every few seconds a
+// glint runs along the word.
+function logo(g: CanvasRenderingContext2D, s: string, cx: number, y: number, scale: number, t: number) {
+  const x0 = Math.round(cx - headingWidth(s, scale) / 2);
+  const glint = (t % 5) / 0.7; // 0..1 while it runs
+  [...s].forEach((ch, i) => {
+    if (ch === ' ') return;
+    // Where this letter starts: the width of what comes before it, kerned.
+    const lx = x0 + headingWidth(s.slice(0, i + 1), scale) - headingWidth(ch, scale);
+    const at = 0.15 + i * 0.09, k = Math.min(1, Math.max(0, (t - at) / 0.35));
+    if (k <= 0) return;
+    // Ease out with an overshoot: falls, dips below its line, settles.
+    const e = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
+    const dy = Math.round((1 - e) * -scale * 6);
+    const lit = glint < 1 && Math.floor(glint * (s.length + 2)) - 1 === i;
+    heading(g, ch, lx, y + dy, lit ? C.wool : C.butter, { scale, outline: C.plum, shadow: C.plum, shade: lit ? C.butter : C.moss });
+  });
 }
 
 export interface MenuState {
@@ -42,15 +56,18 @@ export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H:
 
   const S = safeArea(game.screen);
   const touch = game.input.touchMode;
-  const scale = W >= 300 ? 6 : 5;
-  const ly = Math.round(S.top + (H - S.top) * 0.16);
+  // The logo as big as fits: the heading face is seven pixels tall.
+  let lscale = W >= 300 ? 6 : 5;
+  while (lscale > 2 && headingWidth('COME BY', lscale) > W - 16) lscale--;
+  const ly = Math.round(S.top + (H - S.top) * 0.14);
   // The illustration along the bottom: the heeler on its knoll, by season.
   const menuEnd = Math.round(H * 0.5) + items.length * (touch ? 21 : 15);
   drawTitleArt(g, W, H, menuEnd + 4, H - S.bottom - 34, game.season.season, game.t);
-  logo(g, 'COME BY', W / 2, ly, scale);
+  logo(g, 'COME BY', W / 2, ly, lscale, game.t);
   const sw = textWidth('A HERDING GAME') + 8;
-  rect(g, Math.round(W / 2 - sw / 2), ly + scale * 5 + 6, sw, 9, C.plum); // reads on snow too
-  text(g, 'A HERDING GAME', W / 2, ly + scale * 5 + 8, C.wool, { align: 'center', shadow: C.plum });
+  const ty = ly + lscale * 7 + 6;
+  rect(g, Math.round(W / 2 - sw / 2), ty, sw, 9, C.plum); // reads on snow too
+  text(g, 'A HERDING GAME', W / 2, ty + 2, C.wool, { align: 'center', shadow: C.plum });
 
   // Menu.
   let result: TitleAction = null;
@@ -172,6 +189,7 @@ export const PAUSE_ITEMS: PauseItem[] = [
       saveSettings();
     },
   },
+  { id: 'photo', label: () => 'TAKE A PHOTO', act: (g, dir) => { if (dir === 0) openPhoto(g); } },
   { id: 'dog', label: (g) => `${g.look.name}'S LOOK`, act: (g, dir) => { if (dir === 0) g.openLook('pause'); }, show: (g) => g.net?.role !== 'guest' },
   // Co-op: invite a friend (or see who is here), or leave a friend's ranch.
   { id: 'coop', label: (g) => coopRowLabel(g), act: (g, dir) => { if (dir === 0) openCoop(g, 'invite'); }, show: (g) => g.net?.role !== 'guest' },
@@ -214,7 +232,7 @@ export function drawPause(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
   dimView(g, game.view());
   panel(g, x0, y0, pw, ph);
-  text(g, 'PAUSED', W / 2, y0 + 6, C.butter, { align: 'center' });
+  heading(g, 'PAUSED', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
   text(g, `DAY ${game.day.day}  ${tierOf(game.tier).name}`, W / 2, y0 + 14, C.sage, { align: 'center' });
   rows.forEach((it, i) => {
     const y = y0 + 24 + i * (rh + gap);

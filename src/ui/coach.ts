@@ -1,9 +1,11 @@
 import { C } from '../palette';
-import { panel, ring } from '../gfx/draw';
+import { ring } from '../gfx/draw';
+import { panel } from './frame';
 import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import type { Group } from '../entities/animal';
 import { arrow } from './hud';
+import { updateEmotes } from './emotes';
 import { buzz } from './settings';
 import { orderFor, penGateAt, yardOf } from '../systems/orders';
 import { PARTS, atPost, currentClass } from '../systems/trials';
@@ -107,6 +109,7 @@ function watchJobs(game: Game) {
 // One-time tips, shown through the hint line when they apply.
 export function updateCoach(game: Game, dt: number) {
   if (game.demo) return;
+  updateEmotes(game, dt);
   watchJobs(game);
   if (game.tip) return;
   const seen = game.tipsSeen;

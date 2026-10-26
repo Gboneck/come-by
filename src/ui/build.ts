@@ -1,6 +1,7 @@
 import { C } from '../palette';
-import { ditherRect, panel, rect, ring } from '../gfx/draw';
-import { text, textWidth, wrap } from '../gfx/font';
+import { ditherRect, rect, ring } from '../gfx/draw';
+import { panel } from './frame';
+import { heading, text, textWidth, wrap } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
@@ -412,7 +413,7 @@ export class BuildMode {
         const ds = buildingDrawables(g, temp, game.t, false).sort((a, b) => a.y - b.y);
         for (const d of ds) d.draw();
       } else ditherRect(g, X0, Y0, Wd, Hd, 8, C.plum);
-      outline(g, X0, Y0, Wd, Hd, gh.ok ? C.butter : C.plum, game.t);
+      placeMark(g, X0, Y0, Wd, Hd, gh.ok, game.t);
     }
     if (gh.def.id === 'pen') drawGateMark(g, gh.tx, gh.ty, this.rot, gh.ok, game.t);
     // Cursor tile marker.
@@ -430,7 +431,7 @@ export class BuildMode {
     } else {
       if (ok) pieceDrawable(game, g, p, tx, ty).draw();
       else ditherRect(g, tx * TS, ty * TS, p.w * TS, p.h * TS, 8, C.plum);
-      outline(g, tx * TS, ty * TS, p.w * TS, p.h * TS, ok ? C.butter : C.plum, game.t);
+      placeMark(g, tx * TS, ty * TS, p.w * TS, p.h * TS, ok, game.t);
     }
     rect(g, this.cx * TS + 3, this.cy * TS + 3, 2, 2, C.butter);
   }
@@ -549,11 +550,11 @@ export class BuildMode {
       const gh = this.ghost(game);
       if (!gh.ok && gh.reason) lines.push(gh.reason);
     }
-    const ih = 10 + lines.length * 6;
+    const ih = 13 + lines.length * 6;
     const iy = by - 6 - ih;
     panel(g, L, iy, R - L, ih);
-    text(g, title, L + 4, iy + 3, C.butter, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
+    infoTitle(g, title, L + 4, iy + 3);
+    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
 
     // Touch buttons.
     if (game.input.touchMode) {
@@ -582,7 +583,7 @@ export class BuildMode {
     const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
     panel(g, x0, y0, pw, ph);
     const hasKennel = game.ranch.buildings.some((b) => b.kind === 'kennel');
-    text(g, hasKennel ? `KENNEL: TRAIN ${game.look.name}` : 'BUILD A KENNEL TO TRAIN', W / 2, y0 + 5, C.butter, { align: 'center' });
+    heading(g, hasKennel ? `TRAIN ${game.look.name}` : 'BUILD A KENNEL', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
     UPGRADES.forEach((u, i) => {
       const y = y0 + 16 + i * 16;
       const lvl = game.upgrades[u.key];
@@ -673,11 +674,11 @@ export class BuildMode {
       if (why) lines.push(why);
       else lines.push('DECOR NEVER GETS IN THE STOCK\'S WAY');
     }
-    const ih = 10 + lines.length * 6;
+    const ih = 13 + lines.length * 6;
     const iy = by - 6 - ih;
     panel(g, L, iy, R - L, ih);
-    text(g, title, L + 4, iy + 3, C.butter, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, l, L + 4, iy + 10 + i * 6, C.wool, { iconColor: C.butter }));
+    infoTitle(g, title, L + 4, iy + 3);
+    lines.forEach((l, i) => text(g, l, L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
     if (game.input.touchMode) {
       const bw = 40, bh = 15, rx = R - bw;
       let y = iy - bh - 3;
@@ -704,7 +705,7 @@ export class BuildMode {
     const ph = 30 + (RANCH_ROWS.length + 1) * (rh + gap) + 10;
     const x0 = Math.round(W / 2 - pw / 2), y0 = H - S.bottom - 4 - ph;
     panel(g, x0, y0, pw, ph);
-    text(g, 'YOUR RANCH', W / 2, y0 + 5, C.butter, { align: 'center' });
+    heading(g, 'YOUR RANCH', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
     const signName = game.look.ranch || tierOf(game.tier).name;
     text(g, `THE SIGN READS: COME BY ${signName}`, W / 2, y0 + 13, C.sage, { align: 'center' });
     let y = y0 + 22;
@@ -740,7 +741,7 @@ export class BuildMode {
     const pw = Math.min(W - 8, 176), ph = 34 + Math.max(1, pens.length) * 14;
     const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
     panel(g, x0, y0, pw, ph);
-    text(g, hasMarket ? 'MARKET STALL' : 'NO MARKET STALL YET', W / 2, y0 + 5, C.butter, { align: 'center' });
+    heading(g, hasMarket ? 'MARKET STALL' : 'NO MARKET YET', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
     text(g, `GOODS SELL AT DUSK  X${priceMult(game)}`, W / 2, y0 + 13, C.wool, { align: 'center' });
     if (!pens.length) text(g, 'NO STOCK IN YOUR PENS', W / 2, y0 + 26, C.sage, { align: 'center' });
     pens.forEach((p, i) => {
@@ -757,6 +758,41 @@ export class BuildMode {
         if (ui.click(`sell-${p.id}`, bx, y - 1, bw, 11)) { this.row = i; this.sellOne(game, p); }
       }
     });
+  }
+}
+
+// An info card's title: the name in the heading face, a price after it in
+// the body face ("KENNEL  15$").
+function infoTitle(g: CanvasRenderingContext2D, title: string, x: number, y: number) {
+  const m = title.match(/^(.*?)( {2}\d+\$)?$/);
+  const name = m?.[1] ?? title, price = m?.[2] ?? '';
+  const w = heading(g, name, x, y, C.butter, { shade: C.moss });
+  if (price) text(g, price.trim(), x + w + 5, y + 2, C.wool, { iconColor: C.butter });
+}
+
+// Where the piece would go: gilt corner brackets that breathe in and out
+// when it can be built there, a plum cross over the spot when it cannot.
+function placeMark(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, ok: boolean, t: number) {
+  if (!ok) {
+    g.fillStyle = C.plum;
+    const n = Math.min(w, h);
+    for (let i = 0; i < n; i++) {
+      const fx = Math.round((i / n) * w), fy = Math.round((i / n) * h);
+      g.fillRect(x + fx, y + fy, 1, 1);
+      g.fillRect(x + w - 1 - fx, y + fy, 1, 1);
+    }
+    outline(g, x, y, w, h, C.plum, t);
+    return;
+  }
+  const o = Math.floor(t * 3) % 2; // one pixel out, then back
+  const L = 4;
+  for (const [cx, cy, sx, sy] of [[x - o, y - o, 1, 1], [x + w - 1 + o, y - o, -1, 1], [x - o, y + h - 1 + o, 1, -1], [x + w - 1 + o, y + h - 1 + o, -1, -1]]) {
+    g.fillStyle = C.plum;
+    g.fillRect(Math.min(cx, cx + sx * (L - 1)), cy + sy, L, 1);
+    g.fillRect(cx + sx, Math.min(cy, cy + sy * (L - 1)), 1, L);
+    g.fillStyle = C.butter;
+    g.fillRect(Math.min(cx, cx + sx * (L - 1)), cy, L, 1);
+    g.fillRect(cx, Math.min(cy, cy + sy * (L - 1)), 1, L);
   }
 }
 

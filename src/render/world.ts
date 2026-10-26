@@ -120,7 +120,6 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   g.save();
   g.translate(-ox, -oy);
   game.life.drawAir(g);
-  drawStamina(game, g);
   game.fx.drawHigh(g);
   g.restore();
 
@@ -179,16 +178,4 @@ export function buildingDrawables(g: CanvasRenderingContext2D, b: Building, t: n
   return [];
 }
 
-// A small bar beside the dog, only while stamina is not full.
-function drawStamina(game: Game, g: CanvasRenderingContext2D) {
-  const d = game.dog;
-  if (game.mode === 'title' || d.stamina >= d.stats.stamina - 0.01) return;
-  const h = 10;
-  const x = Math.round(d.x + 8), y = Math.round(d.y - 12);
-  g.fillStyle = C.plum;
-  g.fillRect(x - 1, y - 1, 4, h + 2);
-  const f = Math.round((d.stamina / d.stats.stamina) * h);
-  const blink = d.exhausted && Math.floor(game.t * 6) % 2 === 0;
-  g.fillStyle = blink ? C.moss : C.butter;
-  g.fillRect(x, y + h - f, 2, f);
-}
+// (The dog's stamina is drawn by the HUD now: src/ui/hud.ts.)

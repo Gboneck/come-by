@@ -154,6 +154,7 @@ const RULES: [RegExp, string][] = [
   [/\bESC: RESUME\b/g, '(B) RESUME'],
   [/\bENTER: TYPE A NAME\b/g, '(A) TYPE A NAME'],
   [/\bARROWS: CHANGE\b/g, '(D-PAD) CHANGE'],
+  [/^ARROWS: FRAME {2}SPACE: SNAP {2}ESC: BACK$/, 'STICK FRAME  (A) SNAP  (B) BACK'],
   [/\bPRESS ENTER\b/g, 'PRESS (A)'],
   [/^H: /, '(Y) '],
   // Hints and tips.

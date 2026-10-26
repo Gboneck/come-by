@@ -1,6 +1,11 @@
 import { C } from '../palette';
-import { panel, rect, px } from '../gfx/draw';
-import { text, textWidth } from '../gfx/font';
+import { rect } from '../gfx/draw';
+import { panel } from './frame';
+import { heading, headingWidth, text, textWidth } from '../gfx/font';
+import { drawSpr } from '../gfx/sprite';
+import { animalSprites } from '../art/animals';
+import { bone, coin, dial, icon } from './hudart';
+import { stamp } from './frame';
 import { calmRating, type Game } from '../game';
 import { DUSK_AT, NIGHT_LEN } from '../systems/day';
 import { TIERS, nextGoal } from '../systems/progression';
@@ -10,7 +15,7 @@ import { safeArea } from './safe';
 import { coachHint, drawCoach } from './coach';
 import { defOf } from '../ranch/catalog';
 import { jobArrows, jobCard } from './jobs';
-import { skyIcon } from './icons';
+import { seasonIcon, skyIcon } from './icons';
 import { CALM_MAX } from '../systems/trials';
 import { clamp } from '../util';
 
@@ -68,6 +73,8 @@ function steadyHint(game: Game, want: string | null): string | null {
   return held;
 }
 
+let stamped: object | null = null; // the banner whose stamp has puffed its dust
+
 // A HUD button. Touch gets a generous invisible hit area round it.
 function button(game: Game, g: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, h: number, rim: string, pulse = false): boolean {
   const hot = game.ui.isActive(id);
@@ -108,6 +115,21 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
 
   drawCoach(game, g, T + 12, viewBottom);
 
+  // ---- Stamina: a bone by the dog that empties as it runs ----
+  {
+    const dg = game.dog;
+    if (dg.stamina < dg.stats.stamina - 0.01) {
+      const v = game.view();
+      const bx0 = Math.round(dg.x - v.ox + 5), by0 = Math.round(dg.y - v.oy - 19);
+      bone(g, bx0, by0, dg.stamina / dg.stats.stamina, dg.exhausted, game.t);
+      // Out of puff: a bead of sweat.
+      if (dg.exhausted && Math.floor(game.t * 3) % 2 === 0) {
+        rect(g, bx0 - 3, by0 + 1, 1, 2, C.wool);
+        rect(g, bx0 - 4, by0 + 2, 1, 1, C.wool);
+      }
+    }
+  }
+
   // ---- Edge arrows: groups out in the pastures, and home when driving ----
   const M: Margins = { top: T + 12, bottom: H - viewBottom + 2, left: S.left, right: S.right };
   const gr = game.nearestGroup();
@@ -129,41 +151,30 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   }
   jobArrows(game, g, M);
 
-  // ---- Clock (top-left) ----
+  // ---- Clock (top-left): a dial the sun climbs by day, the moon by night ----
   const d = game.day;
   panel(g, L, T, 62, 18);
-  text(g, `DAY ${d.day}`, L + 4, T + 3, C.wool);
+  const night = d.phase === 'night';
+  dial(g, L + 10, T + 13, 6, d.frac, d.duskAt ?? DUSK_AT, night, d.nightT / NIGHT_LEN, game.t);
+  text(g, `DAY ${d.day}`, L + 20, T + 3, C.wool);
   const resting = game.rest > 1.5;
-  text(g, d.clock(), L + 49, T + 3, d.phase === 'dusk' || resting ? C.butter : C.wool, { align: 'right' });
-  // Today's sky, at the end of the clock.
-  skyIcon(g, game.weather.sky, L + 52, T + 2, d.phase === 'night');
+  text(g, d.clock(), L + 20, T + 10, d.phase === 'dusk' || resting ? C.butter : C.wool);
+  // Today's sky at the end of the clock; on a clear day, the season.
+  if (game.weather.sky === 'clear' && !night) seasonIcon(g, game.season.season, L + 51 + (game.season.season === 'summer' ? 0 : 1), T + 5);
+  else skyIcon(g, game.weather.sky, L + 51, T + 5, night);
   // Resting: the clock runs fast.
   if (resting && Math.floor(game.t * 4) % 2 === 0) text(g, '>>', L + 65, T + 3, C.butter, { shadow: C.plum });
-  // Sun track: day in sage, dusk in teal; a sun dot travels along it.
-  const tx = L + 4, tky = T + 12, tw = 44;
-  rect(g, tx, tky, tw, 2, C.sage);
-  rect(g, tx + Math.round(tw * DUSK_AT), tky, tw - Math.round(tw * DUSK_AT), 2, C.teal);
-  if (d.phase === 'night') {
-    // Moon crossing a dark track.
-    rect(g, tx, tky, tw, 2, C.plum);
-    const mx = tx + Math.round((d.nightT / NIGHT_LEN) * (tw - 1));
-    rect(g, mx - 1, tky - 1, 3, 4, C.wool);
-    px(g, mx + 1, tky - 1, C.plum);
-  } else {
-    const sx = tx + Math.round(d.frac * (tw - 1));
-    rect(g, sx - 1, tky - 1, 3, 4, C.butter);
-    px(g, sx, tky - 2, C.butter);
-  }
 
   // ---- Coins (top-right): ticks up as coins land in the purse ----
   const f = game.feel;
   const shown = f.coinsShown(game.coins);
-  const coinStr = `${shown}$`;
-  const cw = Math.max(textWidth(coinStr), textWidth(`${game.coins}$`)) + 8;
+  const coinStr = `${shown}`;
+  const cw = Math.max(textWidth(coinStr), textWidth(`${game.coins}`)) + 18;
   const ticking = shown !== game.coins || f.bump > 0;
   panel(g, R - cw, T, cw, 11, C.plum, ticking ? C.butter : C.sage);
-  text(g, coinStr, R - 4, T + 3 - (f.bump > 0 ? 1 : 0), ticking ? C.butter : C.wool, { align: 'right', iconColor: C.butter });
-  f.purse.x = R - 6;
+  text(g, coinStr, R - 12, T + 3 - (f.bump > 0 ? 1 : 0), ticking ? C.butter : C.wool, { align: 'right' });
+  coin(g, R - 7, T + 5 - (f.bump > 0 ? 1 : 0), game.t, f.bump > 0);
+  f.purse.x = R - 7;
   f.purse.y = T + 5;
 
   // ---- Pause (touch) ----
@@ -182,11 +193,12 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   // ---- Build button (on the ranch) ----
   if (game.inRanch() && game.net?.role !== 'guest') {
     const label = touch ? 'BUILD' : 'B: BUILD';
-    const w = textWidth(label) + 8;
+    const w = textWidth(label) + 15;
     bx -= w;
     const pulse = game.tut === 6 && game.coins >= defOf('kennel').cost;
     if (button(game, g, 'hud-build', bx, rightY, w, bh, C.butter, pulse)) game.input.push('build');
-    text(g, label, bx + w / 2, rightY + ty, C.wool, { align: 'center' });
+    icon(g, 'build', bx + 4, rightY + Math.floor((bh - 6) / 2));
+    text(g, label, bx + 11, rightY + ty, C.wool);
   }
   rightY += bh + (touch ? 4 : 2);
 
@@ -194,9 +206,10 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
   if (game.helpers.length) {
     const mode = game.day.phase === 'night' ? 'GUARD' : game.helpers[0].mode === 'flank' ? 'FLANK' : game.helpers[0].mode === 'stay' ? 'STAY' : 'HOME';
     const label = touch ? `HELP: ${mode}` : `H: ${game.helpers.map((h) => h.name).join('+')} ${mode}`;
-    const hw = textWidth(label) + 8;
+    const hw = textWidth(label) + 15;
     if (button(game, g, 'hud-help', R - hw, rightY, hw, bh, C.butter)) game.input.push('helper');
-    text(g, label, R - hw / 2, rightY + ty, C.wool, { align: 'center' });
+    icon(g, 'helper', R - hw + 4, rightY + Math.floor((bh - 5) / 2));
+    text(g, label, R - hw + 11, rightY + ty, C.wool);
   }
 
   // ---- Next goal (always visible; tap or Tab for the ledger) ----
@@ -205,12 +218,11 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const ng = nextGoal(game);
     const label = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : game.won ? 'THE VALLEY THRIVES' : 'TIER DONE!';
     const tag = game.ledgerNew ? 'NEW' : '';
-    const w = textWidth(label) + 13 + (tag ? textWidth(tag) + 5 : 0);
+    const w = textWidth(label) + 14 + (tag ? textWidth(tag) + 5 : 0);
     if (button(game, g, 'hud-ledger', L, cardY, w, bh, C.butter, game.ledgerNew || game.tut === 5)) game.input.push('ledger');
-    // Little ledger book icon.
-    rect(g, L + 3, cardY + ty, 4, 5, C.butter);
-    rect(g, L + 4, cardY + ty + 1, 2, 1, C.plum);
-    text(g, label, L + 9, cardY + ty, C.wool, { iconColor: C.butter });
+    // The Ledger's own little book.
+    icon(g, 'ledger', L + 3, cardY + ty);
+    text(g, label, L + 10, cardY + ty, C.wool, { iconColor: C.butter });
     if (tag) text(g, tag, L + w - 4, cardY + ty, C.butter, { align: 'right' });
     cardY += bh + 2;
   }
@@ -234,13 +246,24 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
       mood = `CALM ${calm}/${CALM_MAX}`;
       col = calm >= CALM_MAX * 0.7 ? C.butter : C.wool;
     }
-    const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8;
+    // The flock's own likeness at the left of the card.
+    const a0 = gr.members[0];
+    const pic = animalSprites(sp.id, a0.coat).stand[0];
+    const iw = Math.min(16, pic.w) + 4;
+    const w = Math.max(textWidth(label), 21 + textWidth(mood)) + 8 + iw;
     panel(g, L, cardY, w, 19);
-    text(g, label, L + 4, cardY + 3, C.wool);
+    g.save();
+    g.beginPath();
+    g.rect(L + 2, cardY + 2, iw, 15);
+    g.clip();
+    drawSpr(g, pic, L + 3 + pic.ax, cardY + Math.max(2, Math.floor((19 - pic.h) / 2)) + pic.ay);
+    g.restore();
+    const lx = L + 3 + iw;
+    text(g, label, lx, cardY + 3, C.wool);
     const pips = 5, lit = Math.max(1, Math.round((1 - gr.stress) * pips));
     const panic = gr.stress >= 0.6;
-    for (let i = 0; i < pips; i++) rect(g, L + 4 + i * 4, cardY + 11, 3, 4, i < lit ? (panic ? C.wool : C.butter) : C.sage);
-    if (!panic || Math.floor(game.t * 6) % 2 === 0) text(g, mood, L + 25, cardY + 10, col);
+    for (let i = 0; i < pips; i++) rect(g, lx + i * 4, cardY + 11, 3, 4, i < lit ? (panic ? C.wool : C.butter) : C.sage);
+    if (!panic || Math.floor(game.t * 6) % 2 === 0) text(g, mood, lx + 21, cardY + 10, col);
   }
 
   // ---- Hint line (tutorial and region tips) ----
@@ -256,11 +279,18 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const p = game.place;
     const show = p.t > 2.2 ? Math.floor(p.t * 20) % 2 === 0 : true;
     if (show) {
-      const tw2 = textWidth(p.text);
       // Top centre, between the clock and the purse: clear of the banners.
+      // A heading-face plaque, like a sign at the field gate.
+      const tw2 = headingWidth(p.text);
       const py = T;
-      panel(g, Math.round(W / 2 - tw2 / 2 - 5), py, tw2 + 10, 11);
-      text(g, p.text, W / 2, py + 3, C.wool, { align: 'center' });
+      if (tw2 + 12 <= W - 2 * 70) {
+        panel(g, Math.round(W / 2 - tw2 / 2 - 6), py, tw2 + 12, 11, C.teal, C.sage);
+        heading(g, p.text, W / 2, py + 2, C.wool, { align: 'center', shade: C.sage });
+      } else {
+        const tw3 = textWidth(p.text);
+        panel(g, Math.round(W / 2 - tw3 / 2 - 5), py, tw3 + 10, 11);
+        text(g, p.text, W / 2, py + 3, C.wool, { align: 'center' });
+      }
     }
   }
   if (f.tierCard) drawTierCard(game, g, W, H);
@@ -268,13 +298,26 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     const b = game.banner;
     const age = b.max - b.t;
     const y = Math.round(H * 0.28 + Math.max(0, 1 - age * 5) * -20);
-    // The shepherd's call names the dog.
-    const big = b.big === "THAT'LL DO!" ? `THAT'LL DO, ${game.look.name}!` : b.big;
-    const sc = textWidth(big, 2) <= W - 8 ? 2 : 1;
-    // Big moments land with a stamp: one size up for a few frames.
-    const stamp = big.endsWith('!') && age < 0.09 && textWidth(big, sc + 1) <= W - 8 ? 1 : 0;
-    text(g, big, W / 2, y - stamp * 3, C.butter, { align: 'center', scale: sc + stamp, shadow: C.plum });
-    if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, y + 7 * sc + 4 + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
+    // The shepherd's call names the dog, and lands like a rubber stamp.
+    const thatll = b.big === "THAT'LL DO!";
+    const big = thatll ? `THAT'LL DO, ${game.look.name}!` : b.big;
+    const sc = headingWidth(big, 2) + 16 <= W - 8 ? 2 : 1;
+    let bottom: number;
+    if (thatll) {
+      // Slammed down: one size bigger for a few frames, then pressed flat,
+      // dust puffing out from under it.
+      const slam = age < 0.08 && headingWidth(big, sc + 1) + 16 <= W - 8 ? 1 : 0;
+      stamp(g, big, W / 2, y + 4, C.butter, sc + slam, true);
+      if (stamped !== b && age >= 0.08) {
+        stamped = b;
+        f.stampDust(W / 2, y + 4, headingWidth(big, sc) + 12, 7 * sc + 10);
+      }
+      bottom = y + 4 + (7 * sc + 10) / 2 + 3;
+    } else {
+      heading(g, big, W / 2, y, C.butter, { align: 'center', scale: sc, outline: C.plum, shade: C.moss });
+      bottom = y + 7 * sc + 4;
+    }
+    if (b.small) wrap(b.small, W - 12).forEach((l, i) => text(g, l, W / 2, bottom + i * 7, C.wool, { align: 'center', shadow: C.plum, iconColor: C.butter }));
   }
 }
 
@@ -284,8 +327,8 @@ function drawTierCard(game: Game, g: CanvasRenderingContext2D, W: number, H: num
   const age = c.max - c.t;
   const pw = Math.min(W - 12, 190);
   const lines = [...wrap(c.blurb, pw - 14).map((s) => ({ s, col: C.wool as string })), ...c.brings.flatMap((b) => wrap(`+ ${b}`, pw - 14).map((s) => ({ s, col: C.butter as string })))];
-  const big = textWidth(c.name, 2) <= pw - 10 ? 2 : 1;
-  const ph = 36 + big * 5 + lines.length * 7;
+  const big = headingWidth(c.name, 2) <= pw - 10 ? 2 : 1;
+  const ph = 36 + big * 7 + lines.length * 7;
   const x0 = Math.round(W / 2 - pw / 2);
   const y0 = Math.round(H * 0.24 - ph / 2 + Math.max(0, 1 - age * 5) * -24);
   panel(g, x0, y0, pw, ph, C.plum, C.butter);
@@ -296,8 +339,8 @@ function drawTierCard(game: Game, g: CanvasRenderingContext2D, W: number, H: num
     const on = i < c.n - 1 || (i === c.n - 1 && (age > 0.9 || Math.floor(age * 8) % 2 === 0));
     rect(g, W / 2 - (n * 6) / 2 + i * 6, y0 + 13, 5, 3, on ? C.butter : C.sage);
   }
-  text(g, c.name, W / 2, y0 + 20, C.butter, { align: 'center', scale: big, shadow: C.teal });
-  let y = y0 + 26 + big * 5;
+  heading(g, c.name, W / 2, y0 + 20, C.butter, { align: 'center', scale: big, shade: C.moss, shadow: C.teal });
+  let y = y0 + 26 + big * 7;
   for (const l of lines) {
     text(g, l.s, W / 2, y, l.col, { align: 'center', iconColor: C.butter });
     y += 7;
