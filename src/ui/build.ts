@@ -686,13 +686,6 @@ export class BuildMode {
       if (!game.input.touchMode) lines.push('U: EXTEND  X: REMOVE');
     } else if (under && ud && !fixTool && this.def.id !== 'trough') {
       title = `${ud.name}${under.level > 1 ? ' II' : ''}`;
-      if (under instanceof Pen) {
-        const kinds = under.kinds.map((k) => `${under.animals.filter((a) => a.sp.id === k).length} ${SPECIES[k].plural.toUpperCase()}`);
-        lines.push(kinds.length ? `${kinds.join(', ')}, ${under.goods} GOODS` : 'EMPTY');
-        lines.push(`${under.w}X${under.h}, ROOM ${under.used}/${under.capacity}${under.fixtures.length ? `, ${under.fixtures.map((f) => f.kind.toUpperCase()).join(', ')}` : ''}`);
-        const side = this.extendSide(under);
-        lines.push(`U: EXTEND ${['SOUTH', 'WEST', 'NORTH', 'EAST'][side]} 2 (${extendPrice(under, extendRect(under, side, 2))}$)`);
-      }
       if (ud.upgrade && under.level < 2) lines.push(`U: UPGRADE ${ud.upgrade.cost}$ (${ud.upgrade.desc})`);
       lines.push('X: REMOVE');
     } else if (under && under.kind === 'farmhouse') {
