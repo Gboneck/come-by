@@ -1,6 +1,5 @@
-import { spr } from '../gfx/sprite';
 import type { SpeciesId } from '../world/map';
-import { rimLight, type AnimalSprites } from './animals';
+import { buildSprites, resolveEyes, rimLight, type AnimalGrids, type AnimalSprites } from './animals';
 
 // Lambs, and the fair's rare breeds. (Gameplay drew these; Graphics may
 // polish them.)
@@ -17,58 +16,48 @@ export function rareCoat(id: SpeciesId, coat: number, rows: string[]): string[] 
 }
 
 // ---- Lambs: small, leggy, big-headed; plum face, ears and legs ----
-const LB_BODY = ['.www.pp.', 'wwwwwppp', 'wwwwww..', '.swwws..'];
+const LB_BODY = ['.www.pp.', 'wwwwwpep', 'wwwwww..', '.swwws..'];
 const LB_LOOK = ['.www.p.p', 'wwwwwpp.', 'wwwwww..', '.swwws..'];
-const LB_ALERT = ['.....pp.', '.www.pp.', 'wwwwwppp', 'wwwwww..', '.swwws..'];
-const LAMB = {
-  side: ['.p..p.p.', '..p..p..', '.p.p..p.'].map((l) => [...LB_BODY, l]),
-  run: [[...LB_BODY, 'p.p...pp'], [...LB_BODY, '..pp.p..']],
+const LB_CHEW = ['.www.pp.', 'wwwwwpep', 'wwwwwwp.', '.swwws..'];
+const LB_ALERT = ['.....pp.', '.www.pep', 'wwwwwppp', 'wwwwww..', '.swwws..'];
+const LAMB: AnimalGrids = {
+  side: ['.p..p.p.', '..p..p..', '.p.p..p.', '..pp.pp.'].map((l) => [...LB_BODY, l]),
+  // Running is all skipping: a stretch, then all four tucked up in the air.
+  run: [[...LB_BODY, 'p.p...pp'], [...LB_BODY, '..pp.p..', ''], [...LB_BODY, '.p.p..p.'], [...LB_BODY, '..pp.pp.', '']],
   graze: [
     ['.www....', 'wwwwww..', 'wwwwwwp.', '.swwwpp.', '.p..p.p.'],
     ['.www....', 'wwwwww..', 'wwwwwww.', '.swwwwpp', '.p..p.p.'],
+    ['.www....', 'wwwwww..', 'wwwwwwp.', '.swwwpp.', '..p.p.p.'],
   ],
-  stand: [[...LB_BODY, '.p..p.p.'], [...LB_LOOK, '.p..p.p.']],
+  stand: [[...LB_BODY, '.p..p.p.'], [...LB_LOOK, '.p..p.p.'], [...LB_BODY, '..pp.pp.', '']],
+  chew: [[...LB_BODY, '.p..p.p.'], [...LB_CHEW, '.p..p.p.']],
   alert: [...LB_ALERT, '.p..p.p.'],
+  startle: [...LB_ALERT, 'p.p...pp', ''],
   lie: ['..www.pp.', '.wwwwwppp', 'sswwwws..'],
   down: [
-    ['.wwww.', 'wwwwww', 'pwppwp', '.wppw.', '.spps.', '.p..p.'],
-    ['.wwww.', 'wwwwww', 'pwppwp', '.wppw.', '.spps.', '..pp..'],
+    ['.wwww.', 'wwwwww', 'pweewp', '.wppw.', '.spps.', '.p..p.'],
+    ['.wwww.', 'wwwwww', 'pweewp', '.wppw.', '.spps.', '..pp..'],
   ],
-  downAlert: ['.wwww.', 'pwwwwp', 'wwppww', '.wppw.', '.spps.', '.p..p.'],
+  downAlert: ['.wwww.', 'pwwwwp', 'wweeww', '.wppw.', '.spps.', '.p..p.'],
+  downStartle: ['.wwww.', 'pwwwwp', 'wweeww', '.wppw.', '.spps.', 'p....p', '......'],
   up: [
     ['..pp..', 'pwppwp', 'wwwwww', 'wwwwww', '.swws.', '.p..p.'],
     ['..pp..', 'pwppwp', 'wwwwww', 'wwwwww', '.swws.', '..pp..'],
   ],
 };
 
-const cache = new Map<number, AnimalSprites>();
+const cache = new Map<string, AnimalSprites>();
 
-// A lamb takes its mother's coat: coat 1 is a black lamb.
-export function lambSprites(coat: number): AnimalSprites {
-  let s = cache.get(coat);
+// A lamb takes its mother's coat: coat 1 is a black lamb. `scared`: wide-eyed.
+export function lambSprites(coat: number, scared = false): AnimalSprites {
+  const key = `${coat}${scared ? 's' : ''}`;
+  let s = cache.get(key);
   if (s) return s;
-  const look = (rows: string[]) =>
-    coat === 1 ? rows.map((r) => r.replace(/[wp]/g, (m) => (m === 'w' ? 'p' : 'w'))) : rimLight(rows, 'w', 'y', true);
-  const side = (rows: string[]) => {
-    const r = look(rows);
-    return spr(r, 3, r.length - 1);
+  const look = (rows: string[]) => {
+    const r = resolveEyes(rows, 'p', scared);
+    return coat === 1 ? r.map((x) => x.replace(/[wp]/g, (m) => (m === 'w' ? 'p' : 'w'))) : rimLight(r, 'w', 'y', true);
   };
-  const vert = (rows: string[]) => {
-    const r = look(rows);
-    return spr(r, 2, r.length - 1);
-  };
-  s = {
-    side: LAMB.side.map(side),
-    run: LAMB.run.map(side),
-    grazing: LAMB.graze.map(side),
-    graze: side(LAMB.graze[0]),
-    stand: LAMB.stand.map(side),
-    alert: side(LAMB.alert),
-    lie: side(LAMB.lie),
-    down: LAMB.down.map(vert),
-    downAlert: vert(LAMB.downAlert),
-    up: LAMB.up.map(vert),
-  };
-  cache.set(coat, s);
+  s = buildSprites(LAMB, look, 3, 2);
+  cache.set(key, s);
   return s;
 }

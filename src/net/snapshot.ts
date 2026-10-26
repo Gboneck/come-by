@@ -65,7 +65,8 @@ export const D_LYING = 4, D_SPRINT = 8, D_BARK = 16;
 
 export const PHASES = ['day', 'dusk', 'night'] as const;
 export const PRED_STATES = ['wait', 'hunt', 'dig', 'carry', 'flee', 'gone'] as const;
-export const FOLK_IDS = ['rancher', 'carpenter', 'miller', 'drover', 'auctioneer', 'judge', 'shepherd'] as const;
+// Appended to, never reordered (the index travels): the village's people after the cast.
+export const FOLK_IDS = ['rancher', 'carpenter', 'miller', 'drover', 'auctioneer', 'judge', 'shepherd', 'smith', 'baker', 'grocer', 'weaver', 'cottager1', 'cottager2', 'cottager3', 'cottager4', 'cottager5', 'cottager6', 'warden'] as const;
 export const POSES = ['stand', 'walk', 'carry', 'work', 'crouch', 'sit', 'wave'] as const;
 
 const q8 = (v: number) => Math.round(v * 8);

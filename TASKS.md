@@ -703,6 +703,78 @@ another origin are never answered from the cache.
       `scripts/paddocktest.mjs`, `scripts/valleytest.mjs`
 
 VALLEY_TABLES
+## M28 Characters (graphics round four)
+Before: the dog snapped between four facings with a four-frame trot and
+gallop; animals had two or three walk frames, the same rhythm for every
+kind, and no fright beyond the head coming up; ducks stood in the pond
+with their legs clipped off. After:
+- [x] The dog, eight ways round: three-quarter views between side on and
+      towards/away (face turned to you heading down, back and nape knot
+      heading up). It turns through the in-betweens instead of snapping, a
+      reversal at speed swinging round by the side that shows its face.
+- [x] Six-frame trot and six-frame double-suspension gallop on every view,
+      built from parts (torso, head, tail, legs, the bandana's loose ends):
+      ears flop on the passing frames and pin back at a gallop, the tail
+      swings, streams or wags on its own beat, the bandana's ends lift off
+      the nape at a trot and stream at a gallop (none on a collar)
+- [x] Skid: digging in from a run or turning tail at speed, forefeet out
+- [x] Watching the stock: standing, it turns up to 90 degrees towards the
+      nearest animal it could be working, ears pricked tall; trotting round
+      a flock it turns a three-quarter view their way
+- [x] Panting (mouth open, flanks heaving) when its wind is low, sooner in
+      summer; friends' and helpers' dogs pant after a long gallop
+- [x] Proud stance at "THAT'LL DO": head up, chest out, tail wagging high
+- [x] Soaked after the ford or a long shower: flecks go dark, drips fall
+      from its belly until it shakes off; wading, the legs go under water
+- [x] The same for helpers and co-op friends' dogs (and their idles), all
+      from state that was already synced; the customization layers apply
+      to every new frame through template letters (dogstyle.ts)
+- [x] Animals: a sheep's bouncy trot, a goat's stiff-legged pronk, a duck's
+      waddle (rolling foot to foot seen end on) and wing-beating run,
+      cattle nodding along and landing heavy, ponies' manes flying at a
+      gallop and lifting with the tail when a gust comes through
+- [x] A clear startle (a jump on the spot: sheep and lambs splay, goats
+      bounce, cattle buck, ponies rear, ducks throw up their wings) at the
+      first fright or a bark, then the flight; wide eyes whenever stressed
+      hard (wool on dark faces, a dark ring on pale ones)
+- [x] Grazing: three nibbling frames and spells of chewing with the head up
+      (a duck preens); cattle chew the cud
+- [x] Ducks afloat: sitting low and bobbing, water lapping at their sides,
+      a wake opening behind them as they paddle
+- [x] Lambs skip as they go; a ewe with her lamb close turns and noses it
+- [x] Townsfolk: an eight-frame side stride with arms swinging (near and
+      far legs shaded apart), arm swing towards and away; a gesture loop
+      while talking (hand up, palm out, a point, a nod), blinks and hands on
+      hips standing about; hammer and axe in four frames (wind-up, the
+      strike on the blow's sound, the bounce); bales and sacks held in both
+      arms; crouching to a basket, kneeling side on; sitting with a foot
+      swung; waving in every facing; the lantern and crook in the hand
+- [x] Clothes with the season: shirt sleeves and the rancher's straw hat in
+      summer, scarves in autumn, scarves, mittens, longer coats and bobble
+      hats in winter; the cast told apart (a tall drover, the auctioneer's
+      boater and waistcoat, the judge's bowler and white beard, the
+      shepherd's hood, the miller stout and bearded, the carpenter's apron)
+- [x] `villager(spec)` in people.ts makes a new villager (coat, legs, hat,
+      build, apron, beard, skirt, scarf...); the village's people (smith,
+      baker, grocer, weaver, six cottagers, the warden) are in folk.ts'
+      CAST, appended to FOLK_IDS so guests see them; every lantern lights
+- [x] Coyotes and wolves: a six-frame stalking creep (shoulders high, head
+      low, tail down), the rush into a flat gallop, carrying off head high,
+      fleeing with the tail clamped, digging rump up, and a howl (head
+      thrown back) as each dig begins; down and up facings too
+- [x] Eye glints at night: a pair of buttercup glints set in dark sockets
+      that ride with the head, blink on each animal's own rhythm and flash
+      when it looks your way
+- [x] Animals with a load (`a.load`) lean into it, head down at every step
+- [x] Sprite sheet rows for the new dog views and animal poses (`?sprites`)
+- [x] Checks: typecheck, build, shot, regions; `tune.mjs <species>
+      --seed=7` identical to before for all five; every sprite scanned:
+      all in the palette, red only on the player's dog; cooptest 48/48
+      (with --shots); folktest, lambtest, nighttest; perftest at 6x
+      throttle run alternately against the base on a busy machine, best of
+      three: day 14.0 ms before / 15.0 ms after, worst (winter storm night,
+      predators, helpers) 19.7 / 18.5 ms, medians overlapping: no
+      measurable cost
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -1524,3 +1596,29 @@ VALLEY_TABLES
   and the worst possible one (frantic, penned at dusk) has 15$ on penning
   and 18$ at day's end. 10$ is below the trough (12$), so the tin cannot be
   spent on anything that would leave the kennel out of reach.
+- Characters, round four: the dog's eight ways round are a drawing matter
+  only. The sim keeps its four facings (bark lines, co-op face bits, the
+  bot); render/dogpose.ts picks a view 0..7 from the heading with some
+  hysteresis and turns through the in-betweens 35ms a step (60ms
+  standing). Standing, it turns at most two eighths towards the stock,
+  so a bark (drawn from the sim's facing) never jumps more than that;
+  during a bark it faces its heading. Lying down and getting up happen in
+  the side, front or back views only. The trot and gallop are six frames
+  over the same stride length as the old four (phase x 1.5).
+- Dog frames are put together from parts with template letters (k f n e E
+  h a) that dressRows resolves per look, so every customization reaches
+  every frame without touching the pose grids again. The soaked look is a
+  second set built the first time the dog gets wet (flecks go sage); it
+  lasts until the shake-off, or 40s without rain.
+- Panting: your own dog pants from its real stamina (below 55%, 80% in
+  summer); friends' dogs and helpers have no stamina on screen, so they
+  pant after a couple of seconds of galloping.
+- Animals' wide eyes are a second sprite set per species and coat, built on
+  first fright. The startle is a render-only jump (panic setting in, or
+  stress jumping 0.16 in a frame), so guests see it from synced stress.
+- Bandana red stays on the player's own dog: every animal, predator,
+  person and helper sprite was scanned in the page (2,500 sprites): no red,
+  nothing off the palette, no half-transparent pixels.
+- The village's people (smith, stallholders, cottagers, warden) are
+  drawn and dressed here, ready to spawn; their days are the village's to
+  run (gameplay), through Person.go(steps).

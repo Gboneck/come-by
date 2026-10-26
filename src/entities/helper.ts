@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { ellipse } from '../gfx/draw';
-import { drawSpr, type Sprite } from '../gfx/sprite';
-import { makeDogSprites, type DogSprites } from '../art/dog';
+import { drawSpr } from '../gfx/sprite';
+import { FACE_VIEW, makeDogSprites, pickDogFrame, type DogSprites } from '../art/dog';
 import { BLOCK_DOG } from '../world/map';
 import { collideCircle, wallRepulse } from '../world/collide';
 import { PathFollower } from '../world/path';
@@ -181,21 +181,15 @@ export class Helper {
     ellipse(g, this.x - 1, this.y + 2, this.face === 'l' || this.face === 'r' ? 5 : 3, 1, C.sage);
   }
 
+  get sprites(): DogSprites {
+    return SPR!;
+  }
+
+  // Plain, facing as the sim has it (the world draws helpers through
+  // render/dogpose.ts, like the player's dog).
   draw(g: CanvasRenderingContext2D) {
-    const S = SPR!;
-    const moving = Math.hypot(this.vx, this.vy) > 6;
-    const f = ((Math.floor(this.phase) % 4) + 4) % 4;
-    const fast = Math.hypot(this.vx, this.vy) > 50;
-    let s: Sprite;
-    let flip = false;
-    if (this.face === 'l' || this.face === 'r') {
-      flip = this.face === 'l';
-      s = this.lying ? S.sideLie : this.barkAnim > 0 ? S.sideBark : !moving ? S.sideStand : fast ? S.gallop[f % S.gallop.length] : S.side[f % S.side.length];
-    } else if (this.face === 'd') {
-      s = this.lying ? S.downLie : this.barkAnim > 0 ? S.downBark : moving ? S.down[f % S.down.length] : S.downStand;
-    } else {
-      s = this.lying ? S.upLie : moving ? S.up[f % S.up.length] : S.upStand;
-    }
-    drawSpr(g, s, this.x, this.y + 2 + (moving && f % 2 ? -1 : 0), flip);
+    const v = Math.hypot(this.vx, this.vy);
+    const { s, flip, bob } = pickDogFrame(SPR!, { view: FACE_VIEW[this.face], speed: v, sprint: v > 50, phase: this.phase, lying: this.lying, lieT: 1, rise: 0, bark: this.barkAnim, t: 0 });
+    drawSpr(g, s, this.x, this.y + 2 + bob, flip);
   }
 }
