@@ -327,9 +327,10 @@ export class Pacer {
     const g = this.g, b = g.build, def = defOf(id), r = regionById('ranch');
     b.item = CATALOG.indexOf(def);
     let best: { cx: number; cy: number; rot: Rot } | null = null, bs = 1e9;
+    // The ranch and the fields at its edge.
     for (const rot of (def.rotates ? [0, 1, 2, 3] : [0]) as Rot[])
-      for (let cy = r.cy - r.ry; cy <= r.cy + r.ry; cy++)
-        for (let cx = r.cx - r.rx; cx <= r.cx + r.rx; cx++) {
+      for (let cy = r.cy - r.ry; cy <= r.cy + r.ry + 6; cy++)
+        for (let cx = r.cx - r.rx - 4; cx <= r.cx + r.rx + 4; cx++) {
           b.cx = cx;
           b.cy = cy;
           b.rot = rot;
@@ -431,9 +432,12 @@ export class Pacer {
     // What the valley offers, once the purse allows (the land first).
     const has = (k: string) => g.ranch.buildings.some((b) => b.kind === k);
     const kinds = new Set(g.ranch.pens.map((p) => p.species));
-    if (!has('agility') && g.tier >= 2 && g.coins >= 300) this.buy('agility');
-    if (!has('shed') && kinds.has('sheep') && g.coins >= 250) this.buy('shed');
-    if (!has('dairy') && kinds.has('cow') && g.coins >= 300) this.buy('dairy');
+    // (Not while land is short: stock comes first.)
+    if (!this.landShort) {
+      if (!has('agility') && g.tier >= 2 && g.coins >= 300) this.buy('agility');
+      if (!has('shed') && kinds.has('sheep') && g.coins >= 250) this.buy('shed');
+      if (!has('dairy') && kinds.has('cow') && g.coins >= 300) this.buy('dairy');
+    }
     while (g.coins > 150 && this.train()) { /* spare coin into the dog */ }
   }
 

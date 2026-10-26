@@ -78,10 +78,14 @@ export function getsAlong(a: SpeciesId, b: SpeciesId) {
   return pair('sheep', 'goat') || pair('cow', 'pony');
 }
 
-// Room in a paddock scales with its area: the old 8x7 pen holds 16 space.
-// An old upgraded (sturdy) pen keeps its half again.
+// Room in a paddock scales with its area (the old 8x7 pen holds 16 space),
+// and a big one packs a little more a tile, as less of it is lost to the
+// fence: up to half again at four times the old pen's area (what the old
+// pen upgrade gave). An old upgraded (sturdy) pen keeps its half again.
 export function paddockCapacity(w: number, h: number, level = 1) {
-  return Math.round(((w * h * 16) / (PEN_W * PEN_H)) * (level >= 2 ? 1.5 : 1));
+  const a = w * h, base = PEN_W * PEN_H;
+  const big = 1 + 0.5 * Math.max(0, Math.min(1, (a - base) / (3 * base)));
+  return Math.round(((a * 16) / base) * big * (level >= 2 ? 1.5 : 1));
 }
 
 // Fixtures placed inside a paddock (src/ranch/paddock.ts): a trough (more
