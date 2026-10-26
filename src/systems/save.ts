@@ -4,6 +4,8 @@ import type { Coat } from '../art/animals';
 import { Pen, type BuildingKind, type PenFixture, type Rot } from '../ranch/buildings';
 import { defOfKind } from '../ranch/catalog';
 import { valleyLoad, valleySave, type ValleySave } from './valley';
+import { itemId } from './economy';
+import { herdsLoad, herdsSave, type HerdsSave } from './herds';
 import { Haystack } from '../ranch/structures';
 import { LOFT_MAX, type FairEntry } from './seasonal';
 import { makeBuilding } from '../ui/build';
@@ -44,7 +46,7 @@ export interface SaveData {
   owned: string[];
   buildings: { kind: BuildingKind; tx: number; ty: number; rot: Rot; level: number; trough?: boolean; goods?: number; animals?: SavedAnimal[]; hungry?: boolean; bales?: number;
     // Paddocks (round four): size, gate, fixtures, goods by kind. Old pens lack them.
-    w?: number; h?: number; gate?: number; fixtures?: PenFixture[]; goodsBy?: Partial<Record<SpeciesId, number>> }[];
+    w?: number; h?: number; gate?: number; fixtures?: PenFixture[]; goodsBy?: Partial<Record<SpeciesId, number>>; items?: [SpeciesId, number, number][] }[];
   wild: SavedAnimal[];
   helpers: { name: string; mode: HelperMode }[];
   // Added with orders and trials; older saves lack them.
@@ -67,6 +69,8 @@ export interface SaveData {
   // and the agility yard's training.
   valley?: ValleySave;
   farmwork?: { marks: Partial<Record<UpKey, number>>; trainedDay: number; best: number; cleanRuns: number; shorn: number; milked: number };
+  // Added with bigger herds: the last big drove.
+  herds?: HerdsSave;
 }
 
 function store(): Storage | null {
@@ -140,6 +144,7 @@ export function saveData(game: Game): SaveData {
           if (b.gateAt !== null) out.gate = b.gateAt;
           if (b.fixtures.length) out.fixtures = b.fixtures.map((f) => ({ ...f }));
           if (Object.keys(b.goodsBy).length) out.goodsBy = { ...b.goodsBy };
+          if (b.items.length) out.items = b.items.map((i) => [i.sp, Math.round(i.x), Math.round(i.y)]);
           out.animals = b.animals.filter((a) => !a.gone).map((a) => ({ id: a.sp.id, coat: a.coat, stress: +a.stress.toFixed(2), produceT: Math.round(a.produceT), ...seasonFields(a, ks) }));
           if (b.hungry) out.hungry = true;
         }
@@ -167,6 +172,7 @@ export function saveData(game: Game): SaveData {
     seasonal: { loft: game.seasonal.loft, hungryNights: game.seasonal.hungryNights, fair: game.seasonal.fair },
     valley: valleySave(game),
     farmwork: (({ marks, trainedDay, best, cleanRuns, shorn, milked }) => ({ marks, trainedDay, best, cleanRuns, shorn, milked }))(game.farmwork),
+    herds: herdsSave(game),
   };
 }
 
@@ -283,6 +289,7 @@ export function loadInto(game: Game): boolean {
   mergeTravels(game); // places and keepsakes found visiting friends' ranches
   valleyLoad(game, d.valley);
   Object.assign(game.farmwork, d.farmwork ?? {});
+  herdsLoad(game, d.herds);
   game.ranch.restamp();
   const door = game.doorPoint();
   game.helpers = d.helpers.map((h, i) => new Helper(h.name, door.x + (i ? 10 : -10), door.y + 6, h.mode, i));
@@ -326,6 +333,7 @@ function buildRanch(game: Game, d: SaveData, pen?: (b: Pen, sb: SaveData['buildi
       else b.hasTrough = !!sb.trough;
       b.goods = sb.goods ?? 0;
       b.goodsBy = { ...(sb.goodsBy ?? {}) };
+      b.items = (sb.items ?? []).slice(0, b.goods).map(([sp, x, y]) => ({ id: itemId(), sp, x, y, t: 0 }));
       b.hungry = !!sb.hungry;
       pen?.(b, sb);
     }

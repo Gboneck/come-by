@@ -1,5 +1,6 @@
 import type { Game } from '../game';
-import type { PenFixture, Rot } from '../ranch/buildings';
+import type { GoodItem, PenFixture, Rot } from '../ranch/buildings';
+import { SPECIES_ORDER } from '../entities/species';
 import { stacks, type Seasonal } from '../systems/seasonal';
 import { valleyApply, valleyShared, type ValleySave } from '../systems/valley';
 import type { FavourSave } from '../systems/favour';
@@ -26,6 +27,9 @@ export const SHARED: Shared[] = [
   // Each paddock's size, gate and fixtures, in building order: extending a
   // side or moving a gate does not add a building, so it is sent here.
   { key: 'paddocks', get: (g) => g.ranch.pens.map((p) => [p.tx, p.ty, p.w, p.h, p.rot, p.gateAt, p.fixtures]), set: (g, v) => applyPaddocks(g, v as PaddockRec[]) },
+  // The goods lying in each paddock, in building order: [kind, x, y, id]
+  // (systems/economy.ts). An item keeps its object while its id stays.
+  { key: 'goods', get: (g) => g.ranch.pens.map((p) => p.items.map((i) => [SPECIES_ORDER.indexOf(i.sp), i.x, i.y, i.id])), set: (g, v) => applyGoods(g, v as ItemRec[][]) },
   // The village, the paddocks' scrub, the old bridge (systems/valley.ts).
   { key: 'valley', get: (g) => valleyShared(g), set: (g, v) => valleyApply(g, v as ValleySave) },
   // Valley projects: progress, what is done, the fold's gate (systems/projects.ts).
@@ -45,6 +49,14 @@ function applyPaddocks(g: Game, recs: PaddockRec[]) {
     }
   });
   if (changed) g.ranch.restamp();
+}
+
+type ItemRec = [number, number, number, number];
+function applyGoods(g: Game, recs: ItemRec[][]) {
+  g.ranch.pens.forEach((p, i) => {
+    const had = new Map(p.items.map((it) => [it.id, it]));
+    p.items = (recs[i] ?? []).map(([k, x, y, id]): GoodItem => had.get(id) ?? { id, sp: SPECIES_ORDER[k] ?? 'duck', x, y, t: g.t });
+  });
 }
 
 export function sharedOut(game: Game): Record<string, unknown> {

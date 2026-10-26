@@ -47,6 +47,7 @@ import { Seasonal, seasonalEvening } from './systems/seasonal';
 import { fairDrawables } from './art/fair';
 import { Valley } from './systems/valley';
 import { Farmwork, farmworkEvening } from './systems/farmwork';
+import { Herds } from './systems/herds';
 import { valleyDrawables } from './art/valley';
 import { Discovery } from './systems/discovery';
 import { landmarkDrawables } from './art/landmarks';
@@ -176,6 +177,7 @@ export class Game {
   seasonal = new Seasonal(); // lambs, the shearer, the fair, winter hay
   valley!: Valley; // the village, the paddocks, the old bridge
   farmwork = new Farmwork(); // the shearing shed, the dairy, the agility yard
+  herds = new Herds(); // the sale yard's lot, big droves
   discovery = new Discovery(); // hidden places, keepsakes, the Ledger map's fog
   projects = new Projects(); // valley projects: herding work that changes a place for good
   rest = 1; // how fast the day passes: 1, or up to REST_MAX while resting

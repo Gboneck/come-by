@@ -4,6 +4,7 @@ import { drawSpr, type Sprite } from './gfx/sprite';
 import { text } from './gfx/font';
 import { makeDogSprites } from './art/dog';
 import { animalSprites, type Coat } from './art/animals';
+import { youngSprites } from './art/young';
 import { SPECIES_ORDER, SPECIES } from './entities/species';
 import type { Game } from './game';
 import { runSim, type BotOpts } from './bot';
@@ -64,6 +65,13 @@ function buildSheet() {
         const s = animalSprites(id, c as Coat);
         const x = animalSprites(id, c as Coat, true);
         return { label: `${id.toUpperCase()} ${c}`, sprites: [...s.side, ...s.run, ...s.grazing, ...s.stand, ...s.chew, s.alert, s.startle, x.alert, s.lie, ...(s.swim?.side ?? []), ...(s.flow ?? []), ...s.down, s.downAlert, s.downStartle, ...s.up] };
+      }),
+    ),
+    // The young of each kind and coat (art/young.ts).
+    ...SPECIES_ORDER.flatMap((id) =>
+      Array.from({ length: id === 'sheep' ? 2 : id === 'duck' ? 1 : 3 }, (_, c) => {
+        const s = youngSprites(id, c), x = youngSprites(id, c, true);
+        return { label: `${SPECIES[id].young.toUpperCase()} ${c}`, sprites: [...s.side, ...s.run, ...s.grazing, ...s.stand, ...s.chew, s.alert, s.startle, x.alert, s.lie, ...(s.swim?.side ?? []), ...s.down, s.downAlert, s.downStartle, ...s.up] };
       }),
     ),
   ];
