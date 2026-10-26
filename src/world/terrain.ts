@@ -68,6 +68,7 @@ export interface FineData {
   water: Uint8Array;
   deep: Uint8Array;
   path: Uint8Array;
+  finePath: Uint8Array; // the paths' smoother outline the fine painter draws
   cm: Uint8Array; // canopy cover (1x)
   pz: Uint8Array; // the pine zone of the forest mass
   rh: Float32Array; // soft rock height
@@ -105,13 +106,20 @@ export function sample(f: Float32Array, x: number, y: number): number {
 // and roughened by smooth noise, cut at a threshold. A function of position,
 // so the fine (2x) painter draws the very same outline at its own density.
 export type Edge = [threshold: number, seed: number, scale: number, amp: number];
+// The world data's outlines keep their per-pixel jitter (`JITTER`) exactly as
+// they always were: soil, the canopy's kind and so on feed effects that roll
+// the shared Math.random, so a seeded tune run stays the same. The fine
+// painter draws the same outlines without the jitter, and the paths with a
+// smoother wobble (`FINE_PATH`, its own mask).
 export const EDGES: Record<'forest' | 'rock' | 'water' | 'deep' | 'path', Edge> = {
   forest: [0.36, 5, 0.11, 0.75],
   rock: [0.45, 21, 0.2, 0.5],
   water: [0.5, 31, 0.15, 0.35],
   deep: [0.55, 37, 0.15, 0.3],
-  path: [0.42, 41, 0.1, 0.3],
+  path: [0.42, 41, 0.25, 0.45],
 };
+const JITTER = { forest: 0.18, rock: 0.1, water: 0.05, deep: 0.05, path: 0.22 };
+export const FINE_PATH: Edge = [0.42, 41, 0.1, 0.3];
 
 export function edgeAt(field: Float32Array, e: Edge, x: number, y: number): boolean {
   const f = sample(field, x, y);
@@ -120,10 +128,19 @@ export function edgeAt(field: Float32Array, e: Edge, x: number, y: number): bool
   return f + (fbm(x * e[2], y * e[2], e[1], 2) - 0.5) * e[3] > e[0];
 }
 
-function edgeMask(field: Float32Array, ...e: Edge): Uint8Array {
+function edgeMask(field: Float32Array, e: Edge, jitter = 0): Uint8Array {
   const W = WORLD_W, H = WORLD_H;
   const m = new Uint8Array(W * H);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (edgeAt(field, e, x, y)) m[y * W + x] = 1;
+  const [threshold, seed, scale, amp] = e;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const f = sample(field, x, y);
+      if (f <= 0.001) continue;
+      if (f >= 0.999) { m[y * W + x] = 1; continue; }
+      const n = (fbm(x * scale, y * scale, seed, 2) - 0.5) * amp + (hash2(x, y, seed + 3) - 0.5) * jitter;
+      if (f + n > threshold) m[y * W + x] = 1;
+    }
+  }
   return m;
 }
 
@@ -251,11 +268,12 @@ function bakeWorld(map: WorldMap): Baked {
     deep: tileField(map, (t) => t === Ter.Water),
     path: tileField(map, (_t, i) => map.path[i] === 1),
   };
-  const forest = edgeMask(fields.forest, ...EDGES.forest);
-  const rock = edgeMask(fields.rock, ...EDGES.rock);
-  const water = edgeMask(fields.water, ...EDGES.water);
-  const deep = edgeMask(fields.deep, ...EDGES.deep);
-  const path = edgeMask(fields.path, ...EDGES.path);
+  const forest = edgeMask(fields.forest, EDGES.forest, JITTER.forest);
+  const rock = edgeMask(fields.rock, EDGES.rock, JITTER.rock);
+  const water = edgeMask(fields.water, EDGES.water, JITTER.water);
+  const deep = edgeMask(fields.deep, EDGES.deep, JITTER.deep);
+  const path = edgeMask(fields.path, EDGES.path, JITTER.path);
+  const finePath = edgeMask(fields.path, FINE_PATH);
 
   // ---- Canopy ----
   const cb = bakeCanopy(map, forest, water);
@@ -852,7 +870,7 @@ function bakeWorld(map: WorldMap): Baked {
   for (let i = 0; i < W * H; i++) if (cm[i]) csp[i] = U32.sage;
   csg.putImageData(csi, 0, 0);
   const fine: FineData = {
-    fields, forest, rock, water, deep, path, cm, pz: cb.pz, rh, near, shade: shadow, crowns: cb.crowns, pines: cb.pines, trunks: cb.trunks,
+    fields, forest, rock, water, deep, path, finePath, cm, pz: cb.pz, rh, near, shade: shadow, crowns: cb.crowns, pines: cb.pines, trunks: cb.trunks,
     hills: { x0: hx0, y0: hy0, w: hw, h: hh, owner, mounds }, worn, showBox: [sx0, sx1, sy0], stones, map,
   };
   return { ground, canopy: cb.canvas, water: waterAnims, sway, soil, puddles, groundPx: gp, canopyPx: cb.cp, canopyKind: cb.kind, waterDist: wdist, waterMask: { c: wmc, x: wx0, y: wy0 }, canopyShadow: csc, fine };

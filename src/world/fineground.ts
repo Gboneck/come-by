@@ -1,7 +1,7 @@
 import { U32 } from '../palette';
 import { BAYER4 } from '../gfx/draw';
 import { fbm, hash2, mulberry32 } from '../rng';
-import { EDGES, edgeAt, type Baked, type FineData } from './terrain';
+import { EDGES, FINE_PATH, edgeAt, type Baked, type FineData } from './terrain';
 import { REGIONS, TS, WORLD_H, WORLD_W } from './map';
 
 // The ground at double density: two fine pixels to a world pixel. It paints
@@ -75,9 +75,9 @@ export function paintGround(b: Baked, fx0: number, fy0: number, fw: number, fh: 
 function classify(j: Job) {
   const { d, cls, bw, bh } = j;
   const f = d.fields;
-  const masks = [d.rock, d.water, d.deep, d.path];
+  const masks = [d.rock, d.water, d.deep, d.finePath];
   const fields = [f.rock, f.water, f.deep, f.path];
-  const edges = [EDGES.rock, EDGES.water, EDGES.deep, EDGES.path];
+  const edges = [EDGES.rock, EDGES.water, EDGES.deep, FINE_PATH];
   const v = [0, 0, 0, 0], uni = [true, true, true, true];
   const pick = (r: number, w: number, dp: number, p: number): K => (r ? K.Rock : w ? (dp ? K.Deep : K.Shallow) : p ? K.Path : K.Grass);
   // World pixels covering the job (fine pixels pair up on even coordinates).
@@ -411,7 +411,7 @@ function stamps(j: Job) {
   if (j.look.leaves > 0) fallenLeaves(j);
   const open = (wx: number, wy: number) => {
     const i = wy * W + wx;
-    return !d.path[i] && !d.water[i] && !d.rock[i] && !d.cm[i];
+    return !d.finePath[i] && !d.water[i] && !d.rock[i] && !d.cm[i];
   };
   const openBox = (wx: number, wy: number, w: number, h: number) => {
     for (let y = wy; y < wy + h; y++) for (let x = wx; x < wx + w; x++) if (x < 0 || y < 0 || x >= W || y >= H || !open(x, y)) return false;
@@ -468,13 +468,13 @@ function stamps(j: Job) {
   });
   // Pebbles on the tracks.
   cells(j, 13, 11, 45, 6, (wx, wy, gx, gy) => {
-    if (hash2(gx, gy, 46) > 0.3 || !d.path[wy * W + wx]) return;
+    if (hash2(gx, gy, 46) > 0.3 || !d.finePath[wy * W + wx]) return;
     put(j, wx * FINE + (gx & 1), wy * FINE, hash2(gx, gy, 47) < 0.6 ? PEBBLE : PEBBLE2, pathOnly);
   });
   // Stones along the banks.
   cells(j, 9, 7, 164, 6, (wx, wy, gx, gy) => {
     const i = wy * W + wx;
-    if (d.water[i] || d.rock[i] || d.path[i] || hash2(gx, gy, 165) > 0.3) return;
+    if (d.water[i] || d.rock[i] || d.finePath[i] || hash2(gx, gy, 165) > 0.3) return;
     if (!(d.water[i - 1] || d.water[i + 1] || d.water[i + W] || d.water[i - W] || d.water[i + 2 * W])) return;
     put(j, wx * FINE, wy * FINE, PEBBLE2);
   });
@@ -564,7 +564,7 @@ function grassMarks(j: Job) {
   const d = j.d;
   cells(j, 6, 5, 300, 8, (wx, wy, gx, gy) => {
     const i = wy * W + wx;
-    if (d.path[i] || d.water[i] || d.rock[i] || d.cm[i]) return;
+    if (d.finePath[i] || d.water[i] || d.rock[i] || d.cm[i]) return;
     const drift = fbm(wx / 26, wy / 22, 301, 2);
     if (hash2(gx, gy, 302) > (drift - 0.35) * 1.6) return;
     const reg = d.map.regionAt(wx, wy)?.id;
@@ -598,7 +598,7 @@ function flowers(j: Job) {
   const d = j.d;
   cells(j, 7, 6, 320, 4, (wx, wy, gx, gy) => {
     const i = wy * W + wx;
-    if (d.path[i] || d.water[i] || d.rock[i] || d.cm[i] || d.shade[i]) return;
+    if (d.finePath[i] || d.water[i] || d.rock[i] || d.cm[i] || d.shade[i]) return;
     const reg = d.map.regionAt(wx, wy)?.id;
     const drift = fbm(wx / 30, wy / 26, 321, 2);
     const rich = reg === 'meadow' || reg === 'high' ? 1.6 : 1;
@@ -616,7 +616,7 @@ function fallenLeaves(j: Job) {
   const d = j.d;
   cells(j, 4, 3, 330, 4, (wx, wy, gx, gy) => {
     const i = wy * W + wx;
-    if (d.path[i] || d.water[i] || d.rock[i] || d.cm[i] || !d.shade[i] || d.pz[Math.max(0, wy - 6) * W + Math.min(W - 1, wx + 5)]) return;
+    if (d.finePath[i] || d.water[i] || d.rock[i] || d.cm[i] || !d.shade[i] || d.pz[Math.max(0, wy - 6) * W + Math.min(W - 1, wx + 5)]) return;
     if (hash2(gx, gy, 331) > j.look.leaves * 0.12) return;
     const k = hash2(gx, gy, 332);
     put(j, wx * FINE + (gx & 1), wy * FINE + (gy & 1), k < 0.45 ? LEAF_A : k < 0.75 ? LEAF_C : LEAF_B, grassOnly);
