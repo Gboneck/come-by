@@ -1,5 +1,5 @@
 import { C } from '../palette';
-import { panel } from '../gfx/draw';
+import { panel } from './frame';
 import { text, textWidth } from '../gfx/font';
 import type { Screen } from '../gfx/screen';
 

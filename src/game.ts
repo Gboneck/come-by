@@ -23,7 +23,7 @@ import { BuildMode } from './ui/build';
 import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
 import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
-import { drawLedger } from './ui/ledger';
+import { drawLedger, ledgerKeys } from './ui/ledger';
 import { REGIONS } from './world/map';
 import { Predator, type PredCtx } from './entities/predator';
 import { Barn } from './ranch/structures';
@@ -59,10 +59,11 @@ import type { HostNet } from './net/host';
 import type { GuestNet } from './net/guest';
 import { coopKeys, drawCoop, openCoop } from './ui/coop';
 import { drawTransfer, openTransfer, transferKeys } from './ui/transfer';
+import { drawPhoto, photoKeys } from './ui/photo';
 
 const REST_MAX = 12; // a rested hour of daylight takes about 2s
 
-export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop' | 'transfer';
+export type Mode = 'play' | 'summary' | 'build' | 'ledger' | 'title' | 'pause' | 'look' | 'coop' | 'transfer' | 'photo';
 export type Request = 'new' | 'continue' | 'title' | 'join' | null;
 
 export interface DayStats {
@@ -292,7 +293,7 @@ export class Game {
       const t = tierOf(n);
       // The tier card is the banner; whatever banner was up waits behind it.
       this.feel.tierCard = { n, name: t.name, blurb: t.blurb, brings: t.brings, t: 5.5, max: 5.5 };
-      this.feel.confetti(this.screen.W);
+      this.feel.confetti(this.screen.W, 40, this.screen.H);
       this.feel.shake(1, 0.35);
       buzz(this.input.touchMode, [30, 60, 30, 60, 90]);
       this.audio?.play('tierup');
@@ -426,8 +427,13 @@ export class Game {
   }
 
   // Day transitions go through a dithered plum fade.
+  // In play it closes as an iris on the dog (and opens on it again).
   fadeTo(act: () => void) {
-    if (this.feel.fadeTo(act)) this.input.clearQueue();
+    const at = () => {
+      const v = this.view();
+      return this.mode === 'play' ? { x: this.dog.x - v.ox, y: this.dog.y - v.oy - 4 } : { x: v.W / 2, y: v.H / 2 };
+    };
+    if (this.feel.fadeTo(act, 0.3, 0.4, at)) this.input.clearQueue();
   }
 
   quitToTitle() {
@@ -487,6 +493,11 @@ export class Game {
       this.coopWorld(dt);
       return;
     }
+    if (this.mode === 'photo') {
+      photoKeys(this, dt);
+      this.coopWorld(dt);
+      return;
+    }
     if (this.mode === 'transfer') {
       transferKeys(this);
       if (this.demo) this.updateDemo(dt);
@@ -506,7 +517,7 @@ export class Game {
       return;
     }
     if (this.mode === 'ledger') {
-      if (this.input.pressed('ledger') || this.input.pressed('cancel') || this.input.pressed('confirm')) this.mode = 'play';
+      if (ledgerKeys(this)) this.mode = 'play';
       this.coopWorld(dt);
       return;
     }
@@ -820,9 +831,7 @@ export class Game {
       this.feel.kick(Math.round(d.hx * 2), Math.round(d.hy * 2), hit ? 0.14 : 0.08);
       if (hit) this.feel.hitstop = 0.06;
       buzz(this.input.touchMode, hit ? 24 : 10);
-      const nx = d.x + d.hx * 7, ny = d.y + d.hy * 7 - 2;
-      for (let i = 0; i < 4; i++)
-        this.fx.add({ kind: 'spark', x: nx, y: ny, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, max: 0.18, color: hit ? C.butter : C.wool });
+      this.fx.impact(d.x + d.hx * 7, d.y + d.hy * 7 - 2, !!hit);
     }
   }
 
@@ -1106,6 +1115,8 @@ export class Game {
       drawLook(this, g, v.W, v.H);
     } else if (this.mode === 'transfer') {
       drawTransfer(this, g, v.W, v.H);
+    } else if (this.mode === 'photo') {
+      drawPhoto(this, g, v.W, v.H);
     }
     drawCoop(this, g, v, 'ui');
     this.feel.drawCover(g, v.W, v.H);

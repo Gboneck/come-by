@@ -651,6 +651,55 @@ another origin are never answered from the cache.
 - [x] `scripts/daytest.mjs`: calm, rough, late and frantic-at-dusk first
       drives all afford the kennel by the end of day one
 
+## M28 UI and effects, round four (visible quality)
+- [x] Font: the body face proportional (I and the stops are 1px) with
+      automatic kerning; a bold 7px heading face for titles, banners, the
+      logo and plaques; a two-tone coin that keeps a plum rim on paper
+- [x] Frames: every panel bevelled (plum outline, light top and left,
+      shade bottom and right), gilt when it wants attention, rivets on big
+      ones; wool paper with ruled lines for the journal and the Ledger
+- [x] HUD: a sun-and-moon dial clock (season icon on a clear day), a coin
+      that glints in the purse, a bone-shaped stamina gauge by the dog (with
+      a bead of sweat when spent), the flock's own likeness on its card,
+      icons on BUILD, HELP and the goal; the place name on a teal plaque;
+      bevelled thumb buttons with tiny pictures
+- [x] Screens: the end of day as a journal page (taped, ruled, a CALM
+      stamp); the Ledger as a cloth-bound book with a ribbon, ticked goals
+      and an ink-on-paper map with uncharted hatching and a compass; panel
+      titles in the heading face; build mode's corner brackets (a cross where
+      it cannot go) and headings on the info card; transitions close as an
+      iris on the dog
+- [x] Effects: the bark ring as a dithered shockwave, sparks as streaks
+      and an impact star on a nip, dust two-tone, mud on wet ground and
+      snow in winter, ripples under splashes, notes and hearts over a
+      content flock and stress lines over a nervous one, "THAT'LL DO" as a
+      rubber stamp with a dust puff, fireworks on a tier-up, coins trailing
+      a glint; thinned by `quality.fx`
+- [x] Title: the logo in the heading face, its letters dropping in with a
+      bounce, a glint running along it
+- [x] Photo mode (pause menu, TAKE A PHOTO): no HUD, pan to frame the shot,
+      a postcard frame with the ranch's name, the date, a stamp with your
+      dog on it and a postmark; SNAP saves a crisp PNG (the share sheet on
+      a phone, a download elsewhere)
+- [x] Checks: typecheck, build, shot, uitour at every size, padtest,
+      cooptest, perftest before and after
+- [x] The Ledger's pages: cloth tabs on the cover (RANCH first), Q/E,
+      [ ], LB/RB or a tap to turn; other features add pages to
+      `LEDGER_PAGES` (src/ui/ledger.ts) and draw in the book's ink
+- [x] `sharePng()` (src/ui/photo.ts): any canvas as a crisp PNG, the share
+      sheet on a phone, a download elsewhere; photo mode uses it
+- [x] Paddocks in build mode (src/ui/paddockbuild.ts): drag out a field
+      (or SPACE / MARK OUT drops one at the cursor), then size it by its
+      side handles, slide the gate round the fence, move it whole; live
+      price, "HOLDS 12 SHEEP / 24 DUCKS" and the reason a spot is refused,
+      the refused tiles in plum. Phones get W, H and GATE steppers and
+      BUILD / CANCEL, so no drag has to be precise; keys and pads cycle the
+      handle the arrows move (R / Y). A built paddock reopens (tap it, U /
+      Y, EXTEND) with sides that only go outward, priced at the
+      difference; troughs and the like snap inside it; its card shows the
+      mix, a bar of spaces and its fixtures. Waits on the ranch's paddock
+      rules (`setPaddockRules`); `src/ui/paddockdev.ts` is a stand-in for
+      trying it (debug and tests only)
 ## M28 Paddocks you size yourself, and the valley grows (gameplay, round four)
 - [x] Paddocks instead of fixed pens (`src/ranch/paddock.ts`, the rules for
       build mode): any size from 6x6 to 28 across, the gate on any side at
@@ -1730,3 +1779,46 @@ with their legs clipped off. After:
 - The unseeded ordertest is flaky on this branch and on the base (the bot
   sometimes walks the order's flock into the empty open pen); seeded runs
   pass.
+- Round four of UI and effects. The body face stays 5px tall and no glyph
+  got wider, so every layout that measured with textWidth() still fits;
+  only I (and the stops) got narrower, and pairs whose facing columns are
+  two rows apart are kerned a pixel closer. The heading face is new and
+  separate (heading(), headingWidth()).
+- One panel() for all screens (src/ui/frame.ts, the same call as the old
+  one in gfx/draw.ts), so every screen picked up the bevel at once. Paper is
+  its own frame: plum ink on wool, teal for what matters; texts written for
+  dark panels map wool to plum and buttercup to teal on paper.
+- The stamina gauge moved from render/world.ts into the HUD layer, so it
+  reads over the night's dither too.
+- Emotes and the nip's impact star are local 'anim' particles (a co-op
+  host does not send them; every screen makes its own). The ripple and the
+  clods of mud are ordinary particles and do travel to friends.
+- Fireworks and the stamp's dust are screen space (src/ui/feel.ts), drawn
+  over the HUD with the coins in flight.
+- The iris follows the dog while the next scene opens; in a menu it is the
+  middle of the screen.
+- Photo mode freezes the world as the pause menu does (it runs on with
+  friends here). The card is saved at the largest whole-number scale that
+  keeps it near 1200px on its long side; the data URL is turned into a file
+  at once so the share sheet opens while the tap still counts.
+- Perf (perftest, 4x CPU, phone size, best batch): title 5.5 to 5.6 ms,
+  day 10.1 to 9.7 ms, worst 11.7 to 12.2 ms: within the noise of a machine
+  shared with other sessions. After the Ledger tabs and the paddock editor
+  (neither runs in play): 5.7, 10.2 and 12.4 ms, under a load average of
+  13 to 20.
+- Paddock rules come from Gameplay's src/ranch/paddock.ts through
+  src/ui/paddockrules.ts, found by `import.meta.glob` so this branch still
+  builds without them. The merge with valley-r4 (branch ui-r4-valley)
+  drops valley's stopgap "U extends the nearest side by two" and its
+  paddock info lines, which the editor replaces.
+- Paddock build UI: the rules (price, capacity, where it may go, building,
+  extending, gates, fixtures) belong to the ranch and come in through one
+  interface, `PaddockRules` in src/ui/paddockbuild.ts; build mode only
+  asks. The editor works on a draft (a rectangle and a gate) that stays
+  open until BUILD, so a rough first drag is fine: every handle can be
+  nudged after, by drag, stepper or key. Extending reuses the editor with
+  the old fence as a floor. Fixtures are charged their catalog price by
+  build mode, as every catalog item is; paddocks and extensions are paid
+  by the rules, since only they know the price.
+- The Ledger keeps its open page between visits (a book stays open where
+  you left it); confirm closes it only when the page does not use it.

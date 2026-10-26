@@ -1,5 +1,5 @@
 import { C } from '../palette';
-import { panel } from '../gfx/draw';
+import { panel } from './frame';
 import { text, wrap } from '../gfx/font';
 import type { Game } from '../game';
 import { SAVE_KEY, saveData, type SaveData } from '../systems/save';

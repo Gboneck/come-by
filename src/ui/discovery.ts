@@ -12,6 +12,38 @@ import { FH, FW, GLIMPSED, SEEN } from '../systems/discovery';
 
 let fog: HTMLCanvasElement | null = null;
 let fogVer = -1;
+let fogPaper: HTMLCanvasElement | null = null;
+let fogPaperVer = -1;
+
+// On the Ledger's paper map the unknown is blank paper, hatched: uncharted.
+function paperFog(game: Game): HTMLCanvasElement {
+  const d = game.discovery;
+  if (fogPaper && fogPaperVer === d.fogVer) return fogPaper;
+  const [c, g] = fogPaper ? [fogPaper, fogPaper.getContext('2d')!] : makeCanvas(FW, FH);
+  const img = g.createImageData(FW, FH);
+  const buf = new Uint32Array(img.data.buffer);
+  const f = d.fog;
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= FW || y >= FH ? 0 : f[y * FW + x]);
+  for (let y = 0; y < FH; y++)
+    for (let x = 0; x < FW; x++) {
+      const v = f[y * FW + x];
+      if (v === SEEN) continue;
+      if (v === GLIMPSED) {
+        if (((x + y) & 1) === 0) buf[y * FW + x] = U32.wool;
+        continue;
+      }
+      const edge = at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1);
+      buf[y * FW + x] = edge && (x + y) % 2 ? U32.sage : (x - y) % 6 === 0 ? U32.sage : U32.wool;
+    }
+  g.putImageData(img, 0, 0);
+  fogPaper = c;
+  fogPaperVer = d.fogVer;
+  return c;
+}
+
+export function drawPaperFog(game: Game, g: CanvasRenderingContext2D, x0: number, y0: number) {
+  g.drawImage(paperFog(game), x0, y0);
+}
 
 function fogCanvas(game: Game): HTMLCanvasElement {
   const d = game.discovery;

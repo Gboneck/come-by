@@ -58,6 +58,8 @@ original and drawn in code. No external art files, ever.
   serves the game twice (installable, offline with the server off, a new
   deploy picked up), `scripts/installtest.mjs` the install card,
   `scripts/padtest.mjs` plays every screen with a simulated game pad,
+  `scripts/paddockuitest.mjs` drives the paddock editor in build mode by
+  touch (drag out, handles, gate, build, extend, a trough inside),
   `scripts/transfertest.mjs` moves a save between two browsers, `scripts/places.mjs` screenshots every hidden place and its way in
   (`--found`, `--only=circle,hut`),
   `scripts/pacetest.mjs` has a decent-player bot (`src/pacebot.ts`) play
@@ -222,7 +224,14 @@ needs a line there.
   agility yard: `game.farmwork`).
 - `src/ui/` HUD, touch controls, ledger, summary, build mode, title/pause;
   `look.ts` + `lookui.ts` the dog's look screen, `decorbuild.ts` the decor
-  pieces, `textfield.ts` typed names.
+  pieces, `textfield.ts` typed names; `frame.ts` the UI's frames (panel,
+  paper, stamp, ribbon), `hudart.ts` the dial, coin, stamina bone and icons,
+  `emotes.ts` the flock's notes, hearts and stress lines, `photo.ts` photo
+  mode (`sharePng()` saves or shares any canvas), `feel.ts` kicks, coins,
+  fireworks and the iris, `paddockbuild.ts` the paddock editor in build
+  mode (it asks the ranch's rules through `PaddockRules`). Ledger pages
+  beyond the first go in `LEDGER_PAGES` (`ledger.ts`). `src/gfx/font.ts`
+  has two faces: text() (5px, proportional) and heading() (7px, bold).
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses (gaits, startles, wide eyes, ducks afloat), `dogpose.ts` every
   dog's poses (eight-way turning, watching the stock, skids, panting, the

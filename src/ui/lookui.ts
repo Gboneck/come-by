@@ -1,6 +1,7 @@
 import { C } from '../palette';
-import { panel, rect } from '../gfx/draw';
-import { text, textWidth } from '../gfx/font';
+import { rect } from '../gfx/draw';
+import { panel } from './frame';
+import { heading, text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import { playerDogSprites, type Mask, type Neck, type Speckle } from '../art/dogstyle';
 import { dimView } from './feel';
@@ -67,7 +68,7 @@ export function drawLook(game: Game, g: CanvasRenderingContext2D, W: number, H: 
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(2 + S.top, Math.round(H / 2 - ph / 2));
   panel(g, x0, y0, pw, ph);
   const fresh = game.lookFrom === 'new';
-  text(g, fresh ? 'MEET YOUR HEELER' : 'YOUR DOG', W / 2, y0 + 5, C.butter, { align: 'center' });
+  heading(g, fresh ? 'MEET YOUR HEELER' : 'YOUR DOG', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
 
   // Preview: trotting side on, then facing you and facing away.
   const px0 = x0 + 6, py0 = y0 + 14;

@@ -28,14 +28,48 @@ export function touchLayout(game: Game, W: number, H: number): TouchLayout {
   return { bark, nip, lie, stickHome: { x: S.left + 36, y: by }, top: lie.y - lie.r - 2 };
 }
 
+// Tiny pictures over the labels: sound lines, teeth, a down chevron.
+const BTN_ICON: Record<string, string[]> = {
+  BARK: ['.#...#.', '#..#..#', '.#...#.'],
+  NIP: ['#.#.#', '.#.#.'],
+  DOWN: ['#...#', '.#.#.', '..#..'],
+};
+
+// Points of a ring, split into its upper-left and lower-right halves (the
+// light and shade of a bevel).
+function bevelRing(g: CanvasRenderingContext2D, cx: number, cy: number, r: number, hi: string, lo: string) {
+  let x = r, y = 0, err = 1 - r;
+  const put = (px: number, py: number) => {
+    g.fillStyle = px + py < 0 ? hi : lo;
+    g.fillRect(cx + px, cy + py, 1, 1);
+  };
+  while (x >= y) {
+    for (const [a, b] of [[x, y], [y, x], [-y, x], [-x, y], [-x, -y], [-y, -x], [y, -x], [x, -y]]) put(a, b);
+    y++;
+    if (err < 0) err += 2 * y + 1;
+    else { x--; err += 2 * (y - x) + 1; }
+  }
+}
+
 function roundButton(g: CanvasRenderingContext2D, b: Btn, label: string, active: boolean, ready: boolean, pulse: boolean) {
   // Pressed buttons sink a pixel onto their shadow.
   const y = b.y + (active ? 1 : 0);
   if (!active) disc(g, b.x, b.y + 1, b.r, C.sage);
-  disc(g, b.x, y, b.r, active ? C.teal : C.plum);
-  ring(g, b.x, y, b.r, active || pulse ? C.butter : ready ? C.sage : C.plum);
+  disc(g, b.x, y, b.r, C.plum);
+  disc(g, b.x, y, b.r - 2, active ? C.teal : C.plum);
+  // A bevel inside the plum rim: light above, shade below (swapped when
+  // pressed in), gilt when it is the move to make.
+  if (pulse || active) bevelRing(g, b.x, y, b.r - 1, C.butter, active ? C.butter : C.moss);
+  else bevelRing(g, b.x, y, b.r - 1, ready ? C.sage : C.plum, ready ? C.teal : C.plum);
   if (pulse) ring(g, b.x, y, b.r + 2, C.butter, 4);
-  text(g, label, b.x + 1, y - 2, active ? C.butter : ready ? C.wool : C.sage, { align: 'center' });
+  const ink = active ? C.butter : ready ? C.wool : C.sage;
+  const ic = BTN_ICON[label];
+  if (ic) {
+    const iw = ic[0].length;
+    g.fillStyle = active ? C.butter : ready ? C.sage : C.plum;
+    ic.forEach((row, ry) => { for (let rx = 0; rx < iw; rx++) if (row[rx] === '#') g.fillRect(b.x - (iw >> 1) + rx, y - 8 + ry, 1, 1); });
+  }
+  text(g, label, b.x + 1, y - 1, ink, { align: 'center' });
 }
 
 // Dashed arc from 12 o'clock, clockwise, `frac` of the way round.

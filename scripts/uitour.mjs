@@ -30,7 +30,7 @@ const SIZES = {
 
 // Each state runs in a fresh page; `fn` runs in the page with the game.
 const STATES = {
-  title: { query: 'debug&title', fn: () => {} },
+  title: { query: 'debug&title', fn: () => 80 },
   start: { fn: () => {} },
   flock: {
     fn: () => {
@@ -78,6 +78,22 @@ const STATES = {
       g.enterBuild();
       g.build.item = 3;
       return 20;
+    },
+  },
+  paddock: {
+    // The paddock editor: a draft south-west of the farmhouse. Uses the
+    // stand-in rules (src/ui/paddockdev.ts) until the ranch has its own.
+    fn: async () => {
+      const g = window.game;
+      const pb = await import('/src/ui/paddockbuild.ts');
+      if (!pb.paddockRules()) (await import('/src/ui/paddockdev.ts')).useDevPaddocks();
+      const cat = await import('/src/ranch/catalog.ts');
+      g.coins = 120;
+      g.tier = 4;
+      g.enterBuild();
+      g.build.item = cat.CATALOG.findIndex((d) => d.id === pb.paddockRules().tool);
+      g.build.paddock.start(pb.paddockRules(), 0, 0, { tx: 80, ty: 109, w: 10, h: 6 });
+      return 60;
     },
   },
   dogtab: {
@@ -277,6 +293,18 @@ const STATES = {
       const f = g.ranch.farmhouse;
       g.dog.x = f.cx + 20; g.dog.y = f.y1 + 14; g.cam.x = f.cx + 10; g.cam.y = f.cy + 10;
       return 40;
+    },
+  },
+  photo: {
+    fn: async () => {
+      const g = window.game;
+      const L = await import('/src/ui/look.ts');
+      const P = await import('/src/ui/photo.ts');
+      g.look.ranch = 'WILLOW CREEK';
+      L.applyLook(g.look);
+      g.tut = 9; g.tip = null; g.banner = null; g.place = null;
+      P.openPhoto(g);
+      return 30;
     },
   },
   tierup: {
