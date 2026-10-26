@@ -121,10 +121,12 @@ function blossom(buf: Buf, x: number, y: number) {
 }
 
 function autumnScheme(c: Clump, leaves: number): number {
+  // Even at the height of autumn a fifth of the clumps stay green, and of
+  // the rest about half go gold, half a late sage.
   const h = hash2(c.seed, 1, 714);
-  const turned = h < leaves / 4;
+  const turned = h < (leaves / 4) * 0.8;
   if (!turned) return 0;
-  return hash2(c.seed, 2, 715) < 0.55 ? 1 : 2;
+  return hash2(c.seed, 2, 715) < 0.5 ? 1 : 2;
 }
 
 // Clumps over the broadleaf forest mass on a jittered grid, back to front.

@@ -257,7 +257,7 @@ export function hipRoof(g: CanvasRenderingContext2D, xa: number, xb: number, top
 
 // A window with a plum frame, mullions, slatted shutters, a sill and a glint
 // on the glass by day; lit buttercup at night. Drawn on the fine grid.
-function windowAt(g: CanvasRenderingContext2D, wx: number, wy: number, night: boolean, w = 5, h = 3, shutters = true, trim: string = C.sage) {
+export function windowAt(g: CanvasRenderingContext2D, wx: number, wy: number, night: boolean, w = 5, h = 3, shutters = true, trim: string = C.sage) {
   fine(g, (fg) => {
     const X = wx * PX, Y = wy * PX, Wd = w * PX, Hd = h * PX;
     rect(fg, X - 2, Y - 2, Wd + 4, 1, trim);
@@ -287,7 +287,7 @@ function windowAt(g: CanvasRenderingContext2D, wx: number, wy: number, night: bo
 }
 
 // Brick chimney with a sage cap: courses of brick on the fine grid.
-function chimney(g: CanvasRenderingContext2D, x: number, top: number, h: number) {
+export function chimney(g: CanvasRenderingContext2D, x: number, top: number, h: number) {
   fine(g, (fg) => {
     const X = x * PX, T = top * PX, Hh = h * PX;
     rect(fg, X, T, 8, Hh, C.plum);
