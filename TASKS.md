@@ -683,6 +683,33 @@ Before → after, in plain words:
       title 9.0 vs 9.8, day 15.4 vs 16.2, worst 19.0 vs 20.0 at 6x, i.e. the
       same within the machine's noise.
 
+- [x] Paddocks of any size (for Gameplay's paddocks, `src/art/paddock.ts`):
+      pens were drawn for one 8x7 shape with the gate in the middle of a
+      side. The paddock is now drawn as any rectangle:
+      - The gate can be anywhere along any side, and a wide gate gets two
+        leaves meeting in the middle.
+      - Posts are spaced evenly along each side at about 8px (10px on a big
+        field), with stouter corner and gate posts. The rails are worn: a
+        knot, a grey weathered streak, the odd sag.
+      - A small pen is trodden all over and strewn with straw. A big one
+        reads as a field: grass inside, a trodden lane just inside the fence,
+        a worn track from the gate to the trough, longer grass in the
+        corners, flowers in spring and summer.
+      - The ground is trodden outside the gate too.
+      - Fixtures: a trough, a hay rack, and a small field shelter in the
+        ranch's roofing with straw bedding.
+      - An inner hurdle with its own gate.
+      - In snow the lanes and tracks show as trodden paths, and every fence's
+        rails (old fences too) turn dark and wet instead of vanishing
+        against the white.
+      - Checks: typecheck, build, shot, picturetest (ok), regions (ranch,
+        show, sale, drover), tune --seed=7 for sheep (identical to before).
+        perftest run back to back with the commit before, best batch at 4x:
+        day 9.5 vs 10.3–10.9 ms, worst 12.1–13.1 vs 14.0–14.4. At 6x: day
+        14.3–15.0 vs 16.3–17.1, worst 20.4 vs 19.7–21.4. Cheaper, because a
+        pen's floor is one image now and no longer redrawn pixel by pixel
+        into the picture cache every frame.
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1527,3 +1554,13 @@ Before → after, in plain words:
   `Math.random`, so a seeded `tune.mjs` run is unchanged by them.
 - Morning mist is light (up to 0.18, gone by 07:40): at the strength of fog
   it laid a grid over every morning.
+- Paddock floors are one cached bitmap per paddock, painted from ImageData
+  and keyed on the size, the gate, the fixtures and the season, so a big
+  field costs one image a frame. A repaint always makes a new canvas,
+  because the picture cache knows an image by its object. A paddock reads
+  as a field gradually, as its smaller interior side grows from 6 to 10
+  tiles.
+- The paddock data the art reads: `rot` + `gateSpan()` for the gate,
+  `fixtures?: { kind, tx, ty }[]` and `hurdle?: { vertical, at, gate, swing }`
+  (types in `src/art/paddock.ts`). If there is `hasTrough` and no list, a
+  trough goes by the back fence, as before.
