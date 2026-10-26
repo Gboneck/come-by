@@ -8,6 +8,7 @@ import { SPECIES } from '../entities/species';
 import { TIERS, tierOf } from '../systems/progression';
 import { dimView } from './feel';
 import { safeArea } from './safe';
+import { pitch } from './metrics';
 
 // MOVE A RANCH (title) / MOVE THIS RANCH (pause menu): take the save to
 // another phone or computer as a text code or a file, or bring one here.
@@ -355,11 +356,11 @@ export function drawTransfer(game: Game, g: CanvasRenderingContext2D, W: number,
     for (const l of prose('TAKE IT TO ANOTHER PHONE OR COMPUTER AS A CODE OR A FILE, OR BRING ONE HERE.', pw - 16)) head.push({ s: l, c: C.wool });
   }
   const notes = st.note ? prose(st.note, pw - 16) : [];
-  const ph = 10 + head.length * 7 + 4 + rs.length * (rh + gap) + (notes.length ? notes.length * 7 + 3 : 0);
+  const ph = 10 + head.length * pitch() + 4 + rs.length * (rh + gap) + (notes.length ? notes.length * pitch() + 3 : 0);
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.max(S.top + 4, Math.round(H / 2 - ph / 2));
   panel(g, x0, y0, pw, ph);
-  head.forEach((r, i) => text(g, r.s, W / 2, y0 + 6 + i * 7, r.c, { align: 'center' }));
-  let y = y0 + 10 + head.length * 7;
+  head.forEach((r, i) => text(g, r.s, W / 2, y0 + 6 + i * pitch(), r.c, { align: 'center' }));
+  let y = y0 + 10 + head.length * pitch();
   const now = performance.now();
   hits = [];
   rs.forEach((r, i) => {
@@ -373,7 +374,7 @@ export function drawTransfer(game: Game, g: CanvasRenderingContext2D, W: number,
     if (ui.click(`tr-${r.id}`, bx - 4, y - 1, bw + 8, rh + 2) && now - tapped > 400) act(game, r.id);
     y += rh + gap;
   });
-  notes.forEach((l, i) => text(g, l, W / 2, y + 1 + i * 7, st.noteGood ? C.butter : C.wool, { align: 'center' }));
+  notes.forEach((l, i) => text(g, l, W / 2, y + 1 + i * pitch(), st.noteGood ? C.butter : C.wool, { align: 'center' }));
   if (st.busy) text(g, '...', W / 2, y0 + ph + 4, C.wool, { align: 'center', shadow: C.plum });
   ui.captureAll('transfer-bg');
 }

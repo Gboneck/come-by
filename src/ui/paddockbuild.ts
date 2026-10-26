@@ -1,7 +1,7 @@
 import { C } from '../palette';
 import { prose, sentence } from './case';
 import { ditherRect, px, rect } from '../gfx/draw';
-import { heading, text, textWidth } from '../gfx/font';
+import { heading, text, textWidth, lineHeight } from '../gfx/font';
 import type { Game } from '../game';
 import type { Building } from '../ranch/buildings';
 import { SPECIES } from '../entities/species';
@@ -400,16 +400,16 @@ export class PaddockEditor {
     }
     const rowH = touch ? 17 : 0;
     const rows = touch && d ? 2 : touch ? 1 : 0;
-    const ch = 13 + lines.length * 6 + rows * rowH + (rows ? 2 : 0);
+    const ch = 13 + lines.length * lineHeight() + rows * rowH + (rows ? 2 : 0);
     const y0 = bottom - ch;
     panel(g, L, y0, W, ch);
     const tw = heading(g, title, L + 4, y0 + 3, C.butter, { shade: C.moss });
     text(g, price, L + 4 + tw + 5, y0 + 5, C.wool, { iconColor: C.butter });
-    lines.forEach((l, i) => text(g, sentence(l.s), L + 4, y0 + 13 + i * 6, l.c, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l.s), L + 4, y0 + 13 + i * lineHeight(), l.c, { iconColor: C.butter }));
 
     if (touch) {
       // Buttons: a row of steppers, then CANCEL and BUILD.
-      let y = y0 + 13 + lines.length * 6 + 2;
+      let y = y0 + 13 + lines.length * lineHeight() + 2;
       const btn = (id: string, x: number, w: number, label: string, on: boolean, fn: () => void, rim: string = C.sage) => {
         panel(g, x, y, w, rowH - 2, ui.isActive(id) ? C.teal : C.plum, on ? rim : C.plum);
         if (label.length === 1) glyph(g, label, Math.round(x + w / 2), y + Math.floor((rowH - 2) / 2), on ? C.wool : C.sage);

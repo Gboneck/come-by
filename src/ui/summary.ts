@@ -10,6 +10,7 @@ import { dimView } from './feel';
 import { drawSale, saleLen, type Sale } from './sale';
 import { sentence } from './case';
 import { SKY_WORD, skyIcon } from './icons';
+import { pitch } from './metrics';
 
 export interface Summary {
   day: number;
@@ -74,7 +75,8 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
   const goal = ng ? `${ng.goal.label}${ng.goal.target > 1 ? ` ${Math.min(ng.value, ng.goal.target)}/${ng.goal.target}` : ''}` : null;
   const build = s.buildable ?? [];
   const bh = touch ? 15 : 13;
-  const ph = 34 + lines.length * 8 + 5 + (goal ? 8 : 0) + 9 + (build.length ? 12 + Math.ceil(build.length / 2) * 8 : 0) + bh + 9;
+  const rp = pitch() + 1; // a row of the page
+  const ph = 34 + lines.length * rp + 5 + (goal ? rp : 0) + 9 + (build.length ? 4 + rp + Math.ceil(build.length / 2) * rp : 0) + bh + 9;
   const px0 = Math.round(W / 2 - pw / 2);
   // The card drops in as the fade clears.
   const drop = Math.round(Math.max(0, 1 - age / 0.25) * -16);
@@ -98,7 +100,7 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
       text(g, sentence(k), px0 + 13, y, ink, iconOpts);
       text(g, sentence(v), px0 + pw - 6, y, col ?? ink, { align: 'right', ...iconOpts });
     }
-    y += 8;
+    y += pitch() + 1;
   });
   const late = age >= (lines.length + 2) * ROW_STEP;
   // A calm day earns the page a stamp.
@@ -111,7 +113,7 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
       text(g, 'Next goal', px0 + 13, y, ink2);
       text(g, sentence(goal), px0 + pw - 6, y, ink, { align: 'right', ...iconOpts });
     }
-    y += 8;
+    y += pitch() + 1;
   }
   if (late) {
     const sky = game.weather.forecast, word = sentence(SKY_WORD[sky]);
@@ -128,10 +130,10 @@ export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, 
     if (late) {
       text(g, 'Now you can build', px0 + 13, y, ink2);
       build.forEach((b, i) => {
-        text(g, sentence(b), px0 + 13 + (i % 2) * (pw / 2 - 6), y + 8 + Math.floor(i / 2) * 8, ink, iconOpts);
+        text(g, sentence(b), px0 + 13 + (i % 2) * (pw / 2 - 6), y + pitch() + 1 + Math.floor(i / 2) * (pitch() + 1), ink, iconOpts);
       });
     }
-    y += 8 + Math.ceil(build.length / 2) * 8;
+    y += pitch() + 1 + Math.ceil(build.length / 2) * (pitch() + 1);
   }
   // Buttons: BUILD is the recommended choice when something is affordable.
   // They only take input once the card is fully in.
