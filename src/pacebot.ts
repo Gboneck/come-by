@@ -502,7 +502,7 @@ export class Pacer {
     const got: Animal[] = [];
     let paid = 0;
     for (let k = 0; k < 6 && this.playing; k++) {
-      const want = sale.animals.filter((a) => a.forSale && !a.rare && a.forSale + 150 <= g.coins && this.roomFor(a.sp.id) >= got.length * a.sp.space + a.sp.space)[0];
+      const want = sale.animals.filter((a) => a.forSale && !a.rare && a.forSale + 150 <= g.coins && this.roomFor(a.sp.id) > got.length)[0];
       if (!want) break;
       const side = [{ x: sale.x0 - 6, y: want.y }, { x: sale.x1 + 6, y: want.y }, { x: want.x, y: sale.y0 - 6 }, { x: want.x, y: sale.y1 + 6 }].sort((a, b) => dist(a, want) - dist(b, want))[0];
       if (!this.walkTo(side, 60, 4) || !this.near(want)) break;
@@ -543,7 +543,10 @@ export class Pacer {
       const sp = m[0].sp.id;
       if (this.roomFor(sp) === 0 && (g.coins < defOf('pen').cost || (g.ranch.pens.some((p) => p.species === sp) && !goalSp.has(sp) && g.tier < 3))) continue;
       const d = dist(centroid(m), home);
-      const s = d - (goalSp.has(sp) ? 2000 : 0) - SPECIES[sp].value * 8 * m.length;
+      // A big drove is worth only what there is room for (plus a flock's
+      // worth of paddock to be made).
+      const take = Math.min(m.length, this.roomFor(sp) + SPECIES[sp].spawnGroup[1]);
+      const s = d - (goalSp.has(sp) ? 2000 : 0) - SPECIES[sp].value * 8 * take;
       if (s < bs) { bs = s; best = m; }
     }
     return best;

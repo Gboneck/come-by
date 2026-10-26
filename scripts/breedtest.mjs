@@ -179,6 +179,13 @@ const res = await page.evaluate(async () => {
     SV.loadInto(g);
     const p2 = g.ranch.pens.find((q) => q.tx === p.tx && q.ty === p.ty);
     check('items come back from a save', p2 && p2.items.length === p.items.length && p2.items.every((i, k) => i.x === p.items[k].x && i.y === p.items[k].y), { before: p.items.length, after: p2?.items.length });
+    // Co-op: what a guest is sent puts the same items back.
+    const NS = await import('/src/net/shared.ts');
+    const sent = JSON.parse(JSON.stringify(NS.sharedOut(g)));
+    const want = JSON.stringify(g.ranch.pens.map((q) => q.items.map((i) => [i.sp, i.x, i.y, i.id])));
+    for (const q of g.ranch.pens) q.items = [];
+    NS.sharedIn(g, sent);
+    check('a guest is sent the goods lying in each paddock', JSON.stringify(g.ranch.pens.map((q) => q.items.map((i) => [i.sp, i.x, i.y, i.id]))) === want && p2.items.length > 0);
     const sold = E.sellAllGoods(g);
     check('day end sells the goods and clears the items', sold.value > 0 && g.ranch.pens.every((q) => q.items.length === 0) && seen.includes('sold'));
     off();
