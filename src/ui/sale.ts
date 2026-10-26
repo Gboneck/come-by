@@ -17,7 +17,7 @@ import type { Summary } from './summary';
 // stays 'summary', so friends wait as before).
 
 export interface SaleFrom { x: number; y: number; kinds: string[] } // a paddock's goods (world px), one entry a good
-export interface Sale { value: number; market: boolean; from: SaleFrom[] }
+export interface Sale { value: number; mill?: number; market: boolean; from: SaleFrom[] }
 
 const IN = 0.8; // the cart rolls in
 const GOODS = 0.75; // goods start flying
@@ -127,7 +127,7 @@ export function drawSale(game: Game, g: CanvasRenderingContext2D, W: number, H: 
   // What it came to, over the cart once the goods are in.
   if (t > GOODS + 0.3) {
     const title = 'GOODS SOLD';
-    const sum = `+${sale.value}$${sale.market ? '  MARKET DAY X1.25' : ''}`;
+    const sum = `+${sale.value}$${sale.market ? '  MARKET DAY X1.25' : ''}${sale.mill ? `  THE MILL +${sale.mill}$` : ''}`;
     const w = Math.max(headingWidth(title), textWidth(sum)) + 14;
     const y = ry - 46;
     const x = Math.round(Math.min(W - w - 4, Math.max(4, cx - w / 2)));

@@ -427,6 +427,7 @@ export class Game {
     // What each paddock made, for the cart to collect on screen (ui/sale.ts).
     const from = this.ranch.pens.filter((p) => p.goods > 0).map((p) => ({ x: p.cx, y: p.cy, kinds: p.goodsList() as string[] }));
     const sale = sellAllGoods(this);
+    const before = this.coins;
     this.earn(sale.value);
     this.stats.goodsValue += sale.value;
     this.projects.evening(this, sale.value); // the mill at the falls
@@ -441,7 +442,8 @@ export class Game {
       coins: this.coins,
       penned: this.ranch.pens.reduce((s, p) => s + p.animals.length, 0),
       buildable: this.buildable(),
-      sale: { value: sale.value, market: isMarketDay(this), from },
+      // All the goods brought in (the mill's share too, once it is mended).
+      sale: { value: this.coins - before, mill: this.coins - before - sale.value, market: isMarketDay(this), from },
     };
     this.mode = 'summary';
     this.summaryT = 0;
