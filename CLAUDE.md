@@ -45,7 +45,8 @@ original and drawn in code. No external art files, ever.
   `scripts/trace.mjs` screenshots a bot run, `scripts/pentest.mjs`,
   `scripts/econtest.mjs`, `scripts/flowtest.mjs`, `scripts/nighttest.mjs`,
   `scripts/savetest.mjs`, `scripts/trialtest.mjs`, `scripts/ordertest.mjs`,
-  `scripts/resttest.mjs`, `scripts/weathertest.mjs`, `scripts/transittest.mjs`
+  `scripts/resttest.mjs`, `scripts/daytest.mjs` (day one affords the kennel
+  however the first drive goes), `scripts/weathertest.mjs`, `scripts/transittest.mjs`
   (an order's flock across a built-up ranch to each yard)
   `scripts/discoverytest.mjs` and `scripts/tour.mjs` check the loops end to
   end, `scripts/perftest.mjs` measures each frame's work at a phone size

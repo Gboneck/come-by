@@ -13,6 +13,7 @@ import { collideCircle, wallRepulse } from '../world/collide';
 import { PathFollower } from '../world/path';
 import { SPECIES } from './species';
 import { tToClock } from '../systems/orders';
+import { defOf } from '../ranch/catalog';
 
 // The townsfolk. The rancher (your handler) lives in the farmhouse: out in
 // the morning, helping at the pen gate when you bring a flock home, doing
@@ -370,7 +371,7 @@ export class Folk {
     if (game.tier >= 2 && game.day.day % 3 === 0) return 'IT\'S TRIAL DAY AT THE SHOW GROUND!';
     const pens = game.ranch.pens.filter((p) => p.animals.length);
     if (pens.some((p) => !p.hasTrough) && game.coins >= 12) return 'THAT PEN COULD DO WITH A TROUGH.';
-    if (!game.ranch.buildings.some((b) => b.kind === 'kennel') && game.coins >= 20) return 'A KENNEL WOULD HELP YOU TRAIN.';
+    if (!game.ranch.buildings.some((b) => b.kind === 'kennel') && game.coins >= defOf('kennel').cost) return 'A KENNEL WOULD HELP YOU TRAIN.';
     return pick(['MORNING! LET\'S BRING THEM HOME.', 'MORNING! QUIET AND STEADY TODAY.', 'LOVELY MORNING FOR IT.']);
   }
 

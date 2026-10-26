@@ -644,6 +644,13 @@ deploy's bundle is running after one relaunch, its files are kept and the
 old build's cache is deleted, and it then plays offline too; requests to
 another origin are never answered from the cache.
 
+## M27 Day one always affords the kennel (from playtesting)
+- [x] A new ranch starts with 10$ in the tin; the kennel costs 15$
+- [x] Hints, the BUILD pulse and the rancher's remark read the kennel's
+      real price instead of a hard-coded 20
+- [x] `scripts/daytest.mjs`: calm, rough, late and frantic-at-dusk first
+      drives all afford the kennel by the end of day one
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -1456,4 +1463,11 @@ another origin are never answered from the cache.
   base64 behind `COMEBY1.`; a tier-5 ranch is about 3,100 letters, which
   is fine to copy and paste but not to type, so a file is offered too.
   Codes may arrive broken over lines; plain save JSON also loads.
-
+- Day one still stalled for some players: 5 ducks (the fewest that spawn)
+  pay 15$ driven calm but 10$ steady and 5$ rattled or frantic, and a pen
+  filled at midday lays only about 7$ of eggs by nightfall, so anything
+  short of a calm drive missed the 20$ kennel. A new ranch now starts with
+  10$ and the kennel costs 15$: a calm or steady drive pays for it at once,
+  and the worst possible one (frantic, penned at dusk) has 15$ on penning
+  and 18$ at day's end. 10$ is below the trough (12$), so the tin cannot be
+  spent on anything that would leave the kennel out of reach.

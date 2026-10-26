@@ -7,7 +7,7 @@ import { arrow } from './hud';
 import { buzz } from './settings';
 import { orderFor, penGateAt, yardOf } from '../systems/orders';
 import { PARTS, atPost, currentClass } from '../systems/trials';
-import { CATALOG } from '../ranch/catalog';
+import { CATALOG, defOf } from '../ranch/catalog';
 
 // In-the-moment coaching: markers showing where to stand or where the flock
 // goes next, key caps and pulsing buttons for the move a hint asks for, and
@@ -153,7 +153,7 @@ export function coachHint(game: Game): string | null {
 // Which touch button to pulse.
 export function coachButton(game: Game): 'bark' | 'nip' | 'lie' | null {
   if (game.tut === 2 || game.tip?.text.includes('HOLD DOWN')) return 'lie';
-  if (game.tut === 6 && game.coins < 20 && game.inRanch() && game.rest === 1) return 'lie';
+  if (game.tut === 6 && game.coins < defOf('kennel').cost && game.inRanch() && game.rest === 1) return 'lie';
   if (game.tip?.text.includes('NIP')) return 'nip';
   if (game.day.phase !== 'night') {
     // At the crook, or at the gate of a pen whose stock a buyer wants.

@@ -69,7 +69,7 @@ out.summary = await page.evaluate(() => ({ mode: window.game.mode, coins: window
 await page.screenshot({ path: 'shots/resttest.png' });
 
 console.log(JSON.stringify(out, null, 1));
-const ok = out.after6s.dayT - out.before.dayT > 30 && out.gotUp.rest === 1 && out.loose.blocked && out.restToEnd.mode !== 'play' && out.summary.coins >= 20 && !errors.length;
+const ok = out.after6s.dayT - out.before.dayT > 30 && out.gotUp.rest === 1 && out.loose.blocked && out.restToEnd.mode !== 'play' && out.summary.coins >= 15 && !errors.length;
 if (errors.length) console.log('ERRORS', errors);
 console.log(ok ? 'PASS' : 'FAIL');
 await browser.close();

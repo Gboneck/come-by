@@ -20,7 +20,7 @@ import { drawWorld } from './render/world';
 import { drawHud } from './ui/hud';
 import { drawSummary, type Summary } from './ui/summary';
 import { BuildMode } from './ui/build';
-import { CATALOG } from './ranch/catalog';
+import { CATALOG, defOf } from './ranch/catalog';
 import { MAX_UP, UPGRADES, dogStatsFor, sellAllGoods, updateProduce, type UpKey } from './systems/economy';
 import { TIERS, newTotals, tierComplete, tierOf, type Totals } from './systems/progression';
 import { drawLedger } from './ui/ledger';
@@ -119,7 +119,9 @@ export class Game {
   t = 0;
   mode: Mode = 'play';
   tier = 1;
-  coins = 0;
+  // A new ranch starts with a little in the tin, so any first drive home
+  // (calm or not) pays for the kennel by the end of day one.
+  coins = 10;
   stats: DayStats = newStats();
   summary: Summary | null = null;
   banner: Banner | null = null;
@@ -984,7 +986,7 @@ export class Game {
       case 4: return 'CALM DRIVES PAY X1.5. A BARK MOVES THEM FAST BUT SCARES THEM.';
       case 5: return touch ? 'TAP YOUR GOAL (TOP LEFT) FOR THE RANCH LEDGER.' : 'TAB OPENS THE RANCH LEDGER: GOALS AND WHAT COMES NEXT.';
       case 6:
-        if (this.coins >= 20) return touch ? 'YOU CAN AFFORD A KENNEL: TAP BUILD AT THE RANCH.' : 'YOU CAN AFFORD A KENNEL: PRESS B AT THE RANCH.';
+        if (this.coins >= defOf('kennel').cost) return touch ? 'YOU CAN AFFORD A KENNEL: TAP BUILD AT THE RANCH.' : 'YOU CAN AFFORD A KENNEL: PRESS B AT THE RANCH.';
         // Not enough yet: the eggs sell at the end of the day.
         return this.day.phase === 'night' ? null : `GOODS SELL AT DAY'S END. ${this.restHint()}`;
     }
