@@ -1300,6 +1300,92 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
       poses (dust at the paws, earth flying)
 - [x] `scripts/loottest.mjs`; seeded tune.mjs identical for all five
       species; discoverytest, projecttest, savetest, seasontest, cooptest
+## M36 Balance pass: everything together (gameplay, round six)
+Many sources of coin and stock landed in parallel in rounds four and five
+(buyer favour, loot, breeding, valley projects, market days, fields, the
+shed, dairy and agility yard). Played together by the pace bot, two things
+stood out: goods made by stock sitting at home came to two-thirds to
+three-quarters of all income from tier 3 on (a penned animal earned its
+own delivery price again every day), so herding mattered less and less;
+and the purse outran everything worth buying by about day 8 (1,760$ of
+one-off buildings, training and land against 1,556$ in hand at the end of
+tier 4, 4,394$ at the end of tier 5, 25,000$ by year three). The tier-5
+goals then stalled on land, not coin.
+- [x] A packed paddock makes less (`crowding` in `src/systems/economy.ts`):
+      full rate up to three-fifths of its room, half when full. A roomy
+      paddock makes as much as a crowded one, and has room for young, so
+      there is no reason to pack one; a tip says so the first time
+- [x] A calm drove pays a bonus at the gate (game.ts): six head or more
+      brought in calm, a twentieth more a head past five, up to half again
+      at fifteen (the banner shows it). Bigger flocks and droves are worth
+      herding well
+- [x] Late prices rise so tiers 4 and 5 still end with a choice: the
+      windmill (a tier-5 goal) 260$ to 500$, the dairy 110$ to 180$, the
+      fields 200$/300$ to 250$/450$, the top level of each training
+      100-120$ to 140-160$. Day one is untouched (the kennel is still 15$;
+      daytest passes)
+- [x] The valley holds at most 260 wild animals (`WILD_CAP` in
+      `src/systems/spawner.ts`): no new flocks or droves past it. Breeding
+      at home needed no cap: young are born only into room they can grow
+      into, so a paddock never overruns, and a packed one breeds nothing
+- [x] The pace bot buys a field when land is short (it had walked into its
+      own fences to reach the sign, or never tried) and leaves a drove far
+      bigger than its room; pacetest now tags every coin by the system that
+      paid it, and logs what is still worth buying and how many animals
+      the world holds; perftest `--animals=N` measures a herd-heavy year
+- [x] breedtest gained the drove bonus, the wild cap and crowding (31 checks)
+
+**Herding is unchanged**: `node scripts/tune.mjs <species> --seed=1` is
+identical before and after for all five species.
+
+**Pace** (six seeds; before is test/round-5 with the same pace bot): the
+valley thrives on days 8, 10, 9, 10, 6, 7 before (mean 8.3) and 8, 10, 8,
+8, 9, 6 after (mean 8.2). With the old bot the same build took 8, 10, 16,
+15, 8, 7 (mean 10.7): the stalls were the bot's, at tier 5, short of land.
+
+| tier | days, before | after | earned a day $, before | after | goods' share, before | after | herding's share (stock, orders, favour, trials), before | after | purse at tier end $, before | after | worth buying left at tier end $ (and how much of it affordable), before | after |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2.0 | 2.0 | 133 | 125 | 42% | 33% | 58% | 67% | 89 | 75 | 1261 (10 of 16) | 1621 (9 of 16) |
+| 2 | 1.0 | 1.0 | 406 | 342 | 51% | 42% | 45% | 54% | 85 | 75 | 853 (3 of 6) | 1288 (2 of 7) |
+| 3 | 1.0 | 1.0 | 470 | 421 | 63% | 47% | 34% | 45% | 180 | 60 | 702 (3 of 5) | 1145 (1 of 6) |
+| 4 | 2.2 | 1.5 | 575 | 472 | 73% | 46% | 26% | 46% | 697 | 304 | 365 (3 of 4) | 1220 (3 of 5) |
+| 5 | 2.2 | 2.7 | 1036 | 729 | 64% | 42% | 26% | 43% | 2570 | 1260 | 265 (3 of 3) | 402 (3 of 3) |
+
+(The rest of the income is legacy prizes, places found and stock sold to
+make room. The bot never digs, does no valley projects and passes up the
+shed, dairy and agility yard while land is short, so a player who does
+them earns a little more; those pay for herding work too, but for the
+loot.)
+
+**Two years** (`--year --days=34`, three seeds):
+
+| season | purse at end $, before | after | goods' share, before | after | animals in the world, before | after | young | penned, before | after |
+|---|---|---|---|---|---|---|---|---|---|
+| y1 spring | 190 | 57 | 53% | 41% | 144 | 160 | 19 | 39 | 37 |
+| y1 summer | 2181 | 1126 | 72% | 44% | 257 | 252 | 0 | 65 | 59 |
+| y1 autumn | 5503 | 2957 | 74% | 57% | 255 | 224 | 0 | 74 | 79 |
+| y1 winter | 9056 | 4949 | 78% | 70% | 311 | 266 | 15 | 80 | 80 |
+| y2 spring | 13823 | 8065 | 81% | 62% | 358 | 336 | 32 | 88 | 87 |
+| y2 summer | 19062 | 10807 | 76% | 77% | 395 | 355 | 0 | 88 | 99 |
+| y2 winter | 27153 | 15603 | 91% | 71% | 372 | 328 | 11 | 98 | 105 |
+| y3 spring | 29875 | 17232 | 82% | 69% | 392 | 339 | 16 | 101 | 110 |
+
+After the valley thrives, coin still piles up (700-850$ a day) with little
+left to buy, and goods are most of it again (the bot's herds are home and
+it has no room for more). That is a design question beyond a balance pass:
+late-game things to buy (more land, a second holding, things for the
+village) would give it somewhere to go.
+
+**Frame work** (perftest at 4x CPU throttle, the tier-5 fixture, best
+batches of repeated runs; the two builds measure the same at the same
+count): about 13ms a day frame and 17-18.6ms in the worst scene (a storm
+night with predators) at 340 animals. The cap keeps year two's world at
+about 340 animals instead of about 390. The worst scene is over 16.7ms even
+at the fixture's 170 animals, on the base as on this branch.
+
+Known, not from this branch (they fail on test/round-5 too): achievetest
+"a tapped card opens the Ledger at its badge", picturetest "day".
+
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
   It is gitignored and was removed from history before the first push: it
@@ -2190,6 +2276,18 @@ Round four: 234 x 507 world pixels drawn 1:1. Now: 195 x 422 world, 390 x
   whether the file exists), so each branch works alone and merged.
 - With mixed flocks a fair entry goes home to any paddock it can share
   (the fair's goat to the sheep's), as everywhere else.
+- Balance (round six): herding stays the best way to earn by cutting the
+  passive side, not by paying herding more across the board. Goods stay
+  a reward for calm herds (stress still cuts them) but a packed paddock
+  makes half, and the one new bonus is for the hardest herding: a big
+  drove brought in calm. Crowding is a production factor only, not
+  stress, so it does not spill into order pay, the fair or breeding's calm
+  test (breeding has its own room rule).
+- Prices raised are the late ones only, so the early game (and day one's
+  kennel) plays as before and tiers 4-5 still end with a choice.
+- The wild cap (260) counts animals that are not yours (not penned, not
+  home, not entries or for sale), checked each morning before a new flock
+  or a drove.
 - Breeding (round five): once a year, on the first two mornings of the
   kind's season (spring; ponies summer), from tier 2. Chances a season:
   ducks 0.5 (2-3 ducklings), sheep 0.93 (15% twins), goats 0.8 (40% twins),
