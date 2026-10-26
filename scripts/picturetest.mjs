@@ -62,6 +62,29 @@ const diffs = await page.evaluate(async ({ save, night }) => {
 bad += diffs.slice(0, 4).filter(Boolean).length;
 console.log(`${diffs.slice(0, 4).every((d) => !d) ? 'ok  ' : 'FAIL'} ${night ? 'night, storm' : 'day'}: pixels that differ at three spots: ${diffs.slice(0, 3).join(', ')}; over 60 moving frames: ${diffs[3]} (pictures ${diffs[4]})`);
 }
+// The chunked fine layer (src/gfx/chunks.ts) draws what a plain layer does:
+// the baked ground through a FineLayer, moving about, against drawImage.
+await page.goto(`http://localhost:${PORT}/?debug`);
+await page.waitForFunction(() => window.game);
+const layer = await page.evaluate(async () => {
+  const g = window.game;
+  const { FineLayer } = await import('/src/gfx/chunks.ts');
+  const { WORLD_W, WORLD_H } = await import('/src/world/map.ts');
+  const src = g.baked.ground;
+  const L = new FineLayer(WORLD_W, WORLD_H, (cg, x0, y0, w, h) => cg.drawImage(src, x0, y0, w, h, x0, y0, w, h), { keep: 12 });
+  const sg = g.screen.g, { W, H } = g.screen;
+  let diff = 0;
+  for (const [ox, oy] of [[700, 760], [710, 765], [300, 200], [1000, 900], [0, 0], [WORLD_W - W, WORLD_H - H]]) {
+    L.draw(sg, ox, oy, W, H);
+    const a = sg.getImageData(0, 0, g.screen.FW, g.screen.FH).data;
+    sg.drawImage(src, ox, oy, W, H, 0, 0, W, H);
+    const b = sg.getImageData(0, 0, g.screen.FW, g.screen.FH).data;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diff++;
+  }
+  return diff;
+});
+if (layer) bad++;
+console.log(`${layer ? 'FAIL' : 'ok  '} chunked fine layer: pixels that differ from the plain layer at six spots: ${layer}`);
 if (errs.length) console.log('ERRORS', errs);
 await b.close();
 await server.close();

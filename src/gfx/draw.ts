@@ -1,4 +1,5 @@
 import { C } from '../palette';
+import { PX, fine, makeCanvas } from './screen';
 
 export function rect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   g.fillStyle = color;
@@ -74,14 +75,32 @@ export function panel(g: CanvasRenderingContext2D, x: number, y: number, w: numb
 // 4x4 Bayer matrix, thresholds 0..15.
 export const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
-// Ordered-dither fill of a rect: level 0 = nothing, 16 = solid.
-export function ditherRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, level: number, color: string) {
-  g.fillStyle = color;
-  x = Math.round(x); y = Math.round(y);
-  for (let j = 0; j < h; j++) {
-    for (let i = 0; i < w; i++) {
-      const px = x + i, py = y + j;
-      if (BAYER4[(py & 3) * 4 + (px & 3)] < level) g.fillRect(px, py, 1, 1);
-    }
+// Ordered-dither fill of a rect: level 0 = nothing, 16 = solid. The dots
+// are fine pixels, anchored to the world (one pattern fill, not a fillRect
+// a dot).
+const dithers = new Map<string, CanvasPattern | null>();
+export function ditherPattern(level: number, color: string): CanvasPattern | null {
+  const l = Math.max(0, Math.min(16, Math.ceil(level)));
+  const key = l + color;
+  let p = dithers.get(key);
+  if (p === undefined) {
+    const [c, g] = makeCanvas(4, 4);
+    g.fillStyle = color;
+    for (let i = 0; i < 16; i++) if (BAYER4[i] < l) g.fillRect(i % 4, Math.floor(i / 4), 1, 1);
+    p = g.createPattern(c, 'repeat');
+    dithers.set(key, p);
   }
+  return p;
+}
+
+export function ditherRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, level: number, color: string) {
+  if (level <= 0) return;
+  x = Math.round(x); y = Math.round(y);
+  if (level >= 16) return rect(g, x, y, w, h, color);
+  const p = ditherPattern(level, color);
+  if (!p) return;
+  fine(g, (fg) => {
+    fg.fillStyle = p;
+    fg.fillRect(x * PX, y * PX, Math.round(w) * PX, Math.round(h) * PX);
+  });
 }
