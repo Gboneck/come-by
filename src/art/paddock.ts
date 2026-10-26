@@ -5,7 +5,8 @@ import { makeCanvas } from '../gfx/screen';
 import { hash2 } from '../rng';
 import { ROOFS, farmLook } from './ranchstyle';
 import { seasonLook, snowCap } from './seasonlook';
-import { drawGood, gateLeaf, groundShadow, post, postCap, railCol, type Drawable } from './buildings';
+import { gateLeaf, groundShadow, post, postCap, railCol, type Drawable } from './buildings';
+import { goodsDrawables } from './goods';
 import type { Pen } from '../ranch/buildings';
 import { CS, TS } from '../world/map';
 
@@ -152,19 +153,12 @@ export function penDrawables(g: CanvasRenderingContext2D, pen: Pen, t: number, s
 
   for (const f of fixtures) out.push(...fixtureDrawables(g, f, t));
 
-  // Goods waiting, each drawn as its kind's (a mixed paddock shows several).
-  const goods = p.goodsList ? p.goodsList().slice(0, 12) : p.species ? Array<string>(Math.min(12, p.goods)).fill(p.species) : [];
-  if (goods.length) {
-    out.push({
-      y: p.iy1 - 2,
-      draw: () => {
-        goods.forEach((sp, i) => {
-          const gx = p.ix0 + 3 + (i % 6) * 4, gy = p.iy1 - 4 - Math.floor(i / 6) * 4;
-          drawGood(g, sp, gx, gy);
-        });
-      },
-    });
-  }
+  // Goods waiting for the cart: a pile of each kind along the back fence
+  // (art/goods.ts), clear of the fixtures.
+  out.push(...goodsDrawables(g, p, (tx, ty) => fixtures.some((f) => {
+    const [fw, fh] = FIXTURE_SIZE[f.kind];
+    return tx >= f.tx && tx < f.tx + fw && ty >= f.ty && ty < f.ty + fh;
+  })));
 
   const hGap = (r: number) => (p.rot === r ? [s.x0, s.x1] as [number, number] : undefined);
   const vGap = (r: number) => (p.rot === r ? [s.y0, s.y1] as [number, number] : undefined);

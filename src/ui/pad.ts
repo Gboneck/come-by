@@ -164,6 +164,7 @@ const RULES: [RegExp, string][] = [
   [/\bX: (REMOVE|PICK IT UP)/g, '(X) $1'],
   // Buttons and cards.
   [/\bSPACE: NEXT DAY\b/g, '(A) NEXT DAY'],
+  [/\bSPACE: GO ON\b/g, '(A) GO ON'],
   [/\bB: BUILD\b/g, '(LB) BUILD'],
   [/^Q\/E: PAGE {2}TAB: CLOSE$/, '(LB)(RB) PAGE  (B) CLOSE'],
   [/\bTAB: CLOSE\b/g, '(B) CLOSE'],

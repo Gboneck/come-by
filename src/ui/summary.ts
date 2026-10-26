@@ -7,6 +7,7 @@ import type { DayStats, Game } from '../game';
 import { SPECIES, SPECIES_ORDER } from '../entities/species';
 import { nextGoal } from '../systems/progression';
 import { dimView } from './feel';
+import { drawSale, saleLen, type Sale } from './sale';
 import { SKY_WORD, skyIcon } from './icons';
 
 export interface Summary {
@@ -18,6 +19,8 @@ export interface Summary {
   penned: number;
   buildable?: string[];
   lost?: number;
+  sale?: Sale; // the day's goods, sold as the cart comes by
+  saleSkipped?: boolean;
 }
 
 const ROW_STEP = 0.07; // rows of the card arrive one after another
@@ -38,7 +41,13 @@ function tape(g: CanvasRenderingContext2D, x: number, y: number, w: number) {
 export function drawSummary(game: Game, g: CanvasRenderingContext2D, W: number, H: number): 'next' | 'build' | null {
   const s = game.summary!;
   const ui = game.ui;
-  const age = game.summaryT;
+  // First the cart comes for the day's goods (ui/sale.ts).
+  const sale = saleLen(s);
+  if (game.summaryT < sale) {
+    drawSale(game, g, W, H, game.summaryT);
+    return null;
+  }
+  const age = game.summaryT - sale;
   const touch = game.input.touchMode;
   const pw = Math.min(W - 16, 168);
   const lines: [string, string, string?][] = [];

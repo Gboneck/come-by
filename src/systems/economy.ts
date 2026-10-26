@@ -1,4 +1,3 @@
-import { C } from '../palette';
 import type { Game } from '../game';
 import { BASE_STATS, type DogStats } from '../entities/dog';
 import type { Pen } from '../ranch/buildings';
@@ -23,7 +22,7 @@ export function updateProduce(game: Game, dt: number) {
         a.produceT -= sp.goodEvery;
         p.goods++;
         p.goodsBy[sp.id] = (p.goodsBy[sp.id] ?? 0) + 1;
-        if (game.isOnScreen(a.x, a.y)) game.fx.float(a.x, a.y - 8, `+1 ${sp.good.toUpperCase().replace(/S$/, '')}`, C.wool, 0.9);
+        if (game.isOnScreen(a.x, a.y)) game.fx.good(a.x, a.y - 8, sp.id); // its icon and a +1
       }
     }
   }

@@ -1,6 +1,7 @@
 import { C } from '../palette';
 import { rect } from '../gfx/draw';
 import { panel } from './frame';
+import { drawGoodsTally } from './goods';
 import { heading, headingWidth, text, textWidth } from '../gfx/font';
 import { drawSpr } from '../gfx/sprite';
 import { animalSprites } from '../art/animals';
@@ -211,7 +212,11 @@ export function drawHud(game: Game, g: CanvasRenderingContext2D, W: number, H: n
     if (button(game, g, 'hud-help', R - hw, rightY, hw, bh, C.butter)) game.input.push('helper');
     icon(g, 'helper', R - hw + 4, rightY + Math.floor((bh - 5) / 2));
     text(g, label, R - hw + 11, rightY + ty, C.wool);
+    rightY += bh + 2;
   }
+
+  // ---- Today's goods, and what they fetch at day's end ----
+  drawGoodsTally(game, g, R, rightY, W >= 300);
 
   // ---- Next goal (always visible; tap or Tab for the ledger) ----
   let cardY = T + 20;
