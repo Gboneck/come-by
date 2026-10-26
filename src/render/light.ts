@@ -109,8 +109,10 @@ export class FineWorld {
     for (const { c, vis: v } of todo) {
       // Painting a missing chunk in view is urgent the first time round;
       // otherwise stop when the budget is spent.
+      // Only the first frames (the game just loaded) paint everything they
+      // need at once; after that the old ground stands in for a moment.
       const missing = v && !c.ground;
-      if (performance.now() - t0 > BUDGET_MS && !(urgent && missing)) break;
+      if (performance.now() - t0 > BUDGET_MS && !(urgent && missing && this.frame <= 2)) break;
       this.update(baked, c);
     }
     this.stats.ms = performance.now() - t0;

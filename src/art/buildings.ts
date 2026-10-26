@@ -168,26 +168,17 @@ export function gateLeaf(g: CanvasRenderingContext2D, hx: number, hy: number, al
 export { penDrawables } from './paddock';
 
 // Tiny goods: egg, wool tuft, cheese wedge, milk can.
+// Tiny goods on the fine grid: an egg, a wool fleece, a cheese wedge, a
+// milk can.
+const GOODS: Record<string, string[]> = {
+  duck: ['.ww.', 'wwww', 'wwws', '.ss.'],
+  sheep: ['.ww.w.', 'wwwwww', 'wwwwws', '.ssss.'],
+  goat: ['y.....', 'yyy...', 'yyyyy.', 'ypyyyy', 'ssssss'],
+  cow: ['.pp.', 'wwww', 'wtww', 'wwws', 'wwws', '.ss.'],
+};
 export function drawGood(g: CanvasRenderingContext2D, sp: string, x: number, y: number) {
-  switch (sp) {
-    case 'duck':
-      rect(g, x, y, 2, 2, C.wool);
-      px(g, x, y + 2, C.sage);
-      break;
-    case 'sheep':
-      rect(g, x, y + 1, 3, 2, C.wool);
-      px(g, x + 1, y, C.wool);
-      break;
-    case 'goat':
-      rect(g, x, y + 1, 3, 2, C.butter);
-      px(g, x, y, C.butter);
-      px(g, x + 1, y + 2, C.plum);
-      break;
-    case 'cow':
-      rect(g, x, y, 2, 3, C.wool);
-      rect(g, x, y, 2, 1, C.plum);
-      break;
-  }
+  const rows = GOODS[sp];
+  if (rows) fine(g, (fg) => grid(fg, rows, x * PX, y * PX));
 }
 
 // ---- Shared pieces ----
