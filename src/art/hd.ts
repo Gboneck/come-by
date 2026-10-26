@@ -68,6 +68,7 @@ export function spr2(rows: Grid, ax: number, ay: number): Sprite {
 // Fine-pixel drawing from inside the world's frame. `x, y` are world
 // positions; offsets are in fine pixels.
 const fx0 = (x: number) => Math.round(x * PX);
+const u = 1 / PX; // a fine pixel, in world units
 
 // Only the top `rows` grid rows of a sprite (wading: the legs under water),
 // placed exactly as drawSpr would place it. Returns where it went, in fine
@@ -76,24 +77,25 @@ export function drawSprTop(g: CanvasRenderingContext2D, s: Sprite, x: number, y:
   const k = PX / (s.d ?? 1);
   const left = fx0(x) - (flip ? s.w - 1 - s.ax : s.ax) * k, top = fx0(y) - s.ay * k;
   const h = Math.max(0, Math.min(s.h, rows));
+  if (!h) return { left, top, k };
+  if (!flip) {
+    g.drawImage(s.img, 0, 0, s.w, h, left * u, top * u, s.w * k * u, h * k * u);
+    return { left, top, k };
+  }
   fine(g, (fg) => {
-    if (!h) return;
-    if (!flip) fg.drawImage(s.img, 0, 0, s.w, h, left, top, s.w * k, h * k);
-    else {
-      fg.translate(left + s.w * k, top);
-      fg.scale(-1, 1);
-      fg.drawImage(s.img, 0, 0, s.w, h, 0, 0, s.w * k, h * k);
-    }
+    fg.translate(left + s.w * k, top);
+    fg.scale(-1, 1);
+    fg.drawImage(s.img, 0, 0, s.w, h, 0, 0, s.w * k, h * k);
   });
   return { left, top, k };
 }
 
-// Single fine pixels (drips, ripples, wakes) at fine coordinates.
+// Single fine pixels (drips, ripples, wakes) at fine coordinates. Drawn in
+// world units at half-pixel steps, which land exactly on the fine grid
+// (no transform change per call).
 export function finePixels(g: CanvasRenderingContext2D, color: string, pts: number[]) {
-  fine(g, (fg) => {
-    fg.fillStyle = color;
-    for (let i = 0; i < pts.length; i += 2) fg.fillRect(pts[i], pts[i + 1], 1, 1);
-  });
+  g.fillStyle = color;
+  for (let i = 0; i < pts.length; i += 2) g.fillRect(pts[i] * u, pts[i + 1] * u, u, u);
 }
 export const toFinePx = fx0;
 
@@ -101,13 +103,11 @@ export const toFinePx = fx0;
 // round world (x, y), its edge as smooth as the fine grid allows.
 export function fineShadow(g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, color: string) {
   const cx = fx0(x), cy = fx0(y);
-  fine(g, (fg) => {
-    fg.fillStyle = color;
-    const iry = Math.max(0, Math.round(ry));
-    for (let dy = -iry; dy <= iry; dy++) {
-      const t = iry === 0 ? 0 : dy / (ry + 0.5);
-      const hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - t * t)));
-      fg.fillRect(cx - hw, cy + dy, hw * 2 + 1, 1);
-    }
-  });
+  g.fillStyle = color;
+  const iry = Math.max(0, Math.round(ry));
+  for (let dy = -iry; dy <= iry; dy++) {
+    const t = iry === 0 ? 0 : dy / (ry + 0.5);
+    const hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - t * t)));
+    g.fillRect((cx - hw) * u, (cy + dy) * u, (hw * 2 + 1) * u, u);
+  }
 }
