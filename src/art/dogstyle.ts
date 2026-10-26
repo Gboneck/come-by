@@ -114,3 +114,27 @@ export function soaked(s: DogSprites): DogSprites {
   if (!w) wets.set(s, (w = makeDogSprites(s.bandana, s.look, true)));
   return w;
 }
+
+// Fine-pixel grids (double density) carry every look in their letters, so
+// there is no geometry to guess: k bandana bulk, K a fold in it, f its loose
+// ends, n a neckerchief's point, i the eye, j its glint, h the mask round
+// the near eye, H round the far one, a the tail tip, v a fleck, x a fleck
+// only a heavily flecked coat has, d the saddle.
+export function dressFine(rows: string[], look: DogLook, wet = false): string[] {
+  const collar = look.neck === 'collar';
+  const T: Record<string, string> = {
+    k: collar ? 't' : 'r',
+    K: collar ? 't' : 'p',
+    f: collar ? '.' : 'r',
+    n: look.neck === 'neckerchief' ? 'r' : 't',
+    i: 'p',
+    j: 'w',
+    h: look.mask === 'none' ? 'w' : 'p',
+    H: look.mask === 'both' ? 'p' : 'w',
+    a: look.tailTip ? 'w' : 't',
+    v: look.speckle === 'light' ? 't' : wet ? 's' : 'w',
+    x: look.speckle === 'heavy' ? (wet ? 's' : 'w') : 't',
+    d: look.saddle ? 'p' : 't',
+  };
+  return rows.map((r) => r.replace(/[kKfnijhHavxd]/g, (c) => T[c]));
+}
