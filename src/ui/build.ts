@@ -5,7 +5,7 @@ import { drawSpr } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef } from '../ranch/catalog';
 import { Building, Pen, type Rot } from '../ranch/buildings';
-import { fixtureProblem, isFixture, placeFixture } from '../ranch/paddock';
+import { extendPaddock, extendPrice, extendProblem, fixtureProblem, isFixture, placeFixture } from '../ranch/paddock';
 import { AgilityYard, Barn, Dairy, FieldGate, Fence, Haystack, Kennel, Market, ShearingShed, Windmill } from '../ranch/structures';
 import { MW, TS, Ter, regionById } from '../world/map';
 import { MAX_UP, UPGRADES, livestockPrice, penGoodsValue, priceMult, type UpKey } from '../systems/economy';
@@ -187,7 +187,24 @@ export class BuildMode {
       game.fx.dust(gh.tx * TS + Math.random() * gh.w * TS, (gh.ty + gh.h) * TS - 1, (Math.random() - 0.5) * 20, 0);
   }
 
+  // A paddock grows instead (until drag handles come): the side nearest the
+  // cursor moves out two tiles, paying only for the new fence.
+  private extendSide(b: Pen): Rot {
+    const d = [this.cy - b.ty, b.tx + b.w - 1 - this.cx, b.ty + b.h - 1 - this.cy, this.cx - b.tx]; // N, E, S, W
+    const k = d.indexOf(Math.min(...d));
+    return ([2, 3, 0, 1] as Rot[])[k];
+  }
+
   private upgrade(game: Game, b: Building) {
+    if (b instanceof Pen) {
+      const side = this.extendSide(b);
+      const why = extendProblem(game, b, side, 2);
+      if (why) return this.say(why);
+      extendPaddock(game, b, side, 2);
+      this.say(`PADDOCK EXTENDED: ROOM FOR ${b.capacity}`, true);
+      game.audio?.play('build');
+      return;
+    }
     const d = defOfKind(b.kind);
     if (!d?.upgrade || b.level >= 2) return this.say('NOTHING TO UPGRADE');
     if (game.tier < d.upgrade.tier) return this.say(`UPGRADE AT TIER ${d.upgrade.tier}`);
@@ -538,12 +555,14 @@ export class BuildMode {
     const ud = under ? defOfKind(under.kind) : null;
     const lines: string[] = [];
     let title = '';
-    if (under && ud && this.def.id !== 'trough') {
+    if (under && ud && !isFixture(this.def.id)) {
       title = `${ud.name}${under.level > 1 ? ' II' : ''}`;
       if (under instanceof Pen) {
-        const sp = under.species ? SPECIES[under.species] : null;
-        lines.push(sp ? `${under.animals.length} ${sp.plural.toUpperCase()}, ${under.goods} GOODS` : 'EMPTY');
-        if (under.hasTrough) lines.push('HAS A TROUGH');
+        const kinds = under.kinds.map((k) => `${under.animals.filter((a) => a.sp.id === k).length} ${SPECIES[k].plural.toUpperCase()}`);
+        lines.push(kinds.length ? `${kinds.join(', ')}, ${under.goods} GOODS` : 'EMPTY');
+        lines.push(`${under.w}X${under.h}, ROOM ${under.used}/${under.capacity}${under.fixtures.length ? `, ${under.fixtures.map((f) => f.kind.toUpperCase()).join(', ')}` : ''}`);
+        const side = this.extendSide(under);
+        lines.push(`U: EXTEND ${['SOUTH', 'WEST', 'NORTH', 'EAST'][side]} 2 (${extendPrice(under, side, 2)}$)`);
       }
       if (ud.upgrade && under.level < 2) lines.push(`U: UPGRADE ${ud.upgrade.cost}$ (${ud.upgrade.desc})`);
       lines.push('X: REMOVE');
@@ -576,7 +595,8 @@ export class BuildMode {
       if (this.def.rotates) btn('b-rot', 'TURN', () => game.input.push('rotate'));
       if (under && ud) {
         btn('b-rm', 'REMOVE', () => game.input.push('remove'));
-        if (ud.upgrade && under.level < 2) btn('b-up', 'UPGRADE', () => game.input.push('upgrade'));
+        if (under instanceof Pen) btn('b-up', 'EXTEND', () => game.input.push('upgrade'));
+        else if (ud.upgrade && under.level < 2) btn('b-up', 'UPGRADE', () => game.input.push('upgrade'));
       }
     } else {
       text(g, 'ARROWS MOVE  Q/E PICK  R TURN  SPACE BUILD', W / 2, by - ih - 14, C.wool, { align: 'center', shadow: C.plum });
