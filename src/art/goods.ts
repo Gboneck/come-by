@@ -154,15 +154,27 @@ interface PenLike {
   goods: number;
   goodsBy: Partial<Record<string, number>>;
   species: string | null;
+  items?: { sp: string }[]; // goods as laid (Gameplay's), which reach a co-op guest
+}
+
+// What a paddock holds, by kind: its own count, else (on a friend's copy
+// of the ranch) counted from the goods laid, else all of its first kind.
+export function goodsByKind(p: PenLike): [string, number][] {
+  const by = Object.entries(p.goodsBy ?? {}).filter(([, n]) => (n ?? 0) > 0) as [string, number][];
+  if (by.length || !p.goods) return by;
+  if (p.items?.length) {
+    const m = new Map<string, number>();
+    for (const it of p.items) m.set(it.sp, (m.get(it.sp) ?? 0) + 1);
+    return [...m];
+  }
+  return p.species ? [[p.species, p.goods]] : [];
 }
 
 // The goods waiting in a paddock, each kind's pile along the back fence (the
 // side away from the gate), clear of the fixtures. `blocked(tx, ty)`: a tile
 // a fixture stands on.
 export function goodsDrawables(g: CanvasRenderingContext2D, p: PenLike, blocked: (tx: number, ty: number) => boolean): Drawable[] {
-  const by = Object.entries(p.goodsBy).filter(([k, n]) => (n ?? 0) > 0 && k in ROOM) as [GoodKind, number][];
-  // An older pen counts its goods without saying by whom.
-  if (!by.length && p.goods > 0 && p.species && p.species in ROOM) by.push([p.species as GoodKind, p.goods]);
+  const by = goodsByKind(p).filter(([k]) => k in ROOM) as [GoodKind, number][];
   if (!by.length) return [];
   // Spots along the back fence, 12px apart, that a pile can stand on.
   const W = 11, Hh = 12;

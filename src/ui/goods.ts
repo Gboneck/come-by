@@ -3,7 +3,7 @@ import { text, textWidth } from '../gfx/font';
 import type { Game } from '../game';
 import { penGoodsValue } from '../systems/economy';
 import { isMarketDay } from '../systems/valley';
-import { drawGoodIcon, goodIcon } from '../art/goods';
+import { drawGoodIcon, goodIcon, goodsByKind } from '../art/goods';
 import { sprW } from '../gfx/sprite';
 import { panel } from './frame';
 
@@ -20,10 +20,7 @@ export function goodsTally(game: Game): Tally {
     if (!p.goods) continue;
     total += p.goods;
     value += penGoodsValue(game, p);
-    const entries = Object.entries(p.goodsBy ?? {}).filter(([, n]) => (n ?? 0) > 0) as [string, number][];
-    // A friend's copy of the ranch only knows the count and the first kind.
-    if (!entries.length && p.species) entries.push([p.species, p.goods]);
-    for (const [k, n] of entries) by.set(k, (by.get(k) ?? 0) + n);
+    for (const [k, n] of goodsByKind(p)) by.set(k, (by.get(k) ?? 0) + n);
   }
   if (isMarketDay(game)) value = Math.round(value * 1.25);
   const order = ['duck', 'sheep', 'goat', 'cow'];
