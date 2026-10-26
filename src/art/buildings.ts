@@ -4,6 +4,7 @@ import { line, rect, px } from '../gfx/draw';
 import { hash2 } from '../rng';
 import { lightLook, seasonLook, snowCap } from './seasonlook';
 import { PX, fine, makeCanvas } from '../gfx/screen';
+import { grid } from './fine';
 import type { Building, RegionGate } from '../ranch/buildings';
 import type { FieldGate, Fence, Barn, Kennel, Market, Windmill } from '../ranch/structures';
 import { CS } from '../world/map';
@@ -578,15 +579,11 @@ export function regionGateDrawables(g: CanvasRenderingContext2D, rg: RegionGate,
   return out;
 }
 
+// A little padlock sign on the fine grid: a buttercup lock with its
+// shackle and keyhole on a plum plate.
+const LOCK = ['....ppppp....', '...pp...pp...', '...p.....p...', '...p.....p...', 'ppppppppppppp', 'pyyyyyyyyyyyp', 'pywyyyyyyyyyp', 'pyyyyypyyyyyp', 'pyyyyypyyyyyp', 'pyyyyyyyyyyyp', 'pyyyyyyyyyyyp', 'ppppppppppppp'];
 function lockSign(g: CanvasRenderingContext2D, x: number, y: number, _t: number) {
-  // A little padlock sign.
-  rect(g, x - 4, y, 9, 8, C.plum);
-  rect(g, x - 3, y + 3, 7, 4, C.butter);
-  rect(g, x - 2, y - 2, 1, 3, C.plum);
-  rect(g, x + 2, y - 2, 1, 3, C.plum);
-  rect(g, x - 1, y - 3, 3, 1, C.plum);
-  px(g, x, y + 4, C.plum);
-  px(g, x, y + 5, C.plum);
+  fine(g, (fg) => grid(fg, LOCK, x * PX - 6, y * PX - 4));
 }
 
 // ---- Free-standing fence panels and field gates ----

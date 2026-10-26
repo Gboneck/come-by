@@ -172,10 +172,9 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
     for (const b of game.ranch.buildings) if (b instanceof Barn) lights.push({ x: b.cx - ox, y: b.y1 + 2 - oy, r: (b.level >= 2 ? 70 : 60) + fl(b.id) });
     for (const y of game.ranch.yards) if (y.site.id === 'drover') { const f = yardFire(y.site); lights.push({ x: f.x - ox, y: f.y - oy, r: 30 + fl(7) * 2, warm: true }); }
   }
-  // Morning mist, lying in drifts until the sun gets up (fair days only).
+  // (Round four's morning mist reused the fog dither; at double density that
+  // laid a grid of dots over every morning, so it is gone.)
   const sk = game.life.wx.sky(game, dark);
-  const f = game.day.frac, w = game.weather;
-  if (quality.shade && game.day.phase === "day" && f < 0.12 && w.rain < 0.1) sk.fog = Math.max(sk.fog ?? 0, 0.18 * (1 - f / 0.12) * (1 - w.wind * 0.7));
   if ((sk.fog ?? 0) > 0.03 && dark <= 0 && !lights.length) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
   game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk });
   game.life.wx.drawAir(g, game, W, H, dark > 0.25);
