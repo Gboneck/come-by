@@ -6,6 +6,7 @@ import { isMarketDay } from '../systems/valley';
 import { drawGoodIcon, goodIcon, goodsByKind } from '../art/goods';
 import { sprW } from '../gfx/sprite';
 import { panel } from './frame';
+import { boxH, textIn } from './metrics';
 
 // Today's goods in the HUD: an icon and a count for each kind the stock has
 // made, and what it all fetches when the cart comes at day's end. The card
@@ -47,17 +48,17 @@ export function drawGoodsTally(game: Game, g: CanvasRenderingContext2D, R: numbe
     return { ...k, s: `${k.n}`, iw: (ic ? Math.ceil(sprW(ic)) : 0) + 1 };
   });
   const w = parts.reduce((s, p) => s + p.iw + textWidth(p.s) + 3, 0) + textWidth(tail) + 7;
-  const h = 11, x0 = R - w;
+  const h = boxH(11), x0 = R - w, ty = textIn(h);
   const hot = flash > 0 && Math.floor(flash * 12) % 2 === 0;
   panel(g, x0, y, w, h, C.plum, hot ? C.butter : C.sage);
   let x = x0 + 4;
   for (const p of parts) {
     const s = goodIcon(p.kind);
-    if (s) drawGoodIcon(g, p.kind, x + sprW(s) / 2, y + 8);
+    if (s) drawGoodIcon(g, p.kind, x + sprW(s) / 2, y + h - 3);
     x += p.iw;
-    text(g, p.s, x, y + 3, C.wool);
+    text(g, p.s, x, y + ty, C.wool);
     x += textWidth(p.s) + 3;
   }
-  text(g, tail, x - 2, y + 3, C.butter, { iconColor: C.butter });
+  text(g, tail, x - 2, y + ty, C.butter, { iconColor: C.butter });
   return h;
 }

@@ -1,8 +1,9 @@
 import { C } from '../palette';
 import { prose, sentence } from './case';
+import { boxH, textIn, touchScale } from './metrics';
 import { ditherRect, rect, ring } from '../gfx/draw';
 import { panel } from './frame';
-import { heading, text, textWidth } from '../gfx/font';
+import { heading, text, textWidth, lineHeight } from '../gfx/font';
 import { drawSpr, sprH, sprW } from '../gfx/sprite';
 import type { Game } from '../game';
 import { CATALOG, defOfKind, footprint, type BuildDef, type ItemId } from '../ranch/catalog';
@@ -534,7 +535,8 @@ export class BuildMode {
     const S = safeArea(game.screen);
     const top = 2 + S.top, R = W - 2 - S.right;
     const touch = inp.touchMode;
-    const th = touch ? 13 : 11, tt = touch ? 4 : 3, p = touch ? 3 : 0;
+    // Tabs and buttons keep their size under a finger in either view.
+    const th = boxH(touch ? Math.round(13 * touchScale(game)) : 11), tt = textIn(th), p = touch ? 3 : 0;
 
     // Tabs and DONE.
     let x = 2 + S.left;
@@ -552,9 +554,10 @@ export class BuildMode {
     if (ui.click('done', R - dw - p, top - p, dw + p * 2, th + p * 2)) result = 'exit';
     const coinStr = `${game.coins}$`;
     const cw = textWidth(coinStr) + 8;
-    panel(g, R - cw, top + th + 2, cw, 11);
-    text(g, coinStr, R - 4, top + th + 5, C.wool, { align: 'right', iconColor: C.butter });
-    const uiTop = top + th + 14; // world taps start below the top bar
+    const ch1 = boxH(11);
+    panel(g, R - cw, top + th + 2, cw, ch1);
+    text(g, coinStr, R - 4, top + th + 2 + textIn(ch1), C.wool, { align: 'right', iconColor: C.butter });
+    const uiTop = top + th + ch1 + 3; // world taps start below the top bar
 
     if (this.tab === 'build') this.drawBuildBar(game, g, W, H);
     else if (this.tab === 'decor') this.drawDecorBar(game, g, W, H);
@@ -565,8 +568,9 @@ export class BuildMode {
     if (this.msg) {
       const m = { ...this.msg, text: sentence(this.msg.text) };
       const tw = textWidth(m.text);
-      panel(g, Math.round(W / 2 - tw / 2 - 5), uiTop + 2, tw + 10, 11, C.plum, m.good ? C.butter : C.sage);
-      text(g, m.text, W / 2, uiTop + 5, m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
+      const mh = boxH(11);
+      panel(g, Math.round(W / 2 - tw / 2 - 5), uiTop + 2, tw + 10, mh, C.plum, m.good ? C.butter : C.sage);
+      text(g, m.text, W / 2, uiTop + 2 + textIn(mh), m.good ? C.butter : C.wool, { align: 'center', iconColor: C.butter });
     }
 
     // World taps / clicks move the cursor (and a mouse click builds).
@@ -602,7 +606,7 @@ export class BuildMode {
     const S = safeArea(game.screen);
     const L = 2 + S.left, R_ = W - 2 - S.right;
     // Two rows when one would make the cells too narrow to tap.
-    const rows = Math.floor((R_ - L) / n) < 20 ? 2 : 1;
+    const rows = Math.floor((R_ - L) / n) < 20 * (game.input.touchMode ? touchScale(game) : 1) ? 2 : 1;
     const per = Math.ceil(n / rows);
     const cw = Math.min(28, Math.floor((R_ - L) / per));
     const bx = Math.round((L + R_) / 2 - (cw * per) / 2), by = H - 26 * rows - S.bottom;
@@ -669,14 +673,14 @@ export class BuildMode {
       const gh = this.ghost(game);
       if (!gh.ok && gh.reason) lines.push(sentence(gh.reason));
     }
-    const ih = 13 + lines.length * 6 + (pd ? 6 : 0);
+    const ih = 13 + lines.length * lineHeight() + (pd ? 6 : 0);
     const iy = by - 6 - ih;
     panel(g, L, iy, R_ - L, ih);
     infoTitle(g, title, L + 4, iy + 3);
-    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * lineHeight(), C.wool, { iconColor: C.butter }));
     if (pd) {
       // How full it is: a bar of spaces.
-      const bw0 = Math.min(R_ - L - 8, 120), bx0 = L + 4, by0 = iy + 13 + lines.length * 6;
+      const bw0 = Math.min(R_ - L - 8, 120), bx0 = L + 4, by0 = iy + 13 + lines.length * lineHeight();
       rect(g, bx0, by0, bw0, 4, C.sage);
       rect(g, bx0, by0, Math.round((bw0 * Math.min(pd.used, pd.capacity)) / Math.max(1, pd.capacity)), 4, C.teal);
       rect(g, bx0, by0, bw0, 1, C.plum);
@@ -684,11 +688,11 @@ export class BuildMode {
 
     // Touch buttons.
     if (game.input.touchMode) {
-      const bw = 40, bh = 15, rx = R_ - bw;
+      const k = touchScale(game), bw = Math.round(40 * k), bh = boxH(Math.round(15 * k)), rx = R_ - bw;
       let y = iy - bh - 3;
       const btn = (id: string, label: string, act: () => void) => {
         panel(g, rx, y, bw, bh, ui.isActive(id) ? C.teal : C.plum, C.butter);
-        text(g, label, rx + bw / 2, y + 5, C.wool, { align: 'center' });
+        text(g, label, rx + bw / 2, y + textIn(bh), C.wool, { align: 'center' });
         if (ui.click(id, rx - 3, y - 1, bw + 4, bh + 2)) act();
         y -= bh + 3;
       };
@@ -710,20 +714,21 @@ export class BuildMode {
 
   private drawDog(game: Game, g: CanvasRenderingContext2D, W: number, H: number) {
     const ui = game.ui;
-    const pw = Math.min(W - 8, 170), ph = 20 + (UPGRADES.length + 2) * 16;
+    const rowS = Math.max(16, lineHeight() * 2 + 4); // a row: the name, then what is next
+    const pw = Math.min(W - 8, 170), ph = 20 + (UPGRADES.length + 2) * rowS;
     const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H / 2 - ph / 2);
     panel(g, x0, y0, pw, ph);
     const hasKennel = game.ranch.buildings.some((b) => b.kind === 'kennel');
     heading(g, hasKennel ? `TRAIN ${game.look.name}` : 'BUILD A KENNEL', W / 2, y0 + 4, C.butter, { align: 'center', shade: C.moss });
     UPGRADES.forEach((u, i) => {
-      const y = y0 + 16 + i * 16;
+      const y = y0 + 16 + i * rowS;
       const lvl = game.upgrades[u.key];
       const sel = i === this.row;
-      if (sel) rect(g, x0 + 3, y - 2, pw - 6, 15, C.teal);
+      if (sel) rect(g, x0 + 3, y - 2, pw - 6, rowS - 1, C.teal);
       text(g, u.name, x0 + 7, y, C.wool);
       for (let k = 0; k < MAX_UP; k++) rect(g, x0 + 7 + k * 5, y + 7, 4, 3, k < lvl ? C.butter : C.sage);
       const next = lvl < MAX_UP ? u.desc(lvl + 1) : 'MAXED';
-      text(g, next, x0 + 36, y + 6, C.wool);
+      text(g, next, x0 + 36, y + lineHeight(), C.wool);
       if (lvl < MAX_UP) {
         const cost = u.costs[lvl - 1];
         const bw = 28, bx = x0 + pw - bw - 6;
@@ -735,13 +740,13 @@ export class BuildMode {
     });
     // Helper dogs.
     {
-      const i = UPGRADES.length, y = y0 + 16 + i * 16;
-      if (this.row === i) rect(g, x0 + 3, y - 2, pw - 6, 15, C.teal);
+      const i = UPGRADES.length, y = y0 + 16 + i * rowS;
+      if (this.row === i) rect(g, x0 + 3, y - 2, pw - 6, rowS - 1, C.teal);
       const n = game.helpers.length;
       text(g, 'HELPER DOG', x0 + 7, y, C.wool);
       for (let k = 0; k < HELPER_COSTS.length; k++) rect(g, x0 + 7 + k * 5, y + 7, 4, 3, k < n ? C.butter : C.sage);
       const note = game.tier < 4 ? 'AT TIER 4' : n >= HELPER_COSTS.length ? 'FULL PACK' : 'HOLDS A FLANK';
-      text(g, note, x0 + 36, y + 6, C.wool);
+      text(g, note, x0 + 36, y + lineHeight(), C.wool);
       if (n < HELPER_COSTS.length && game.tier >= 4) {
         const cost = HELPER_COSTS[n];
         const bw = 28, bx = x0 + pw - bw - 6;
@@ -752,10 +757,10 @@ export class BuildMode {
     }
     // The dog's look: name, coat and neck piece.
     {
-      const i = UPGRADES.length + 1, y = y0 + 16 + i * 16;
-      if (this.row === i) rect(g, x0 + 3, y - 2, pw - 6, 15, C.teal);
+      const i = UPGRADES.length + 1, y = y0 + 16 + i * rowS;
+      if (this.row === i) rect(g, x0 + 3, y - 2, pw - 6, rowS - 1, C.teal);
       text(g, `${game.look.name}'S LOOK`, x0 + 7, y, C.wool);
-      text(g, 'COAT, MASK, NECK', x0 + 7, y + 6, C.sage);
+      text(g, 'COAT, MASK, NECK', x0 + 7, y + lineHeight(), C.sage);
       const bw = 34, bx = x0 + pw - bw - 6;
       panel(g, bx, y, bw, 11, ui.isActive('dog-look') ? C.teal : C.plum, C.butter);
       text(g, 'DRESS', bx + bw / 2, y + 3, C.wool, { align: 'center' });
@@ -771,7 +776,7 @@ export class BuildMode {
     const S = safeArea(game.screen);
     const L = 2 + S.left, R = W - 2 - S.right;
     // Two rows when one would make the cells too narrow to tap.
-    const rows = Math.floor((R - L) / n) < 20 ? 2 : 1;
+    const rows = Math.floor((R - L) / n) < 20 * (game.input.touchMode ? touchScale(game) : 1) ? 2 : 1;
     const per = Math.ceil(n / rows);
     const cw = Math.min(26, Math.floor((R - L) / per));
     const bx = Math.round((L + R) / 2 - (cw * per) / 2), by = H - 32 * rows - S.bottom;
@@ -811,17 +816,17 @@ export class BuildMode {
       if (why) lines.push(why);
       else lines.push('DECOR NEVER GETS IN THE STOCK\'S WAY');
     }
-    const ih = 13 + lines.length * 6;
+    const ih = 13 + lines.length * lineHeight();
     const iy = by - 6 - ih;
     panel(g, L, iy, R - L, ih);
     infoTitle(g, title, L + 4, iy + 3);
-    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * 6, C.wool, { iconColor: C.butter }));
+    lines.forEach((l, i) => text(g, sentence(l), L + 4, iy + 13 + i * lineHeight(), C.wool, { iconColor: C.butter }));
     if (game.input.touchMode) {
-      const bw = 40, bh = 15, rx = R - bw;
+      const k = touchScale(game), bw = Math.round(40 * k), bh = boxH(Math.round(15 * k)), rx = R - bw;
       let y = iy - bh - 3;
       const btn = (id: string, label: string, act: () => void) => {
         panel(g, rx, y, bw, bh, ui.isActive(id) ? C.teal : C.plum, C.butter);
-        text(g, label, rx + bw / 2, y + 5, C.wool, { align: 'center' });
+        text(g, label, rx + bw / 2, y + textIn(bh), C.wool, { align: 'center' });
         if (ui.click(id, rx - 3, y - 1, bw + 4, bh + 2)) act();
         y -= bh + 3;
       };

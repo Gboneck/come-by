@@ -14,6 +14,7 @@ import { drawInstallHint } from './install';
 import { openTransfer } from './transfer';
 import { openPhoto } from './photo';
 import { LEVELS, quality } from '../gfx/quality';
+import { pitch } from './metrics';
 
 
 // The logo in the heading face, scaled up: each letter drops in on its own
@@ -111,9 +112,9 @@ export function drawTitle(game: Game, g: CanvasRenderingContext2D, W: number, H:
   const lines = game.input.touchMode
     ? ['DRAG TO MOVE. PUSH PAST THE RING TO RUN', 'BARK  NIP  HOLD DOWN TO LIE DOWN', 'CALM DRIVES PAY BEST']
     : ['WASD MOVE  SHIFT RUN  SPACE BARK  E NIP', 'HOLD Q LIE DOWN  B BUILD  TAB LEDGER', 'H HELPERS  ESC PAUSE  M SOUND'];
-  const cy = H - 8 - S.bottom - lines.length * 7;
+  const cy = H - 8 - S.bottom - lines.length * pitch();
   rect(g, 0, cy - 5, W, H - cy + 5, C.plum);
-  lines.forEach((l, i) => text(g, l, W / 2, cy + i * 7, i === lines.length - 1 && game.input.touchMode ? C.butter : C.wool, { align: 'center' }));
+  lines.forEach((l, i) => text(g, l, W / 2, cy + i * pitch(), i === lines.length - 1 && game.input.touchMode ? C.butter : C.wool, { align: 'center' }));
   if (!m.confirmNew) drawInstallHint(game, g, W, my + items.length * (touch ? 21 : 15), cy - 5);
   return result;
 }

@@ -13,6 +13,7 @@ import { tToClock, yardOf, type Order } from '../systems/orders';
 import { orderTag } from '../systems/favour';
 import { CLASSES, PARTS, atPost, classLabel, currentClass, isTrialDay, nextTrialDay, prizeToday, type TrialResult } from '../systems/trials';
 import { LEGACY, goalDone } from '../systems/progression';
+import { pitch } from './metrics';
 
 // Orders and trials on screen: a card in the HUD's left column (under the
 // goal tracker), edge arrows to where the work is, the judge's card at the
@@ -63,11 +64,11 @@ export function jobCard(game: Game, g: CanvasRenderingContext2D, x: number, y: n
   if (!lines.length) return 0;
   const tagW = Math.max(...lines.map((l) => textWidth(l.tag)));
   const w = tagW + 4 + Math.max(...lines.map((l) => textWidth(l.s))) + 8;
-  const h = lines.length * 7 + 5;
+  const h = lines.length * pitch() + 5;
   panel(g, x, y, w, h, C.plum, C.butter);
   lines.forEach((l, i) => {
-    text(g, l.tag, x + 4, y + 3 + i * 7, C.butter);
-    text(g, l.s, x + 8 + tagW, y + 3 + i * 7, l.c, { iconColor: C.butter });
+    text(g, l.tag, x + 4, y + 3 + i * pitch(), C.butter);
+    text(g, l.s, x + 8 + tagW, y + 3 + i * pitch(), l.c, { iconColor: C.butter });
   });
   return h + 2;
 }

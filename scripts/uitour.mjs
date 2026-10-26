@@ -26,6 +26,9 @@ const SIZES = {
   // Home-screen web app on a notched phone: fake safe-area insets (CSS px).
   notch: { width: 390, height: 844, dpr: 3, touch: true, q: 'safe=59,0,34,0' },
   landnotch: { width: 844, height: 390, dpr: 3, touch: true, q: 'safe=0,59,21,59' },
+  // VIEW: WIDE (pause menu): more world on screen, text stepped up a size.
+  phonewide: { width: 390, height: 844, dpr: 3, touch: true, view: 'wide' },
+  deskwide: { width: 1280, height: 720, dpr: 1, view: 'wide' },
 };
 
 // Each state runs in a fresh page; `fn` runs in the page with the game.
@@ -440,6 +443,7 @@ for (const sn of sizeNames) {
     page.on('console', (m) => m.type() === 'error' && errors.push(`${sn}/${st}: ${m.text()}`));
     await page.goto(`http://localhost:${PORT}/?${STATES[st].query ?? 'debug'}${s.q ? `&${s.q}` : ''}`);
     await page.waitForFunction(() => window.game);
+    if (s.view) await page.evaluate((v) => window.game.screen.setView(v), s.view);
     await page.evaluate(async () => {
       const m = await import('/src/ui/build.ts');
       const c = await import('/src/ranch/catalog.ts');

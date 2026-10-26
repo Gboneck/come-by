@@ -6,6 +6,7 @@ import type { Game } from '../game';
 import { CATALOG } from '../ranch/catalog';
 import { REGIONS } from '../world/map';
 import { panel } from './frame';
+import { pitch } from './metrics';
 
 // "What's this": the first time something new is on screen near the dog (a
 // paddock, a building, a buyer's yard, the trial crook, a locked gate), a
@@ -107,7 +108,7 @@ export function drawWhatsThis(game: Game, g: CanvasRenderingContext2D, top: numb
   const sx = Math.round(th.x - ox), sy = Math.round(th.y - oy);
   const pw = Math.min(W - 8, 150);
   const lines = prose(th.line, pw - 10).slice(0, 4);
-  const ph = 13 + lines.length * 7 + 2;
+  const ph = 13 + lines.length * pitch() + 2;
   const drop = Math.round(Math.max(0, 1 - t / 0.2) * -6);
   let x0 = Math.round(Math.max(4, Math.min(W - pw - 4, sx - pw / 2)));
   let y0 = sy - 16 - ph + drop;
@@ -125,7 +126,7 @@ export function drawWhatsThis(game: Game, g: CanvasRenderingContext2D, top: numb
   const name = headingWidth(th.name) <= pw - 10 ? th.name : '';
   if (name) heading(g, name, x0 + 5, y0 + 3, C.butter, { shade: C.moss });
   else text(g, th.name, x0 + 5, y0 + 4, C.butter);
-  lines.forEach((l, i) => text(g, l, x0 + 5, y0 + 13 + i * 7, C.wool, { iconColor: C.butter }));
+  lines.forEach((l, i) => text(g, l, x0 + 5, y0 + 13 + i * pitch(), C.wool, { iconColor: C.butter }));
   if (game.ui.click('whatsthis', x0, y0, pw, ph)) {
     cur = null;
     gap = 2;

@@ -3,6 +3,7 @@ import { disc, ring } from '../gfx/draw';
 import { text } from '../gfx/font';
 import type { Game } from '../game';
 import { safeArea } from './safe';
+import { touchScale } from './metrics';
 import { coachButton } from './coach';
 
 interface Btn { x: number; y: number; r: number }
@@ -20,12 +21,16 @@ export interface TouchLayout {
 export function touchLayout(game: Game, W: number, H: number): TouchLayout {
   const S = safeArea(game.screen);
   const portrait = H > W;
-  const by = H - S.bottom - (portrait ? 34 : 26);
+  // Laid out in world pixels, grown in the wide view so each button keeps
+  // its size under a thumb.
+  const k = touchScale(game);
+  const by = H - S.bottom - Math.round((portrait ? 34 : 26) * k);
   const rx = W - S.right;
-  const bark = { x: rx - 24, y: by, r: 16 };
-  const nip = { x: rx - 62, y: by + 12, r: 13 };
-  const lie = { x: rx - 55, y: by - 25, r: 13 };
-  return { bark, nip, lie, stickHome: { x: S.left + 36, y: by }, top: lie.y - lie.r - 2 };
+  const z = (v: number) => Math.round(v * k);
+  const bark = { x: rx - z(24), y: by, r: z(16) };
+  const nip = { x: rx - z(62), y: by + z(12), r: z(13) };
+  const lie = { x: rx - z(55), y: by - z(25), r: z(13) };
+  return { bark, nip, lie, stickHome: { x: S.left + z(36), y: by }, top: lie.y - lie.r - 2 };
 }
 
 // Tiny pictures over the labels: sound lines, teeth, a down chevron.

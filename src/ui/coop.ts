@@ -13,6 +13,7 @@ import { safeArea } from './safe';
 import { edgeArrow } from './hud';
 import { touchLayout } from './touch';
 import { drawPings, pingArrows, pingControls } from '../net/ping';
+import { pitch } from './metrics';
 
 // The co-op screens. A host opens INVITE A FRIEND from the pause menu: a
 // room code and a link to send. A guest opens JOIN A FRIEND on the title
@@ -205,11 +206,11 @@ function card(game: Game, g: CanvasRenderingContext2D, W: number, H: number, big
   if (dim) dimView(g, game.view(), 6);
   const pw = Math.min(W - 16, 170);
   const ls = small.flatMap((s) => lines(s, pw - 14));
-  const ph = 16 + ls.length * 7;
+  const ph = 16 + ls.length * pitch();
   const x0 = Math.round(W / 2 - pw / 2), y0 = Math.round(H * 0.38 - ph / 2);
   panel(g, x0, y0, pw, ph);
   text(g, big, W / 2, y0 + 5, C.butter, { align: 'center' });
-  ls.forEach((l, i) => text(g, l, W / 2, y0 + 14 + i * 7, C.wool, { align: 'center' }));
+  ls.forEach((l, i) => text(g, l, W / 2, y0 + 14 + i * pitch(), C.wool, { align: 'center' }));
 }
 
 // Name tags over friends' dogs ('world', under the HUD); the guest's cards

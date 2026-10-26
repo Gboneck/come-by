@@ -14,6 +14,7 @@ import { SKY_WORD, skyIcon } from './icons';
 import type { Sky } from '../systems/weather';
 import { dimView } from './feel';
 import { sentenceLines } from './case';
+import { pitch } from './metrics';
 import { discoveryLines, drawPaperFog, drawPlaceMarks, drawProjectMarks, projectLines } from './discovery';
 import { travelLines } from '../net/travels';
 import { valleyLedger } from './valley';
@@ -139,12 +140,12 @@ function drawLines(g: CanvasRenderingContext2D, lines0: Line[], x0: number, y: n
         text(g, l.s.slice(2), x0 + 8, y, ink(l.c), COIN);
       } else text(g, l.s, x0 + (l.x ?? 0) + (l.x ? 8 : 0), y, ink(l.c), COIN);
     }
-    y += l.sky ? 9 : 7;
+    y += l.sky ? Math.max(9, pitch() + 2) : pitch();
   }
   return y;
 }
 
-const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? 9 : 7), 0);
+const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? Math.max(9, pitch() + 2) : pitch()), 0);
 
 // More pages of the Ledger after the first (the ranch, built in): other
 // features add an entry here. Each page draws into the book's paper (`r`,

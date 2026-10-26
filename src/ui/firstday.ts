@@ -4,6 +4,7 @@ import { heading, text } from '../gfx/font';
 import type { Game } from '../game';
 import { panel } from './frame';
 import { safeArea } from './safe';
+import { pitch } from './metrics';
 
 // The first day, so it cannot be missed: a welcome card as a new ranch
 // opens (what you are, what to do first, how to move), put away by moving
@@ -37,12 +38,12 @@ export function drawWelcome(game: Game, g: CanvasRenderingContext2D, W: number, 
     'YOUR DUCKS ARE OUT IN THE MEADOW. BRING THEM HOME TO THE PADDOCK.',
   ].flatMap((p) => prose(p, pw - 14));
   const how = touch ? 'DRAG WITH YOUR LEFT THUMB TO RUN' : 'WASD OR THE ARROW KEYS TO RUN';
-  const ph = 20 + body.length * 7 + 14;
+  const ph = 20 + body.length * pitch() + 14;
   const x0 = Math.round(W / 2 - pw / 2);
   const y0 = Math.round(H * 0.3 - ph / 2 + Math.max(0, 1 - age * 4) * -12);
   panel(g, x0, y0, pw, ph, C.plum, C.butter);
   heading(g, 'COME BY!', W / 2, y0 + 5, C.butter, { align: 'center', shade: C.moss });
-  body.forEach((l, i) => text(g, l, W / 2, y0 + 16 + i * 7, C.wool, { align: 'center' }));
+  body.forEach((l, i) => text(g, l, W / 2, y0 + 16 + i * pitch(), C.wool, { align: 'center' }));
   if (Math.floor(age * 2) % 2 === 0 || age < 1) text(g, sentence(how), W / 2, y0 + ph - 9, C.butter, { align: 'center' });
   if (game.ui.click('welcome', x0, y0, pw, ph)) game.tipsSeen.add('welcome');
 }
