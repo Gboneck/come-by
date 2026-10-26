@@ -28,7 +28,9 @@ export interface Fixture { kind: FixtureKind; tx: number; ty: number }
 // An inner hurdle on a tile line: `at` is a column (vertical) or row, and
 // `gate` a span of tiles along it, both counted from the paddock's tx/ty.
 export interface Hurdle { vertical: boolean; at: number; gate: [number, number]; open?: boolean; swing: number }
-type Paddock = Pen & { fixtures?: Fixture[]; hurdle?: Hurdle };
+// What Gameplay's paddock adds to a Pen (valley-r4), optional here so the art
+// also draws an older Pen: fixtures, goods by kind, the kinds sharing it.
+type Paddock = Pen & { fixtures?: Fixture[]; hurdle?: Hurdle; goodsList?: () => string[]; kinds?: string[] };
 
 export const FIXTURE_SIZE: Record<FixtureKind, [number, number]> = { trough: [2, 1], shelter: [3, 2], rack: [2, 1] };
 
@@ -150,16 +152,16 @@ export function penDrawables(g: CanvasRenderingContext2D, pen: Pen, t: number, s
 
   for (const f of fixtures) out.push(...fixtureDrawables(g, f, t));
 
-  if (p.goods > 0 && p.species) {
-    const n = Math.min(12, p.goods);
-    const sp = p.species;
+  // Goods waiting, each drawn as its kind's (a mixed paddock shows several).
+  const goods = p.goodsList ? p.goodsList().slice(0, 12) : p.species ? Array<string>(Math.min(12, p.goods)).fill(p.species) : [];
+  if (goods.length) {
     out.push({
       y: p.iy1 - 2,
       draw: () => {
-        for (let i = 0; i < n; i++) {
+        goods.forEach((sp, i) => {
           const gx = p.ix0 + 3 + (i % 6) * 4, gy = p.iy1 - 4 - Math.floor(i / 6) * 4;
           drawGood(g, sp, gx, gy);
-        }
+        });
       },
     });
   }
@@ -194,7 +196,8 @@ export function penDrawables(g: CanvasRenderingContext2D, pen: Pen, t: number, s
       draw: () => {
         const sp = p.animals[0]?.sp;
         const cap = sp ? Math.floor(p.capacity / sp.space) : 0;
-        const label = p.full ? 'FULL' : `${p.animals.length}/${cap}`;
+        // A mixed paddock counts room, not heads.
+        const label = p.full ? 'FULL' : p.kinds && p.kinds.length > 1 ? `${p.used}/${p.capacity} ROOM` : `${p.animals.length}/${cap}`;
         const tx = Math.round(p.cx), ty = Math.round(y0 - 12);
         text(g, label, tx, ty, p.full ? C.butter : C.wool, { align: 'center', shadow: C.plum });
       },
@@ -248,9 +251,12 @@ function fixtureDrawables(g: CanvasRenderingContext2D, f: Fixture, t: number): D
     case 'rack':
       return [{ y: y + 7, draw: () => hayRack(g, x + 1, y + 7) }];
     case 'shelter':
+      // The back row is solid and the stock stands under the roof in front,
+      // so the dark inside sorts behind them and the posts and roof before.
       return [
         { y: -1e8 + x * 0.001 + y, draw: () => groundShadow(g, x, y - 6, x + 24, y + 15) },
-        { y: y + 15, draw: () => shelter(g, x, y + 15) },
+        { y: y + 7, draw: () => shelterInside(g, x, y + 15) },
+        { y: y + 15, draw: () => shelterFrame(g, x, y + 15) },
       ];
   }
 }
@@ -294,10 +300,8 @@ function hayRack(g: CanvasRenderingContext2D, x: number, base: number) {
 // A small field shelter: an open-fronted lean-to with a single-pitch roof
 // in the ranch's roofing, boarded sides, straw bedding in the dark inside.
 // (x, base) is its front left foot; 24 wide.
-function shelter(g: CanvasRenderingContext2D, x: number, base: number) {
-  const roof = ROOFS[farmLook.roof];
+function shelterInside(g: CanvasRenderingContext2D, x: number, base: number) {
   const top = base - 20;
-  // Inside: dark, straw on the floor.
   rect(g, x + 2, top + 5, 20, 15, C.plum);
   for (let yy = base - 4; yy <= base; yy++)
     for (let xx = x + 3; xx < x + 21; xx++) {
@@ -305,6 +309,11 @@ function shelter(g: CanvasRenderingContext2D, x: number, base: number) {
       if (h < 0.55 - (base - yy) * 0.1) px(g, xx, yy, h < 0.1 ? C.wool : C.butter);
     }
   rect(g, x + 2, top + 5, 20, 1, C.sage);
+}
+
+function shelterFrame(g: CanvasRenderingContext2D, x: number, base: number) {
+  const roof = ROOFS[farmLook.roof];
+  const top = base - 20;
   // Boarded sides seen edge-on, the left in shade.
   rect(g, x, top + 4, 2, 17, C.sage);
   rect(g, x + 22, top + 4, 2, 17, C.wool);
