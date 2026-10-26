@@ -221,7 +221,7 @@ function shareButton(game: Game, g: CanvasRenderingContext2D, a: AchDef, x: numb
   if (b.hit) share(game, a);
 }
 
-export const BADGES_PAGE: LedgerPage = { id: 'badges', tab: 'BADGES', draw: drawBadges, keys: badgeKeys };
+export const BADGES_PAGE: LedgerPage = { id: 'badges', tab: 'BADGES', draw: drawBadges, keys: badgeKeys, dot: (g) => g.achievements.unseen > 0 };
 
 // ---- The card that drops in ----
 //

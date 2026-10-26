@@ -110,8 +110,10 @@ const linesH = (lines: Line[]) => lines.reduce((h, l) => h + (l.sky ? 9 : 7), 0)
 // features add an entry here. Each page draws into the page's area (`r`,
 // with `spine` the x of the middle on a wide screen, else 0) in ink
 // (`PANEL_INK`: wool writing, buttercup for what matters, sage for what is
-// not yet). `keys` gets the arrows and confirm while its page is open, and
-// returns true when it used confirm (else confirm closes the book).
+// not yet). `keys` gets the first look at the arrows, confirm and cancel
+// while its page is open, and returns true when it used confirm or cancel,
+// so the book stays open. `dot` puts a buttercup dot on its tab (something
+// new to see).
 // (The same shape as Feel and UI's book-style Ledger, round four.)
 export interface LedgerInk { text: string; accent: string; dim: string }
 export const PANEL_INK: LedgerInk = { text: C.wool, accent: C.butter, dim: C.sage };
@@ -120,6 +122,7 @@ export interface LedgerPage {
   tab: string;
   draw: (game: Game, g: CanvasRenderingContext2D, r: { x: number; y: number; w: number; h: number; spine: number }, ink: LedgerInk) => void;
   keys?: (game: Game) => boolean;
+  dot?: (game: Game) => boolean;
 }
 export const LEDGER_PAGES: LedgerPage[] = [BUYERS_PAGE, BADGES_PAGE];
 // The open page (0: the ranch). The book stays open where you left it.
@@ -129,9 +132,9 @@ export const ledgerView = { page: 0 };
 // pages.
 export function ledgerKeys(game: Game): boolean {
   const inp = game.input;
-  if (inp.pressed('ledger') || inp.pressed('cancel')) return true;
+  if (inp.pressed('ledger')) return true;
   const n = LEDGER_PAGES.length + 1;
-  // (Read each once: a press is used up when it is read.)
+  // Read each key once: pressed() uses the press up.
   const step = inp.pressed('next') ? 1 : inp.pressed('prev') ? n - 1 : 0;
   if (n > 1 && step) {
     ledgerView.page = (ledgerView.page + step) % n;
@@ -140,7 +143,7 @@ export function ledgerKeys(game: Game): boolean {
   ledgerView.page = Math.min(ledgerView.page, n - 1);
   const page = LEDGER_PAGES[ledgerView.page - 1];
   if (page?.keys?.(game)) return false;
-  return inp.pressed('confirm');
+  return inp.pressed('cancel') || inp.pressed('confirm');
 }
 
 // The Ranch Ledger: where you are, what to do, what comes next. On a wide
@@ -226,7 +229,7 @@ export function drawLedger(game: Game, g: CanvasRenderingContext2D, W: number, H
 }
 
 // The page tabs, standing up from the panel's top edge, the open page's in
-// teal. Tap one to turn to it. A dot on BADGES while there are new ones.
+// teal. Tap one to turn to it. A page's dot blinks on its tab.
 function drawTabs(game: Game, g: CanvasRenderingContext2D, x0: number, top: number, pw: number, th: number) {
   const names = ['RANCH', ...LEDGER_PAGES.map((p) => p.tab)];
   const ws = names.map((n) => textWidth(n) + (game.input.touchMode ? 10 : 8));
@@ -238,7 +241,7 @@ function drawTabs(game: Game, g: CanvasRenderingContext2D, x0: number, top: numb
     const y = top - th + (on ? 0 : 1);
     panel(g, x, y, w, th + 2, on ? C.teal : C.plum, on ? C.butter : C.sage);
     text(g, n, x + w / 2, y + Math.floor((th - 5) / 2) + 1, on ? C.butter : C.wool, { align: 'center' });
-    if (LEDGER_PAGES[i - 1]?.id === 'badges' && game.achievements.unseen && !on) rect(g, x + w - 4, y + 2, 2, 2, C.butter);
+    if (!on && LEDGER_PAGES[i - 1]?.dot?.(game) && Math.floor(game.t * 2) % 2 === 0) rect(g, x + w - 4, y + 2, 2, 2, C.butter);
     if (game.ui.click(`ledger-tab-${i}`, x, y - 2, w, th + 4) && i !== ledgerView.page) {
       ledgerView.page = i;
       game.audio?.play('click');
