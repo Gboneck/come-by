@@ -245,7 +245,13 @@ needs a line there.
   mode (`sharePng()` saves or shares any canvas), `feel.ts` kicks, coins,
   fireworks and the iris, `paddockbuild.ts` the paddock editor in build
   mode (it asks the ranch's rules through `PaddockRules`). Ledger pages
-  beyond the first go in `LEDGER_PAGES` (`ledger.ts`). `src/gfx/font.ts`
+  beyond the first go in `LEDGER_PAGES` (`ledger.ts`). `objective.ts` the
+  one thing to do now (goal card, arrow, marker), `whatsthis.ts` cards on
+  new things (`THINGS`), `firstday.ts` the welcome and first-day steps,
+  `goods.ts` today's goods in the HUD, `sale.ts` the cart at day's end,
+  `case.ts` sentence case for prose (`prose()`); build mode's changes are
+  `BuildAction`s run by `applyBuild` (a co-op guest sets `build.remote`).
+  `src/art/goods.ts` goods as piles in paddocks and as icons. `src/gfx/font.ts`
   has two faces: text() (5px, proportional) and heading() (7px, bold).
 - `src/render/` world drawing and the night dither; `animals.ts` animal
   poses (gaits, startles, wide eyes, ducks afloat), `dogpose.ts` every

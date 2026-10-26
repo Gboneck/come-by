@@ -1054,9 +1054,15 @@ Before → after, in plain words:
 - [x] Build mode for co-op guests: every change is a `BuildAction` done by
       `applyBuild`; a guest sets `build.remote` to ask the host and hears
       back through `build.answer`
-- [ ] Readable text on Platform's 2x font: every screen retuned, sentence
-      case, body text comfortable on an upright phone, HUD icons and frames
-      redrawn at 2x where it helps
+- [x] Readable text on Platform's 2x font (merged platform-r5): prose in
+      sentence case where it is drawn (`src/ui/case.ts`: `sentence()`,
+      `prose()`, `sentenceLines()`; names, keys and pad buttons keep their
+      capitals), headings, buttons and signs still capitals; the journal's
+      header reflowed (the CALM stamp no longer covers the figures); the
+      build and decor bars go to two rows when cells would be too narrow
+      to tap; dense sprites sized in world pixels (sprW/sprH); the goods
+      icons in fine pixels with a plum outline
+- [x] Pad prompts match whatever the case and answer in the case they find
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -2144,3 +2150,9 @@ Before → after, in plain words:
 - What's-this cards wait for the day's banner and the first steps of day
   one (until the first flock is penned), so a new player sees one thing at
   a time.
+- Sentence case is applied where prose is drawn, not in the strings
+  themselves: other features keep writing capitals (no sweep across a dozen
+  files mid-round), and a line drawn in capitals still works. Headings,
+  buttons, tabs, signs over the world and short status words stay capitals.
+- Pad prompts match case-insensitively and answer in the case they find,
+  so a sentence-case hint still turns "Hold Q" into "Hold (X)".
