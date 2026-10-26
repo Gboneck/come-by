@@ -8,6 +8,7 @@ import { haystackDrawable } from '../art/hay';
 import { agilityDrawables, dairyDrawables, shedDrawables } from '../art/farm2';
 import { valleyLights } from '../art/valley';
 import { penDrawables } from '../art/paddock';
+import type { Look } from '../world/fineground';
 import { farmhouseWindows, windowGlow, barnDrawable, farmhouseDrawable, fenceDrawables, fieldGateDrawables, kennelDrawable, marketDrawable, regionGateDrawables, windmillDrawable, type Drawable } from '../art/buildings';
 import type { Light } from './night';
 import { DECOR, decorDrawable, decorLights, drawLampGlow } from '../ranch/decor';
@@ -16,7 +17,7 @@ import { drawShafts } from './light';
 import { quality } from '../gfx/quality';
 import { tierOf } from '../systems/progression';
 import { TS } from '../world/map';
-import { drawSway, drawWater } from './sway';
+import { drawSway } from './sway';
 import { lightLook, setSeasonLook } from '../art/seasonlook';
 import { drawDog } from './dogpose';
 import { yardFire } from '../art/course';
@@ -43,6 +44,20 @@ function sunShift(game: Game): number {
 const sleeping = (game: Game) => game.dog.lying && game.rest > 1.3;
 import { settings } from '../ui/settings';
 
+// The look the fine ground is painted with, in small steps: the season,
+// how wet the ground is, how golden the light.
+function groundLook(game: Game): Look {
+  const q = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 4);
+  const fair = Math.max(0, 1 - game.weather.rain * 3) * Math.max(0, 1 - game.weather.fog * 2);
+  return {
+    snow: q(game.season.snow),
+    leaves: q(game.season.leaves),
+    bloom: q(game.season.bloom),
+    wet: quality.shade ? Math.round(Math.min(1, game.life.wx.wet) * 3) : 0,
+    golden: quality.shade ? Math.round(lightLook.golden * fair * 3) : 0,
+  };
+}
+
 export interface View {
   ox: number;
   oy: number;
@@ -57,17 +72,15 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // The season: recoloured layers (rebuilt only when a step changes) and
   // the look that roofs, fences and decor read as they draw.
   setSeasonLook(game.season);
-  game.life.seasons.sync(game.baked, game.season);
   // The ground with the trees' shadows thrown by the sun (none at night);
   // buildings read the same light as they draw.
   const sh = sunShadow(game.day);
   lightLook.dx = sh.dx;
   lightLook.dy = sh.dy;
   lightLook.golden = goldenHour(game.day);
-  const ground = game.life.lit.picture(game.baked, game.life.seasons.ground ?? game.baked.ground, sh.dx, sh.dy, game.day.phase !== 'night');
-  g.drawImage(ground, ox, oy, W, H, 0, 0, W, H);
-  game.life.wx.drawGroundShade(g, game, ox, oy, W, H, skyDarkness(game.day));
-  drawWater(g, game.baked.water, ox, oy, W, H, game.life.vt);
+  // The fine ground and canopy, painted in chunks with this look.
+  game.life.lit.sync(game.baked, groundLook(game), sh.dx, sh.dy, game.day.phase !== 'night', ox, oy, W, H, true);
+  game.life.lit.drawGround(g, game.baked, ox, oy, W, H);
 
   g.save();
   g.translate(-ox, -oy);
@@ -126,7 +139,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   if (game.mode === 'build') game.build.drawWorld(game, g);
   g.restore();
 
-  g.drawImage(game.life.seasons.canopy ?? game.baked.canopy, ox, oy, W, H, 0, 0, W, H);
+  game.life.lit.drawCanopy(g, game.baked, ox, oy, W, H);
   // Low sun slanting through the treetops (light comes against the shadow).
   if (quality.fx >= 1 && game.weather.rain < 0.2 && game.weather.fog < 0.4) drawShafts(g, game.baked, ox, oy, W, H, sh.dx, sh.dy, lightLook.golden * 1.4, game.life.vt);
 

@@ -42,6 +42,7 @@ await page.goto(`http://localhost:${PORT}/?debug${season ? `&season=${season}` :
 await page.waitForFunction(() => window.game && window.game.baked, null, { timeout: 30000 });
 const res = await page.evaluate(async ({ ax, ay, sw, sh, zoom, layer, look }) => {
   const g = await import('/src/world/fineground.ts');
+  for (const k in g.paintTime) g.paintTime[k] = 0;
   const t0 = performance.now();
   const W = sw * 2, H = sh * 2;
   const lk = { snow: 0, leaves: 0, bloom: 0, wet: 0, golden: 0, ...look };
@@ -67,10 +68,11 @@ const res = await page.evaluate(async ({ ax, ay, sw, sh, zoom, layer, look }) =>
   const zg = z.getContext('2d');
   zg.imageSmoothingEnabled = false;
   zg.drawImage(c, 0, 0, W * zoom, H * zoom);
-  return { url: z.toDataURL('image/png'), ground: t1 - t0, canopy: t2 - t1, px: W * H };
+  return { url: z.toDataURL('image/png'), ground: t1 - t0, canopy: t2 - t1, px: W * H, parts: JSON.stringify(g.paintTime) };
 }, { ax, ay, sw, sh, zoom, layer, look });
 mkdirSync('shots/fine', { recursive: true });
 writeFileSync(`shots/fine/${name}.png`, Buffer.from(res.url.split(',')[1], 'base64'));
+console.log(`parts ${res.parts}`);
 console.log(`shots/fine/${name}.png  ground ${res.ground.toFixed(1)}ms  canopy ${res.canopy.toFixed(1)}ms  (${res.px} fine px, ${((res.ground * 1000) / res.px).toFixed(2)} us/px ground)  errors: ${errors.length}`);
 for (const e of errors.slice(0, 5)) console.log('  ', e);
 await browser.close();

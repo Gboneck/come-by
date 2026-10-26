@@ -28,10 +28,15 @@ const { meadow, moss, sage, teal, plum, wool, butter } = U32;
 const COL: Record<string, number> = { m: meadow, o: moss, s: sage, t: teal, p: plum, w: wool, y: butter };
 const W = WORLD_W, H = WORLD_H;
 const bayer = (x: number, y: number) => BAYER4[(y & 3) * 4 + (x & 3)] / 16;
+// Ripple lines on shallow water: short wavy strokes, every fourth row.
+const ripple = (x: number, y: number) => {
+  const r = y + Math.round(Math.sin(x * 0.35 + (y >> 2) * 1.7) * 1.2);
+  return (r & 3) === 0 && hash2(x >> 3, r >> 2, 640) < 0.75;
+};
 
 // A paint job: the rectangle plus a margin, so edges and stamps near the
 // border come out the same as in the chunk next door.
-const M = 16;
+const M = 12;
 interface Job {
   d: FineData;
   x0: number; // fine px of buf[0]
@@ -41,15 +46,25 @@ interface Job {
   cls: Uint8Array;
   px: Uint32Array;
   look: Look;
+  tone: (x: number, y: number) => number; // the darker-grass noise at a buffer pixel
 }
+
+// Time spent in each step, for scripts/finepaint.mjs.
+export const paintTime = { classify: 0, base: 0, stamps: 0, dist: 0, loop: 0, shadows: 0 };
 
 export function paintGround(b: Baked, fx0: number, fy0: number, fw: number, fh: number, look: Look): Uint32Array {
   const d = b.fine;
   const bw = fw + 2 * M, bh = fh + 2 * M;
-  const j: Job = { d, x0: fx0 - M, y0: fy0 - M, bw, bh, cls: new Uint8Array(bw * bh), px: new Uint32Array(bw * bh), look };
+  const j: Job = { d, x0: fx0 - M, y0: fy0 - M, bw, bh, cls: new Uint8Array(bw * bh), px: new Uint32Array(bw * bh), look, tone: () => 0 };
+  const t0 = performance.now();
   classify(j);
+  const t1 = performance.now();
   base(j);
+  const t2 = performance.now();
   stamps(j);
+  paintTime.classify += t1 - t0;
+  paintTime.base += t2 - t1;
+  paintTime.stamps += performance.now() - t2;
   const out = new Uint32Array(fw * fh);
   for (let y = 0; y < fh; y++) out.set(j.px.subarray((y + M) * bw + M, (y + M) * bw + M + fw), y * fw);
   return out;
@@ -60,25 +75,40 @@ export function paintGround(b: Baked, fx0: number, fy0: number, fw: number, fh: 
 function classify(j: Job) {
   const { d, cls, bw, bh } = j;
   const f = d.fields;
-  // Per world pixel: whether a mask is the same all round (then its fine
-  // pixels take its value), else each fine pixel asks the outline itself.
-  const fine = (m: Uint8Array, field: Float32Array, e: typeof EDGES.rock, wx: number, wy: number, fx: number, fy: number) => {
-    const i = wy * W + wx;
-    const v = m[i];
-    if (wx > 0 && wy > 0 && wx < W - 1 && wy < H - 1 && m[i - 1] === v && m[i + 1] === v && m[i - W] === v && m[i + W] === v) return v;
-    return edgeAt(field, e, fx / FINE, fy / FINE) ? 1 : 0;
-  };
-  for (let y = 0; y < bh; y++) {
-    const fy = j.y0 + y;
-    const wy = Math.min(H - 1, Math.max(0, fy >> 1));
-    for (let x = 0; x < bw; x++) {
-      const fx = j.x0 + x;
-      const wx = Math.min(W - 1, Math.max(0, fx >> 1));
-      let k: K = K.Grass;
-      if (fine(d.rock, f.rock, EDGES.rock, wx, wy, fx, fy)) k = K.Rock;
-      else if (fine(d.water, f.water, EDGES.water, wx, wy, fx, fy)) k = fine(d.deep, f.deep, EDGES.deep, wx, wy, fx, fy) ? K.Deep : K.Shallow;
-      else if (fine(d.path, f.path, EDGES.path, wx, wy, fx, fy)) k = K.Path;
-      cls[y * bw + x] = k;
+  const masks = [d.rock, d.water, d.deep, d.path];
+  const fields = [f.rock, f.water, f.deep, f.path];
+  const edges = [EDGES.rock, EDGES.water, EDGES.deep, EDGES.path];
+  const v = [0, 0, 0, 0], uni = [true, true, true, true];
+  const pick = (r: number, w: number, dp: number, p: number): K => (r ? K.Rock : w ? (dp ? K.Deep : K.Shallow) : p ? K.Path : K.Grass);
+  // World pixels covering the job (fine pixels pair up on even coordinates).
+  const wx0 = Math.floor(j.x0 / FINE), wy0 = Math.floor(j.y0 / FINE);
+  const wx1 = Math.floor((j.x0 + bw - 1) / FINE), wy1 = Math.floor((j.y0 + bh - 1) / FINE);
+  for (let wy = wy0; wy <= wy1; wy++) {
+    const cy = Math.min(H - 2, Math.max(1, wy));
+    for (let wx = wx0; wx <= wx1; wx++) {
+      const cx = Math.min(W - 2, Math.max(1, wx));
+      const i = cy * W + cx;
+      let all = true;
+      for (let m = 0; m < 4; m++) {
+        const mk = masks[m], val = mk[i];
+        v[m] = val;
+        uni[m] = mk[i - 1] === val && mk[i + 1] === val && mk[i - W] === val && mk[i + W] === val;
+        if (!uni[m]) all = false;
+      }
+      for (let sy = 0; sy < FINE; sy++) {
+        const y = wy * FINE + sy - j.y0;
+        if (y < 0 || y >= bh) continue;
+        for (let sx = 0; sx < FINE; sx++) {
+          const x = wx * FINE + sx - j.x0;
+          if (x < 0 || x >= bw) continue;
+          if (all) { cls[y * bw + x] = pick(v[0], v[1], v[2], v[3]); continue; }
+          const fx = (wx * FINE + sx) / FINE, fy = (wy * FINE + sy) / FINE;
+          const at = (m: number) => (uni[m] ? v[m] : edgeAt(fields[m], edges[m], fx, fy) ? 1 : 0);
+          const r = at(0);
+          const w = r ? 0 : at(1);
+          cls[y * bw + x] = pick(r, w, w ? at(2) : 0, r || w ? 0 : at(3));
+        }
+      }
     }
   }
 }
@@ -113,14 +143,34 @@ function dist(j: Job, inside: (k: number) => boolean, cap: number): Uint8Array {
 
 function base(j: Job) {
   const { d, cls, px, bw, bh } = j;
+  const tb0 = performance.now();
   const isWater = (k: number) => k === K.Shallow || k === K.Deep;
-  const inPath = dist(j, (k) => k === K.Path, 24);
-  const inWater = dist(j, isWater, 12);
-  const outWater = dist(j, (k) => !isWater(k), 10);
-  const outPath = dist(j, (k) => k !== K.Path, 4);
+  let hasPath = false, hasWater = false;
+  for (let i = 0; i < cls.length; i++) {
+    const k = cls[i];
+    if (k === K.Path) hasPath = true;
+    else if (k === K.Shallow || k === K.Deep) hasWater = true;
+  }
+  const none = new Uint8Array(bw * bh);
+  const inPath = hasPath ? dist(j, (k) => k === K.Path, 24) : none;
+  const outPath = hasPath ? dist(j, (k) => k !== K.Path, 4) : none;
+  const inWater = hasWater ? dist(j, isWater, 12) : none;
+  const outWater = hasWater ? dist(j, (k) => !isWater(k), 10) : none;
+  // The darker-grass noise on a coarse grid (it is soft anyway).
+  const TG = 8, tw = Math.ceil(bw / TG) + 2, th = Math.ceil(bh / TG) + 2;
+  const tone = new Float32Array(tw * th);
+  for (let ty = 0; ty < th; ty++) for (let tx = 0; tx < tw; tx++) tone[ty * tw + tx] = fbm((j.x0 + tx * TG) / FINE / 70, (j.y0 + ty * TG) / FINE / 64, 701, 2);
+  j.tone = (x: number, y: number) => {
+    const gx = x / TG, gy = y / TG;
+    const ix = Math.floor(gx), iy = Math.floor(gy), u = gx - ix, w = gy - iy;
+    const k = iy * tw + ix;
+    return tone[k] * (1 - u) * (1 - w) + tone[k + 1] * u * (1 - w) + tone[k + tw] * (1 - u) * w + tone[k + tw + 1] * u * w;
+  };
   const hills = d.hills;
   const [sx0, sx1, sy0] = d.showBox;
   const at = (x: number, y: number) => (x < 0 || y < 0 || x >= bw || y >= bh ? -1 : cls[y * bw + x]);
+  const tb1 = performance.now();
+  paintTime.dist += tb1 - tb0;
 
   for (let y = 0; y < bh; y++) {
     const fy = j.y0 + y, wyf = fy / FINE;
@@ -135,15 +185,21 @@ function base(j: Job) {
         // The bank's lip overhangs the water on the north side.
         const lip = !isWater(at(x, y - 1)) || !isWater(at(x, y - 2)) || (k === K.Deep && !isWater(at(x, y - 3)));
         if (lip) c = plum;
-        else if (k === K.Shallow) c = dw <= 2 ? sage : bayer(fx, fy) < 0.5 ? sage : teal;
-        else c = dw <= 2 ? sage : dw <= 5 && bayer(fx, fy) < (6 - dw) / 5 ? sage : teal;
+        else if (k === K.Shallow) c = ripple(fx, fy) ? teal : sage;
+        else c = dw <= 2 ? sage : dw <= 4 && ripple(fx, fy + 2) ? sage : teal;
+        // Ice creeping out from the banks in a hard winter.
+        const ice = j.look.snow >= 2 ? j.look.snow * 2 : 0;
+        if (ice && dw <= ice && !lip) c = dw === ice ? sage : (fy % 5 === 0 && hash2(fx >> 2, fy, 605) < 0.5) ? sage : wool;
       } else if (k === K.Path) {
         const dp = inPath[i];
-        c = moss;
+        const wet = j.look.wet >= 2;
+        c = wet ? sage : moss;
         // Two wheel ruts a little in from each side, and the worn lip of
         // the track where it dips on its shady (lower, left) edges.
-        if (dp === 4 || (dp === 5 && ((fx >> 1) + (fy >> 1)) % 7 === 0)) c = sage;
-        else if (dp === 1 && (at(x, y + 1) === K.Grass || at(x - 1, y) === K.Grass)) c = sage;
+        if (dp === 4 || (dp === 5 && ((fx >> 1) + (fy >> 1)) % 7 === 0)) c = wet ? plum : sage;
+        else if (dp === 1 && (at(x, y + 1) === K.Grass || at(x - 1, y) === K.Grass)) c = wet ? plum : sage;
+        // Snow stays along the edges of a trodden track.
+        if (j.look.snow > 0 && dp <= 1 + j.look.snow / 2) c = wool;
       } else {
         // Grass. Banks first: a wet sage line at the water, mud beyond it,
         // and where the water lies below, a face of earth dropping to it.
@@ -158,18 +214,31 @@ function base(j: Job) {
           // The edge of a track: the grass lip on its shady side.
           if (outPath[i] === 1 && (at(x, y - 1) === K.Path || at(x + 1, y) === K.Path)) c = sage;
           else if (outPath[i] === 1) c = moss;
-          else c = grassTone(d, fx, fy, wxf, wyf, hills, sx0, sx1, sy0);
+          else c = grassTone(d, fx, fy, wxf, wyf, hills, sx0, sx1, sy0, j.look, j.tone(x, y));
         }
+        if (j.look.snow > 0 && c !== plum) c = snowOn(c, j.look.snow, fx, fy);
       }
       px[i] = c;
     }
   }
+  const tb2 = performance.now();
+  paintTime.loop += tb2 - tb1;
   rockShadows(j);
+  paintTime.shadows += performance.now() - tb2;
 }
 
 // Open grass: the Rolling Hills' mounds shaded on their lower rims, the Show
 // Ground's bare spots, and broad soft patches where the grass grows darker.
-function grassTone(d: FineData, fx: number, fy: number, wxf: number, wyf: number, hills: FineData['hills'], sx0: number, sx1: number, sy0: number): number {
+// Snow over grass: the hills' shaded rims and the darker patches go a
+// clean white too; their shapes come back as the snow thins.
+function snowOn(c: number, snow: number, fx: number, fy: number): number {
+  if (c === meadow || snow >= 3) return wool;
+  if (c === moss) return snow >= 2 || bayer(fx, fy) < snow / 2 ? wool : moss;
+  if (c === sage) return snow >= 2 ? (bayer(fx, fy) < 0.5 ? wool : sage) : sage;
+  return c;
+}
+
+function grassTone(d: FineData, fx: number, fy: number, wxf: number, wyf: number, hills: FineData['hills'], sx0: number, sx1: number, sy0: number, look: Look, tone: number): number {
   const wx = fx >> 1, wy = fy >> 1;
   if (wx >= hills.x0 && wy >= hills.y0 && wx < hills.x0 + hills.w && wy < hills.y0 + hills.h) {
     // The frontmost mound under this fine pixel.
@@ -201,10 +270,11 @@ function grassTone(d: FineData, fx: number, fy: number, wxf: number, wyf: number
       if (dd < 1) return bayer(fx, fy) < (1 - dd) * 3 ? moss : meadow;
     }
   }
-  // Soft patches of darker grass, edged with a short dithered fade.
-  const n = fbm(wxf / 70, wyf / 64, 701, 2);
-  if (n > 0.62) return moss;
-  if (n > 0.585) return bayer(fx, fy) < (n - 0.585) / 0.035 ? moss : meadow;
+  // Soft patches of darker grass, edged with a short dithered fade; more of
+  // them as the grass dries in autumn.
+  const n = tone + look.leaves * 0.015;
+  if (n > 0.65) return moss;
+  if (n > 0.62) return bayer(fx, fy) < (n - 0.62) / 0.03 ? moss : meadow;
   return meadow;
 }
 
@@ -322,19 +392,22 @@ const TUFTS = [
 ];
 const PEBBLE = ['ws', 'pp'];
 const PEBBLE2 = ['.w.', 'wws', '.p.'];
-const MOLEHILL = ['..oo..', '.ooso.', 'osssso', '.pppp.'];
+const MOLEHILL = ['..ooo..', '.ooooo.', 'ooooooo', '.sssss.'];
 const FERN = ['t...t', '.t.t.', 't.t.t', '.ttt.', '..t..'];
 const FERN2 = ['.t...t.', 't.t.t.t', '.t.t.t.', '..ttt..', '...t...'];
 const MUSHROOM = ['.ww.', 'wwww', '.wp.', '.pp.'];
 const BOULDER = ['..www...', '.wwwww..', 'swwwwws.', 'ssswwsss', 'ssssssss', '.pppppp.'];
 const GORSE = ['..ty.t..', '.tttytt.', 'tyttttyt', 'tttttyts', '.tttsss.', '..pppp..'];
-const LILY = ['.sss.', 'ssoss', 'sooss', '.ss..'];
-const LILY2 = ['..ss.', '.soss', 'ssoss', '.sss.'];
+const LILY = ['..sss..', '.ssooss', 'ssooss.', 'ssosss.', '.sss...'];
+const LILY2 = ['...ss..', '.sssoss', 'ssoooss', '.ssosss', '..sss..'];
 const STEP = ['.wwww.', 'wwwwws', 'swwwss', 'ssssss', '.pppp.'];
 
 function stamps(j: Job) {
   const d = j.d;
+  const snow = j.look.snow;
   grassMarks(j);
+  if (j.look.bloom > 0) flowers(j);
+  if (j.look.leaves > 0) fallenLeaves(j);
   const open = (wx: number, wy: number) => {
     const i = wy * W + wx;
     return !d.path[i] && !d.water[i] && !d.rock[i] && !d.cm[i];
@@ -347,7 +420,7 @@ function stamps(j: Job) {
 
   // Clover: little trefoils with a white head or two.
   cells(j, 23, 19, 150, 16, (wx, wy, gx, gy) => {
-    if (hash2(gx, gy, 152) > 0.22 || !openBox(wx - 4, wy - 3, 8, 6)) return;
+    if (snow || hash2(gx, gy, 152) > 0.22 || !openBox(wx - 4, wy - 3, 8, 6)) return;
     for (let k = 0; k < 7; k++) {
       const cx = wx * FINE + Math.round((hash2(gx, gy, 155 + k) - 0.5) * 14), cy = wy * FINE + Math.round((hash2(gx, gy, 165 + k) - 0.5) * 9);
       put(j, cx, cy, hash2(gx, gy, 175 + k) < 0.22 ? CLOVER_HEAD : CLOVER, grassOnly);
@@ -360,7 +433,7 @@ function stamps(j: Job) {
   });
   // Molehill runs across the fields, away from the ranch and the Show Ground.
   cells(j, 61, 53, 158, 40, (wx, wy, gx, gy) => {
-    if (hash2(gx, gy, 159) > 0.25) return;
+    if (snow > 1 || hash2(gx, gy, 159) > 0.25) return;
     const reg = region(wx, wy);
     if (reg === 'ranch' || reg === 'show') return;
     const a = hash2(gx, gy, 160) * Math.PI * 2;
@@ -374,10 +447,13 @@ function stamps(j: Job) {
   });
   // Worn bare patches with a clean edge, darker on their lower rim.
   cells(j, 53, 47, 166, 30, (wx, wy, gx, gy) => {
-    if (hash2(gx, gy, 167) > 0.18) return;
+    if (snow || hash2(gx, gy, 167) > 0.18) return;
     const r = 6 + hash2(gx, gy, 168) * 8; // fine px
     const cx = wx * FINE, cy = wy * FINE;
     if (!openBox(wx - 4, wy - 3, 9, 6)) return;
+    const ci = (cy - j.y0) * j.bw + (cx - j.x0);
+    if (cx - j.x0 >= 0 && cy - j.y0 >= 0 && cx - j.x0 < j.bw && cy - j.y0 < j.bh && j.px[ci] !== meadow) return;
+    if (fbm(wx / 70, wy / 64, 701, 2) > 0.56) return;
     for (let y = Math.floor(cy - r * 0.6) - 1; y <= cy + r * 0.6 + 1; y++)
       for (let x = Math.floor(cx - r) - 1; x <= cx + r + 1; x++) {
         const dd = Math.hypot((x - cx) / r, (y - cy) / (r * 0.6));
@@ -410,7 +486,7 @@ function stamps(j: Job) {
   // The forest floor in the trees' shade: ferns and the odd mushroom.
   cells(j, 11, 9, 80, 10, (wx, wy, gx, gy) => {
     const i = wy * W + wx;
-    if (!d.shade[i] || !open(wx, wy) || hash2(gx, gy, 81) > 0.3) return;
+    if (!d.shade[i] || !open(wx, wy) || hash2(gx, gy, 81) > (snow > 2 ? 0.08 : 0.3)) return;
     const k = hash2(gx, gy, 82);
     put(j, wx * FINE, wy * FINE, k < 0.45 ? FERN : k < 0.85 ? FERN2 : MUSHROOM, grassOnly, (gx & 1) === 1);
   });
@@ -445,6 +521,38 @@ function stamps(j: Job) {
     if (hash2(gx, gy, 94) < 0.3) put(j, fx + 2, fy, [hash2(gx, gy, 95) < 0.5 ? 'w' : 'y']);
   });
   for (const s of d.stones) put(j, s.x * FINE - 1, s.y * FINE - 1, STEP);
+  reflections(j);
+}
+
+// Trees on the far bank mirrored in the water below it, the reflection cut
+// into ripple bands (whole rows, not speckle) that thin out with distance.
+function reflections(j: Job) {
+  const { cls, px, bw, bh, d } = j;
+  for (let x = 0; x < bw; x++) {
+    const fx = j.x0 + x, wx = fx >> 1;
+    if (wx < 0 || wx >= W) continue;
+    let bankW = -2; // the world row of the bank above, from the world data
+    for (let y = 0; y < bh; y++) {
+      const i = y * bw + x;
+      const k = cls[i];
+      if (k !== K.Deep && k !== K.Shallow) continue;
+      const fy = j.y0 + y, wy = fy >> 1;
+      if (bankW < wy - 13 || bankW > wy) {
+        bankW = -2;
+        for (let r = wy; r >= Math.max(0, wy - 13); r--) if (!d.water[r * W + wx]) { bankW = r; break; }
+      }
+      if (bankW < 0 || px[i] === plum) continue;
+      const bank = (bankW + 1) * FINE - 1; // the last fine row of bank
+      const run = fy - bank;
+      if (run > 26) continue;
+      const my = bank - run + 1; // mirrored fine row above the bank
+      const mwy = my >> 1;
+      if (mwy < 0 || !d.cm[mwy * W + wx]) continue;
+      const band = (fy + Math.round(Math.sin(fx * 0.3) * 1)) % (run < 12 ? 3 : 4);
+      if (band === 0) continue;
+      px[i] = run < 12 || band === 1 ? plum : teal;
+    }
+  }
 }
 
 // Grass marks in drifts: thick where the cluster noise is high, none in
@@ -458,8 +566,11 @@ function grassMarks(j: Job) {
     if (hash2(gx, gy, 302) > (drift - 0.35) * 1.6) return;
     const reg = d.map.regionAt(wx, wy)?.id;
     if (reg === 'show' && hash2(gx, gy, 303) < 0.8) return; // mown
+    // Under snow only the tallest tufts show, fewer as it deepens.
+    if (j.look.snow > 0 && hash2(gx, gy, 305) < 0.45 + j.look.snow * 0.12) return;
     const t = TUFTS[Math.floor(hash2(gx, gy, 304) * TUFTS.length)];
     const fx = wx * FINE + (gx & 1), fy = wy * FINE;
+    const tip = j.look.leaves > 1 && hash2(gx, gy, 306) < 0.4 ? butter : j.look.golden > 0 && hash2(gx, gy, 307) < j.look.golden * 0.18 ? butter : 0;
     for (let r = 0; r < t.length; r++)
       for (let c = 0; c < t[r].length; c++) {
         if (t[r][c] === '.') continue;
@@ -468,9 +579,44 @@ function grassMarks(j: Job) {
         const k = y * j.bw + x;
         if (j.cls[k] !== K.Grass) continue;
         const under = j.px[k];
-        if (under === meadow) j.px[k] = moss;
-        else if (under === moss) j.px[k] = sage;
+        // A dry or sunlit head on the tallest blade.
+        if (tip && r === 0) j.px[k] = tip;
+        else if (under === meadow) j.px[k] = moss;
+        else if (under === moss || under === wool) j.px[k] = sage;
       }
+  });
+}
+
+// Spring flowers in drifts: buttercups, and daisies thick in the Home
+// Meadow and on the alpine meadow. Little five-pixel flowers, not dots.
+const BUTTERCUP = ['.y.', 'yoy', '.y.'];
+const DAISY = ['.w.', 'wyw', '.w.'];
+function flowers(j: Job) {
+  const d = j.d;
+  cells(j, 7, 6, 320, 4, (wx, wy, gx, gy) => {
+    const i = wy * W + wx;
+    if (d.path[i] || d.water[i] || d.rock[i] || d.cm[i] || d.shade[i]) return;
+    const reg = d.map.regionAt(wx, wy)?.id;
+    const drift = fbm(wx / 30, wy / 26, 321, 2);
+    const rich = reg === 'meadow' || reg === 'high' ? 1.6 : 1;
+    if (hash2(gx, gy, 322) > (drift - 0.45) * rich * j.look.bloom * 0.5) return;
+    put(j, wx * FINE + (gx & 1), wy * FINE, (reg === 'high' || reg === 'meadow') && hash2(gx, gy, 323) < 0.5 ? DAISY : BUTTERCUP, grassOnly);
+  });
+}
+
+// Autumn: fallen leaves gathered under the broadleaf trees, small leaf
+// shapes in buttercup and plum.
+const LEAF_A = ['yy', '.y'];
+const LEAF_B = ['.p', 'pp'];
+const LEAF_C = ['y.', 'yy'];
+function fallenLeaves(j: Job) {
+  const d = j.d;
+  cells(j, 4, 3, 330, 4, (wx, wy, gx, gy) => {
+    const i = wy * W + wx;
+    if (d.path[i] || d.water[i] || d.rock[i] || d.cm[i] || !d.shade[i] || d.pz[Math.max(0, wy - 6) * W + Math.min(W - 1, wx + 5)]) return;
+    if (hash2(gx, gy, 331) > j.look.leaves * 0.12) return;
+    const k = hash2(gx, gy, 332);
+    put(j, wx * FINE + (gx & 1), wy * FINE + (gy & 1), k < 0.45 ? LEAF_A : k < 0.75 ? LEAF_C : LEAF_B, grassOnly);
   });
 }
 
@@ -536,19 +682,5 @@ function sheepTracks(j: Job) {
   }
 }
 
-// ---- The canopy (first pass: the 1x canopy doubled) ----
-
-export function paintCanopy(b: Baked, fx0: number, fy0: number, fw: number, fh: number, _look: Look): Uint32Array {
-  const out = new Uint32Array(fw * fh);
-  const src = b.canopyPx;
-  for (let y = 0; y < fh; y++) {
-    const wy = (fy0 + y) >> 1;
-    if (wy < 0 || wy >= H) continue;
-    for (let x = 0; x < fw; x++) {
-      const wx = (fx0 + x) >> 1;
-      if (wx < 0 || wx >= W) continue;
-      out[y * fw + x] = src[wy * W + wx];
-    }
-  }
-  return out;
-}
+// The canopy is painted by world/finecanopy.ts.
+export { paintCanopy } from './finecanopy';
