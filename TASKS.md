@@ -1560,6 +1560,13 @@ Before → after, in plain words:
   because the picture cache knows an image by its object. A paddock reads
   as a field gradually, as its smaller interior side grows from 6 to 10
   tiles.
+- `penDrawables` lives in `src/art/paddock.ts` and is re-exported from
+  `art/buildings.ts`, so older imports (farm2.ts on valley-r4) keep working.
+  A trial merge of valley-r4 typechecks and draws Gameplay's real paddocks.
+  To merge, take this side of `penDrawables` in buildings.ts, keep
+  `export function shadowRect` with its `groundShadow` body, and drop
+  `fixtureDrawables` from valleyDrawables: the paddock draws its own
+  fixtures, and with both they would be drawn twice.
 - The paddock data the art reads: `rot` + `gateSpan()` for the gate,
   `fixtures?: { kind, tx, ty }[]` and `hurdle?: { vertical, at, gate, swing }`
   (types in `src/art/paddock.ts`). If there is `hasTrough` and no list, a

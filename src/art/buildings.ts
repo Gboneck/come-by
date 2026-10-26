@@ -117,7 +117,8 @@ export function gateLeaf(g: CanvasRenderingContext2D, hx: number, hy: number, al
   }
 }
 
-// Pens and paddocks: see paddock.ts.
+// Pens and paddocks: drawn in paddock.ts (re-exported here for older imports).
+export { penDrawables } from './paddock';
 
 // Tiny goods: egg, wool tuft, cheese wedge, milk can.
 export function drawGood(g: CanvasRenderingContext2D, sp: string, x: number, y: number) {
