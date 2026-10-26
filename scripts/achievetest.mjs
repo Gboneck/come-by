@@ -363,29 +363,51 @@ async function open(viewport, dpr = 1, phone = false) {
     T.shot();
   });
   await page.screenshot({ path: 'shots/achieve/card-phone.png' });
+  // A what's-this card already up: the badge card waits for it (it would
+  // otherwise take the badge card's tap from underneath).
+  const wait = await page.evaluate(async () => {
+    const g = window.game, T = window.T;
+    const W2 = await import('/src/ui/whatsthis.ts');
+    T.clear();
+    g.banner = null;
+    g.tut = 7;
+    g.input.touchMode = true;
+    g.achievements.got.delete('steady');
+    g.totals.calmBatches = 0;
+    let f = 0;
+    for (; f < 300 && !W2.whatsThisUp(); f++) T.step(1);
+    const up = W2.whatsThisUp();
+    g.totals.calmBatches = 10;
+    T.step(30);
+    const during = { whats: W2.whatsThisUp(), card: g.achievements.card?.id ?? null, badgeUp: T.ui.badgeUp(g), queued: g.achievements.queue.length };
+    for (f = 0; f < 900 && !(T.ui.badgeUp(g) && g.achievements.cardT > 0.4); f++) T.step(1);
+    T.shot();
+    g.input.endFrame();
+    return { up, during, after: { whats: W2.whatsThisUp(), card: g.achievements.card?.id ?? null, badgeUp: T.ui.badgeUp(g) } };
+  });
+  check(wait.up && wait.during.whats && !wait.during.badgeUp && wait.during.card === null && wait.during.queued === 1, "a badge card waits while a what's-this card is up", wait.during);
+  check(!wait.after.whats && wait.after.card === 'steady' && wait.after.badgeUp, 'then comes in', wait.after);
+  await page.screenshot({ path: 'shots/achieve/card-phone-waited.png' });
+  // A real tap on the card where it is on the screen: the Ledger opens at
+  // BADGES, the badge picked.
+  const spot = await page.evaluate(() => {
+    const g = window.game;
+    g.achievements.sel = 0;
+    const { W, H, scale, dpr } = g.screen;
+    const k = scale / dpr; // CSS pixels a world pixel
+    return { x: (W / 2) * k, y: H * 0.24 * k };
+  });
+  await page.touchscreen.tap(spot.x, spot.y);
   const tap = await page.evaluate(async () => {
     const g = window.game, T = window.T;
     const L = await import('/src/ui/ledger.ts');
-    T.clear();
-    g.banner = null;
-    g.achievements.got.delete('steady');
-    T.step(30);
-    // Tap the card: the Ledger opens at BADGES, the badge picked.
-    const c = g.achievements.card;
-    g.achievements.cardT = 1;
-    g.achievements.sel = 0;
-    const { W, H } = g.screen;
-    const p = { id: 1, x: W / 2, y: Math.round(H * 0.24), downX: W / 2, downY: Math.round(H * 0.24), justDown: true, justUp: false, isDown: true, owner: null };
-    g.input.ptrs.set(1, p);
     T.shot();
-    p.justDown = false; p.justUp = true; p.isDown = false;
-    T.shot();
-    g.input.ptrs.delete(1);
+    g.input.endFrame();
     T.step(1);
     T.shot();
-    return { card: c?.id, mode: g.mode, page: L.LEDGER_PAGES[L.ledgerView.page - 1]?.id, sel: T.ach.ACHIEVEMENTS[g.achievements.sel].id };
+    return { mode: g.mode, page: L.LEDGER_PAGES[L.ledgerView.page - 1]?.id, sel: T.ach.ACHIEVEMENTS[g.achievements.sel].id };
   });
-  check(tap.card === 'steady' && tap.mode === 'ledger' && tap.page === 'badges' && tap.sel === 'steady', 'a tapped card opens the Ledger at its badge', tap);
+  check(tap.mode === 'ledger' && tap.page === 'badges' && tap.sel === 'steady', 'a tapped card opens the Ledger at its badge', tap);
   await page.screenshot({ path: 'shots/achieve/badges-phone.png' });
   await ctx.close();
 }

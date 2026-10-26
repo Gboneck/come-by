@@ -67,6 +67,8 @@ export const THINGS: ((game: Game) => Thing[])[] = [goodsThings, ranchThings, sc
 
 let cur: { th: Thing; t: number } | null = null;
 let gap = 0;
+// A card is up (a badge card waits for it, as this one waits for a badge's).
+export const whatsThisUp = () => cur !== null;
 let scan = 0;
 const SHOW = 6.5;
 
