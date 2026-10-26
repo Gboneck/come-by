@@ -156,7 +156,7 @@ export function drawWorld(game: Game, g: CanvasRenderingContext2D, v: View) {
   // Morning mist, lying in drifts until the sun gets up (fair days only).
   const sk = game.life.wx.sky(game, dark);
   const f = game.day.frac, w = game.weather;
-  if (quality.shade && game.day.phase === 'day' && f < 0.16 && w.rain < 0.1) sk.fog = Math.max(sk.fog ?? 0, 0.28 * (1 - f / 0.16) * (1 - w.wind * 0.7));
+  if (quality.shade && game.day.phase === "day" && f < 0.12 && w.rain < 0.1) sk.fog = Math.max(sk.fog ?? 0, 0.18 * (1 - f / 0.12) * (1 - w.wind * 0.7));
   if ((sk.fog ?? 0) > 0.03 && dark <= 0 && !lights.length) lights.push({ x: game.dog.x - ox, y: game.dog.y - oy, r: 56 });
   game.night.draw(g, W, H, ox, oy, { dark, lights, slope: skySlope(game.day), blue: blueHour(game.day), ...sk });
   game.life.wx.drawAir(g, game, W, H, dark > 0.25);

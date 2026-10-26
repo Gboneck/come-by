@@ -676,7 +676,12 @@ Before → after, in plain words:
       dawn and dusk, crows on the fences, frogs on the banks; all flee the
       dog (hops, bounds into the trees, lifting off, a leap into the water).
 - [x] Checks: typecheck, build, shot, regions in every season, weather and
-      time of day, perftest, picturetest, tune --seed=7
+      time of day, perftest, picturetest, tune --seed=7 (sheep, and cattle
+      in a winter storm: identical to `test/round-4`). perftest, run back to
+      back with an untouched `test/round-4` (best batch, phone size):
+      title 5.6 vs 6.3 ms, day 9.8 vs 10.6, worst 13.1 vs 13.3 at 4x;
+      title 9.0 vs 9.8, day 15.4 vs 16.2, worst 19.0 vs 20.0 at 6x, i.e. the
+      same within the machine's noise.
 
 ## Decisions
 - The reference image arrived as `IMG_2749.PNG`; renamed to `reference.png`.
@@ -1498,11 +1503,14 @@ Before → after, in plain words:
   and the worst possible one (frantic, penned at dusk) has 15$ on penning
   and 18$ at day's end. 10$ is below the trough (12$), so the tin cannot be
   spent on anything that would leave the kennel out of reach.
-- Tree shadows are no longer baked: the canopy's silhouette is baked once
-  in sage (`canopyShadow`) and drawn each frame offset by the sun's vector
-  (`sunShadow` in `src/render/sky.ts`), one drawImage. A first version
-  composited plum shadows onto water with canvas operations; it cost ~3ms a
-  frame on a throttled phone, so shadows on water are sage now. The shadow
+- Tree shadows are no longer baked into the ground: the canopy's
+  silhouette is baked once in sage (`canopyShadow`) and laid over the
+  ground shifted by the sun's vector (`sunShadow` in `src/render/sky.ts`)
+  into a world-sized lit-ground picture (`LitGround`, `src/render/light.ts`).
+  When the sun moves a pixel it is redone 32 rows a frame, so a frame still
+  draws the ground as one image. (Drawing the shadow as its own layer every
+  frame cost 2-3 ms on a throttled phone; compositing plum onto water cost
+  more, so shadows on water are sage.) The shadow
   mask the bake still keeps (where the shade usually lies) only places
   ferns and such.
 - Building shadows read `lightLook` (`src/art/seasonlook.ts`), so the
@@ -1515,3 +1523,7 @@ Before → after, in plain words:
 - Morning mist reuses the fog pass, up to 0.28, fair mornings only, off at
   GRAPHICS LOW. Light shafts visit only the pixels inside their bands and
   draw at GRAPHICS HIGH only. Wildlife counts scale with `quality.fx`.
+- The wildlife and the fish use their own seeded random numbers, never
+  `Math.random`, so a seeded `tune.mjs` run is unchanged by them.
+- Morning mist is light (up to 0.18, gone by 07:40): at the strength of fog
+  it laid a grid over every morning.
