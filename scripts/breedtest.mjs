@@ -163,6 +163,35 @@ const res = await page.evaluate(async () => {
     check('...with a banner saying where', found && found.banner === 'A BIG DROVE', found?.banner);
   }
 
+  // ---- A big calm drove pays extra ----
+  {
+    const pen = g.ranch.pens[0];
+    const batch = (n, stress) => Array.from({ length: n }, () => { const a = new A.Animal('sheep', pen.cx, pen.cy, 0); a.peakStress = stress; a.deliveryValue = 8; return a; });
+    const shut = (b) => { const c0 = g.coins; g['onRanchEvent']({ kind: 'shut', pen, batch: b }); return { got: g.coins - c0, banner: g.banner?.small ?? '' }; };
+    const eight = shut(batch(8, 0)), five = shut(batch(5, 0)), fifteen = shut(batch(15, 0)), rattled = shut(batch(10, 0.7));
+    check('a calm drove of six or more pays a bonus, growing to half again at fifteen', eight.got === Math.round(64 * 0.15) && /DROVE/.test(eight.banner) && five.got === 0 && fifteen.got === Math.round(120 * 0.5) && rattled.got === 0, { eight, five: five.got, fifteen: fifteen.got, rattled: rattled.got });
+  }
+
+  // ---- The valley's wild stock is capped ----
+  {
+    const reg = M.REGIONS.find((r) => r.id === 'hills');
+    const crowd = Array.from({ length: SP.WILD_CAP }, (_, i) => new A.Animal('sheep', 100 + (i % 40) * 4, 100 + Math.floor(i / 40) * 4, 0));
+    const more = SP.spawnMorning(g.map, crowd, 30, 5, (r) => r === reg, 'summer');
+    check('no new wild flocks once the valley holds its cap', more.length === 0 && SP.spawnMorning(g.map, [], 30, 5, (r) => r === reg, 'summer').length > 0, { more: more.length });
+  }
+
+  // ---- A packed paddock makes less ----
+  {
+    const p = g.ranch.pens.find((q) => q.animals.length);
+    const cap = p.capacity, was = p.animals;
+    p.animals = []; // empty
+    const roomy = E.crowding(p);
+    p.animals = Array.from({ length: Math.floor(cap / 2) }, () => new A.Animal('sheep', p.cx, p.cy, 0)); // full of sheep
+    const packed = E.crowding(p);
+    p.animals = was;
+    check('a packed paddock makes half as much a head, a roomy one all of it', roomy === 1 && packed <= 0.56 && packed >= 0.5, { roomy, packed: +packed.toFixed(2) });
+  }
+
   // ---- Goods by kind reach a guest ----
   {
     const NS = await import('/src/net/shared.ts');
